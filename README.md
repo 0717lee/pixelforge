@@ -3,11 +3,11 @@
 > 一个纯 [MoonBit](https://www.moonbitlang.cn/) 实现的图像处理库，附带一个在浏览器里实时运行的 Playground。
 > 后端无关的核心库可编译到 **JavaScript / WebAssembly (wasm-gc & 线性内存 wasm) / native**。
 
-![原图](assets/playground-original.png)
+![PixelForge 浏览器 Playground](assets/playground-original.png)
 
-| Sobel 边缘检测 | 像素化 |
-| --- | --- |
-| ![Sobel](assets/playground-sobel.png) | ![Pixelate](assets/playground-pixelate.png) |
+*同一界面一键切换 13 种滤镜与 JS / WebAssembly 双引擎——以 Sobel 边缘检测为例：*
+
+![Sobel 边缘检测](assets/playground-sobel.png)
 
 ---
 
@@ -123,7 +123,7 @@ moon test --target js     # js 后端
 
 ## 📮 发布到 mooncakes.io
 
-> 模块名当前为占位符 `username/pixelforge`。发布前请将 `username` 替换为你的 mooncakes 账号名（涉及 `moon.mod` 以及各 `moon.pkg` 的 import）。
+> 模块名为 `0717lee/pixelforge`。其他 MoonBit 项目可通过 `moon add 0717lee/pixelforge` 添加依赖。
 
 ```bash
 moon login             # 登录 mooncakes.io

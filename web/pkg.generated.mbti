@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "username/pixelforge/web"
+package "0717lee/pixelforge/web"
 
 // Values
 pub fn apply_filter(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]

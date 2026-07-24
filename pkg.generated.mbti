@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "username/pixelforge"
+package "0717lee/pixelforge"
 
 // Values
 pub fn clamp_byte(Int) -> Byte

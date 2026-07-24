@@ -9,13 +9,13 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "username/pixelforge"
+name = "0717lee/pixelforge"
 
 version = "0.1.0"
 
 readme = "README.md"
 
-repository = ""
+repository = "https://github.com/0717lee/pixelforge"
 
 license = "Apache-2.0"
 
