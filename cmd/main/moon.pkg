@@ -1,6 +1,6 @@
 // The native/standalone CLI example. Imports the PixelForge core library.
 import {
-  "username/pixelforge",
+  "0717lee/pixelforge",
 }
 
 pkgtype(kind: "executable")
