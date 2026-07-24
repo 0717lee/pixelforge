@@ -4,23 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PixelForge · MoonBit 图像处理 Playground</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%238b5cf6'/%3E%3Cpath d='M16 1a15 15 0 000 30z' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111418'/%3E%3Crect x='11' y='11' width='10' height='10' rx='2' fill='%23eceff3'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark">◐</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 9V6a2 2 0 0 1 2-2h3" />
+            <path d="M15 4h3a2 2 0 0 1 2 2v3" />
+            <path d="M20 15v3a2 2 0 0 1-2 2h-3" />
+            <path d="M9 20H6a2 2 0 0 1-2-2v-3" />
+            <rect x="10" y="10" width="4" height="4" rx="1" />
+          </svg>
+        </span>
         <div class="brand-text">
           <h1>PixelForge</h1>
           <p>MoonBit 图像处理库 · 浏览器 Playground</p>
         </div>
       </div>
-      <div class="badges">
-        <span class="badge">纯 MoonBit</span>
-        <span class="badge">零拷贝互操作</span>
-        <span class="badge">js / wasm-gc / native 多后端</span>
-      </div>
+      <nav class="meta">
+        <span class="tag">pure MoonBit</span>
+        <span class="tag">zero-copy</span>
+        <span class="tag">js · wasm · native</span>
+      </nav>
     </header>
 
     <main class="layout">
@@ -28,25 +36,24 @@
         <canvas id="canvas" width="960" height="600"></canvas>
         <div class="drop-hint" id="dropHint">
           <div class="drop-hint-inner">
-            <div class="drop-icon">⬇</div>
-            <p>拖拽图片到这里，或点击「上传图片」</p>
-            <p class="muted">也可以直接 Ctrl/⌘+V 粘贴，或先点「示例图片」</p>
+            <p>将图片拖到此处，或使用右侧「上传图片」</p>
+            <p class="muted">支持 Ctrl / ⌘ + V 粘贴 · 或点「示例图片」</p>
           </div>
         </div>
       </section>
 
       <aside class="panel">
-        <div class="group">
+        <section class="group">
           <h2>载入</h2>
           <div class="row">
             <button class="btn primary" id="uploadBtn">上传图片</button>
             <button class="btn" id="sampleBtn">示例图片</button>
           </div>
-          <button class="btn ghost block" id="resetBtn">还原原图</button>
+          <button class="btn block" id="resetBtn">还原原图</button>
           <input type="file" id="fileInput" accept="image/*" hidden />
-        </div>
+        </section>
 
-        <div class="group">
+        <section class="group">
           <h2>滤镜</h2>
           <div class="filters" id="filters">
             <button class="chip active" data-filter="-1">原图</button>
@@ -63,9 +70,17 @@
             <button class="chip" data-filter="12">中值降噪</button>
             <button class="chip" data-filter="13">直方图均衡</button>
           </div>
-        </div>
+        </section>
 
-        <div class="group">
+        <section class="group">
+          <h2>引擎</h2>
+          <div class="filters" id="engines">
+            <button class="chip" data-engine="wasm">WebAssembly</button>
+            <button class="chip active" data-engine="js">JS 后端</button>
+          </div>
+        </section>
+
+        <section class="group">
           <h2>调整</h2>
           <label class="slider">
             <span>亮度 <b id="brightnessVal">0</b></span>
@@ -75,17 +90,9 @@
             <span>对比度 <b id="contrastVal">1.00</b></span>
             <input type="range" id="contrast" min="0" max="300" value="100" />
           </label>
-        </div>
+        </section>
 
-        <div class="group">
-          <h2>引擎</h2>
-          <div class="filters" id="engines">
-            <button class="chip" data-engine="wasm">WebAssembly</button>
-            <button class="chip active" data-engine="js">JS 后端</button>
-          </div>
-        </div>
-
-        <div class="group">
+        <section class="group">
           <h2>性能</h2>
           <dl class="stats">
             <div><dt>图像尺寸</dt><dd id="statSize">—</dd></div>
@@ -93,10 +100,12 @@
             <div><dt>上次耗时</dt><dd id="statTime">—</dd></div>
             <div><dt>吞吐</dt><dd id="statThroughput">—</dd></div>
           </dl>
-          <button class="btn block" id="benchBtn">跑基准测试</button>
-          <button class="btn block" id="compareBtn">对比 JS vs WASM</button>
+          <div class="row">
+            <button class="btn" id="benchBtn">跑基准测试</button>
+            <button class="btn" id="compareBtn">对比 JS / WASM</button>
+          </div>
           <p class="bench-result" id="benchResult"></p>
-        </div>
+        </section>
 
         <p class="footnote">
           像素缓冲区以 <code>Uint8ClampedArray</code> 直接进出 MoonBit
