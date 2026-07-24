@@ -1,0 +1,55 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "username/pixelforge"
+
+// Values
+pub fn clamp_byte(Int) -> Byte
+
+// Errors
+
+// Types and methods
+pub(all) struct Image {
+  width : Int
+  height : Int
+  data : FixedArray[Byte]
+}
+pub fn Image::apply_filter_id(Self, Int, Double) -> Self
+pub fn Image::blur(Self) -> Self
+pub fn Image::brightness(Self, Int) -> Self
+pub fn Image::contrast(Self, Double) -> Self
+pub fn Image::convolve(Self, Kernel) -> Self
+pub fn Image::copy(Self) -> Self
+pub fn Image::edges(Self) -> Self
+pub fn Image::emboss(Self) -> Self
+pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
+pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
+pub fn Image::grayscale(Self) -> Self
+pub fn Image::histogram_equalize(Self) -> Self
+pub fn Image::invert(Self) -> Self
+pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
+pub fn Image::median(Self) -> Self
+pub fn Image::new(Int, Int) -> Self
+pub fn Image::pixel_count(Self) -> Int
+pub fn Image::pixelate(Self, Int) -> Self
+pub fn Image::sepia(Self) -> Self
+pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::sharpen(Self) -> Self
+pub fn Image::sobel(Self) -> Self
+pub fn Image::threshold(Self, Int) -> Self
+
+pub(all) struct Kernel {
+  size : Int
+  weights : Array[Double]
+  divisor : Double
+  bias : Double
+}
+pub fn Kernel::box_blur() -> Self
+pub fn Kernel::edges() -> Self
+pub fn Kernel::emboss() -> Self
+pub fn Kernel::gaussian_blur() -> Self
+pub fn Kernel::new(Int, Array[Double], Double, Double) -> Self
+pub fn Kernel::sharpen() -> Self
+
+// Type aliases
+
+// Traits
+

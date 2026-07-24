@@ -1,0 +1,11 @@
+// Browser bindings package: wraps the PixelForge core library and links it as
+// a foreign library so the js backend emits a clean ES module.
+import {
+  "username/pixelforge",
+}
+
+pkgtype(kind: "foreign_library")
+
+options(
+  link: { "js": { "exports": [ "apply_filter" ], "format": "esm" } },
+)

@@ -1,0 +1,16 @@
+// Genuine-WebAssembly bindings: wraps the PixelForge core and links a
+// linear-memory wasm module that exports its `memory` for bulk pixel transfer.
+import {
+  "username/pixelforge",
+}
+
+pkgtype(kind: "foreign_library")
+
+options(
+  link: {
+    "wasm": {
+      "exports": [ "alloc", "process" ],
+      "export-memory-name": "memory",
+    },
+  },
+)
