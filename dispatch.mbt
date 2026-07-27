@@ -21,6 +21,7 @@
 /// | 13 | histogram equalize | — |
 /// | 14 | flip horizontal | — |
 /// | 15 | flip vertical | — |
+/// | 16 | posterize | levels (default 4) |
 pub fn Image::apply_filter_id(
   self : Image,
   filter_id : Int,
@@ -44,6 +45,7 @@ pub fn Image::apply_filter_id(
     13 => self.histogram_equalize()
     14 => self.flip_horizontal()
     15 => self.flip_vertical()
+    16 => self.posterize(if amount.to_int() < 2 { 4 } else { amount.to_int() })
     _ => self.copy()
   }
 }

@@ -160,3 +160,15 @@ pub fn Image::histogram_equalize(self : Image) -> Image {
     (e, e, e)
   })
 }
+
+///|
+/// Posterize (tone separation): quantizes each channel into `levels` evenly
+/// spaced tones, producing the classic poster/print look. `levels` is clamped
+/// into `[2, 256]`; pure integer math keeps results exactly reproducible.
+pub fn Image::posterize(self : Image, levels : Int) -> Image {
+  let l = if levels < 2 { 2 } else if levels > 256 { 256 } else { levels }
+  self.map_rgb(fn(r, g, b) {
+    let q = fn(c : Int) -> Int { c * l / 256 * 255 / (l - 1) }
+    (q(r), q(g), q(b))
+  })
+}

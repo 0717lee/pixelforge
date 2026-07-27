@@ -62,3 +62,15 @@ test "histogram equalization stretches the tonal range to full black/white" {
   assert_eq(eq.get_pixel(0, 0).0.to_int(), 0)
   assert_eq(eq.get_pixel(2, 0).0.to_int(), 255)
 }
+
+///|
+test "posterize quantizes channels into the requested number of tones" {
+  // 2 levels: below mid -> 0, above -> 255.
+  let (r, g, b, a) = single(100, 200, 30, 128).posterize(2).get_pixel(0, 0)
+  assert_eq(r.to_int(), 0)
+  assert_eq(g.to_int(), 255)
+  assert_eq(b.to_int(), 0)
+  assert_eq(a.to_int(), 128)
+  // 4 levels: 100 -> bucket 1 -> 85.
+  assert_eq(single(100, 0, 0, 255).posterize(4).get_pixel(0, 0).0.to_int(), 85)
+}
