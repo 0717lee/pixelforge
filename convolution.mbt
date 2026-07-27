@@ -153,16 +153,17 @@ fn iabs(v : Int) -> Int {
 }
 
 ///|
-/// Sobel edge detection. The image is first reduced to luma, then the
-/// horizontal (Gx) and vertical (Gy) gradients are measured with the classic
-/// 3x3 Sobel operators. Edge strength uses the L1 magnitude `|Gx| + |Gy|`,
-/// which keeps the whole pass in integer math (fast and reproducible) while
-/// still lighting up edges crisply. Output is grayscale; alpha is preserved.
-pub fn Image::sobel(self : Image) -> Image {
+/// Shared gradient-edge engine: reduces the image to luma, measures the
+/// horizontal (Gx) and vertical (Gy) gradients with the given 3x3 operators,
+/// and writes the L1 magnitude `|Gx| + |Gy|`, which keeps the whole pass in
+/// integer math (fast and reproducible). Output is grayscale; alpha preserved.
+fn Image::gradient_edges(
+  self : Image,
+  gx : Array[Int],
+  gy : Array[Int],
+) -> Image {
   let gray = self.grayscale()
   let out = Image::new(self.width, self.height)
-  let gx = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
-  let gy = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
   for y in 0..<self.height {
     for x in 0..<self.width {
       let mut sx = 0
@@ -187,4 +188,22 @@ pub fn Image::sobel(self : Image) -> Image {
     }
   }
   out
+}
+
+///|
+/// Sobel edge detection with the classic 1/2/1 operators.
+pub fn Image::sobel(self : Image) -> Image {
+  self.gradient_edges([-1, 0, 1, -2, 0, 2, -1, 0, 1], [
+    -1, -2, -1, 0, 0, 0, 1, 2, 1,
+  ])
+}
+
+///|
+/// Scharr edge detection: same structure as Sobel but with 3/10/3 weights,
+/// which are closer to rotational symmetry and give stronger, more uniform
+/// responses on diagonal edges.
+pub fn Image::scharr(self : Image) -> Image {
+  self.gradient_edges([-3, 0, 3, -10, 0, 10, -3, 0, 3], [
+    -3, -10, -3, 0, 0, 0, 3, 10, 3,
+  ])
 }

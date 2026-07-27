@@ -23,6 +23,7 @@ pub fn Image::emboss(Self) -> Self
 pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
 pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
+pub fn Image::gamma(Self, Double) -> Self
 pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
@@ -36,11 +37,13 @@ pub fn Image::posterize(Self, Int) -> Self
 pub fn Image::resize_bilinear(Self, Int, Int) -> Self
 pub fn Image::resize_nearest(Self, Int, Int) -> Self
 pub fn Image::rotate90(Self) -> Self
+pub fn Image::scharr(Self) -> Self
 pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
 pub fn Image::sobel(Self) -> Self
 pub fn Image::threshold(Self, Int) -> Self
+pub fn Image::vignette(Self, Double) -> Self
 
 pub(all) struct Kernel {
   size : Int

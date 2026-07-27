@@ -22,6 +22,9 @@
 /// | 14 | flip horizontal | — |
 /// | 15 | flip vertical | — |
 /// | 16 | posterize | levels (default 4) |
+/// | 17 | gamma | gamma value (default 2.2) |
+/// | 18 | vignette | strength 0..1 (default 0.5) |
+/// | 19 | scharr edges | — |
 pub fn Image::apply_filter_id(
   self : Image,
   filter_id : Int,
@@ -46,6 +49,9 @@ pub fn Image::apply_filter_id(
     14 => self.flip_horizontal()
     15 => self.flip_vertical()
     16 => self.posterize(if amount.to_int() < 2 { 4 } else { amount.to_int() })
+    17 => self.gamma(if amount <= 0.0 { 2.2 } else { amount })
+    18 => self.vignette(if amount <= 0.0 { 0.5 } else { amount })
+    19 => self.scharr()
     _ => self.copy()
   }
 }
