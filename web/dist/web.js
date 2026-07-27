@@ -2,7 +2,9 @@ class $PanicError extends Error {}
 function $panic() {
   throw new $PanicError();
 }
+const _M0MPB7JSArray4push = (arr, val) => { arr.push(val); };
 const _M0MPB7JSArray4copy = (arr) => arr.slice(0);
+const _M0MPB7JSArray3pop = (arr) => arr.pop();
 function _M0TP270717lee10pixelforge5Image(param0, param1, param2) {
   this.width = param0;
   this.height = param1;
@@ -32,19 +34,50 @@ function _M0TP270717lee10pixelforge6Kernel(param0, param1, param2, param3) {
 function _M0FPC15abort5abortGuE(msg) {
   $panic();
 }
+function _M0MPC15array5Array4pushGiE(self, value) {
+  _M0MPB7JSArray4push(self, value);
+}
 function _M0MPC15array10FixedArray4copyGyE(self) {
   return _M0MPB7JSArray4copy(self);
 }
 function _M0MPC16double6Double7to__int(self) {
   return self !== self ? 0 : self >= 2147483647 ? 2147483647 : self <= -2147483648 ? -2147483648 : self | 0;
 }
-function _M0MPC15array5Array2atGdE(self, index) {
-  const len = self.length;
-  return index >= 0 && index < len ? self[index] : $panic();
+function _M0MPC15array5Array11unsafe__popGiE(self) {
+  return _M0MPB7JSArray3pop(self);
 }
 function _M0MPC15array5Array2atGiE(self, index) {
   const len = self.length;
   return index >= 0 && index < len ? self[index] : $panic();
+}
+function _M0MPC15array5Array2atGdE(self, index) {
+  const len = self.length;
+  return index >= 0 && index < len ? self[index] : $panic();
+}
+function _M0MPC15array5Array3setGiE(self, index, value) {
+  const len = self.length;
+  if (index >= 0 && index < len) {
+    self[index] = value;
+    return;
+  } else {
+    $panic();
+    return;
+  }
+}
+function _M0MPC15array5Array4makeGiE(len, elem) {
+  const arr = new Array(len);
+  let _tmp = 0;
+  while (true) {
+    const i = _tmp;
+    if (i < len) {
+      arr[i] = elem;
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return arr;
 }
 function _M0FPC14math3pow(_tmp, _tmp$2) {
   return Math.pow(_tmp, _tmp$2);
@@ -308,11 +341,11 @@ function _M0MP270717lee10pixelforge5Image6invert(self) {
 function _M0MP270717lee10pixelforge5Image10brightness(self, delta) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: r + delta | 0, _1: g + delta | 0, _2: b + delta | 0 }));
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, b) }));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -776,6 +809,234 @@ function _M0MP270717lee10pixelforge6Kernel14gaussian__blur() {
 function _M0MP270717lee10pixelforge5Image4blur(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel14gaussian__blur());
 }
+function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
+  const w = self.width;
+  const h = self.height;
+  const n = Math.imul(w, h) | 0;
+  const gray = _M0MP270717lee10pixelforge5Image4blur(_M0MP270717lee10pixelforge5Image9grayscale(self));
+  const gx = _M0MPC15array5Array4makeGiE(n, 0);
+  const gy = _M0MPC15array5Array4makeGiE(n, 0);
+  const mag = _M0MPC15array5Array4makeGiE(n, 0);
+  const kx = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+  const ky = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+  let _tmp = 0;
+  while (true) {
+    const y = _tmp;
+    if (y < h) {
+      let _tmp$2 = 0;
+      while (true) {
+        const x = _tmp$2;
+        if (x < w) {
+          let sx = 0;
+          let sy = 0;
+          let _tmp$3 = 0;
+          while (true) {
+            const j = _tmp$3;
+            if (j < 3) {
+              let _tmp$4 = 0;
+              while (true) {
+                const i = _tmp$4;
+                if (i < 3) {
+                  const _p = (x + i | 0) - 1 | 0;
+                  const px = _p < 0 ? 0 : _p >= w ? w - 1 | 0 : _p;
+                  const _p$2 = (y + j | 0) - 1 | 0;
+                  const py = _p$2 < 0 ? 0 : _p$2 >= h ? h - 1 | 0 : _p$2;
+                  const _tmp$5 = gray.data;
+                  const _tmp$6 = Math.imul((Math.imul(py, w) | 0) + px | 0, 4) | 0;
+                  $bound_check(_tmp$5, _tmp$6);
+                  const lum = _tmp$5[_tmp$6];
+                  sx = sx + (Math.imul(lum, _M0MPC15array5Array2atGiE(kx, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
+                  sy = sy + (Math.imul(lum, _M0MPC15array5Array2atGiE(ky, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
+                  _tmp$4 = i + 1 | 0;
+                  continue;
+                } else {
+                  break;
+                }
+              }
+              _tmp$3 = j + 1 | 0;
+              continue;
+            } else {
+              break;
+            }
+          }
+          const p = (Math.imul(y, w) | 0) + x | 0;
+          _M0MPC15array5Array3setGiE(gx, p, sx);
+          _M0MPC15array5Array3setGiE(gy, p, sy);
+          const _p = sx;
+          const _tmp$4 = _p < 0 ? -_p | 0 : _p;
+          const _p$2 = sy;
+          _M0MPC15array5Array3setGiE(mag, p, _tmp$4 + (_p$2 < 0 ? -_p$2 | 0 : _p$2) | 0);
+          _tmp$2 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  const thin = _M0MPC15array5Array4makeGiE(n, 0);
+  let _tmp$2 = 0;
+  while (true) {
+    const y = _tmp$2;
+    if (y < h) {
+      let _tmp$3 = 0;
+      while (true) {
+        const x = _tmp$3;
+        if (x < w) {
+          _L: {
+            const p = (Math.imul(y, w) | 0) + x | 0;
+            const m = _M0MPC15array5Array2atGiE(mag, p);
+            if (m === 0) {
+              break _L;
+            }
+            const _p = _M0MPC15array5Array2atGiE(gx, p);
+            const ax = (_p < 0 ? -_p | 0 : _p) + 0;
+            const _p$2 = _M0MPC15array5Array2atGiE(gy, p);
+            const ay = (_p$2 < 0 ? -_p$2 | 0 : _p$2) + 0;
+            let dx = 1;
+            let dy = 0;
+            if (ay <= 0.41421356 * ax) {
+              dx = 1;
+              dy = 0;
+            } else {
+              if (ax <= 0.41421356 * ay) {
+                dx = 0;
+                dy = 1;
+              } else {
+                if ((Math.imul(_M0MPC15array5Array2atGiE(gx, p), _M0MPC15array5Array2atGiE(gy, p)) | 0) > 0) {
+                  dx = 1;
+                  dy = 1;
+                } else {
+                  dx = 1;
+                  dy = -1;
+                }
+              }
+            }
+            const _p$3 = y + dy | 0;
+            const _tmp$4 = Math.imul(_p$3 < 0 ? 0 : _p$3 >= h ? h - 1 | 0 : _p$3, w) | 0;
+            const _p$4 = x + dx | 0;
+            const q1 = _tmp$4 + (_p$4 < 0 ? 0 : _p$4 >= w ? w - 1 | 0 : _p$4) | 0;
+            const _p$5 = y - dy | 0;
+            const _tmp$5 = Math.imul(_p$5 < 0 ? 0 : _p$5 >= h ? h - 1 | 0 : _p$5, w) | 0;
+            const _p$6 = x - dx | 0;
+            const q2 = _tmp$5 + (_p$6 < 0 ? 0 : _p$6 >= w ? w - 1 | 0 : _p$6) | 0;
+            if (m >= _M0MPC15array5Array2atGiE(mag, q1) && m >= _M0MPC15array5Array2atGiE(mag, q2)) {
+              _M0MPC15array5Array3setGiE(thin, p, m);
+            }
+            break _L;
+          }
+          _tmp$3 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp$2 = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  const state = _M0MPC15array5Array4makeGiE(n, 0);
+  const stack = [];
+  let _tmp$3 = 0;
+  while (true) {
+    const p = _tmp$3;
+    if (p < n) {
+      if (_M0MPC15array5Array2atGiE(thin, p) >= high) {
+        _M0MPC15array5Array3setGiE(state, p, 2);
+        _M0MPC15array5Array4pushGiE(stack, p);
+      } else {
+        if (_M0MPC15array5Array2atGiE(thin, p) >= low) {
+          _M0MPC15array5Array3setGiE(state, p, 1);
+        }
+      }
+      _tmp$3 = p + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  while (true) {
+    if (stack.length > 0) {
+      const p = _M0MPC15array5Array11unsafe__popGiE(stack);
+      const px = p % w | 0;
+      const py = p / w | 0;
+      let _tmp$4 = -1;
+      while (true) {
+        const dy = _tmp$4;
+        if (dy < 2) {
+          let _tmp$5 = -1;
+          while (true) {
+            const dx = _tmp$5;
+            if (dx < 2) {
+              _L: {
+                const nx = px + dx | 0;
+                const ny = py + dy | 0;
+                if (nx < 0 || (nx >= w || (ny < 0 || ny >= h))) {
+                  break _L;
+                }
+                const q = (Math.imul(ny, w) | 0) + nx | 0;
+                if (_M0MPC15array5Array2atGiE(state, q) === 1) {
+                  _M0MPC15array5Array3setGiE(state, q, 2);
+                  _M0MPC15array5Array4pushGiE(stack, q);
+                }
+                break _L;
+              }
+              _tmp$5 = dx + 1 | 0;
+              continue;
+            } else {
+              break;
+            }
+          }
+          _tmp$4 = dy + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      continue;
+    } else {
+      break;
+    }
+  }
+  const out = _M0MP270717lee10pixelforge5Image3new(w, h);
+  let _tmp$4 = 0;
+  while (true) {
+    const p = _tmp$4;
+    if (p < n) {
+      const v = _M0MPC15array5Array2atGiE(state, p) === 2 ? 255 : 0;
+      const base = Math.imul(p, 4) | 0;
+      const _tmp$5 = out.data;
+      $bound_check(_tmp$5, base);
+      _tmp$5[base] = v;
+      const _tmp$6 = out.data;
+      const _tmp$7 = base + 1 | 0;
+      $bound_check(_tmp$6, _tmp$7);
+      _tmp$6[_tmp$7] = v;
+      const _tmp$8 = out.data;
+      const _tmp$9 = base + 2 | 0;
+      $bound_check(_tmp$8, _tmp$9);
+      _tmp$8[_tmp$9] = v;
+      const _tmp$10 = out.data;
+      const _tmp$11 = base + 3 | 0;
+      const _tmp$12 = self.data;
+      const _tmp$13 = base + 3 | 0;
+      $bound_check(_tmp$12, _tmp$13);
+      $bound_check(_tmp$10, _tmp$11);
+      _tmp$10[_tmp$11] = _tmp$12[_tmp$13];
+      _tmp$4 = p + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
 function _M0MP270717lee10pixelforge6Kernel5edges() {
   return _M0MP270717lee10pixelforge6Kernel3new(3, [-1, -1, -1, -1, 8, -1, -1, -1, -1], 1, 0);
 }
@@ -947,6 +1208,10 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
     }
     case 19: {
       return _M0MP270717lee10pixelforge5Image6scharr(self);
+    }
+    case 20: {
+      const high = _M0MPC16double6Double7to__int(amount) <= 0 ? 100 : _M0MPC16double6Double7to__int(amount);
+      return _M0MP270717lee10pixelforge5Image5canny(self, high / 2 | 0, high);
     }
     default: {
       return _M0MP270717lee10pixelforge5Image4copy(self);
