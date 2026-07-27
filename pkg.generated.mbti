@@ -31,6 +31,7 @@ pub(all) struct Image {
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
 pub fn Image::blur(Self) -> Self
 pub fn Image::brightness(Self, Int) -> Self
+pub fn Image::canny(Self, Int, Int) -> Self
 pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self

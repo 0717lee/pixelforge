@@ -25,6 +25,7 @@
 /// | 17 | gamma | gamma value (default 2.2) |
 /// | 18 | vignette | strength 0..1 (default 0.5) |
 /// | 19 | scharr edges | — |
+/// | 20 | canny edges | high threshold (default 100, low = high/2) |
 pub fn Image::apply_filter_id(
   self : Image,
   filter_id : Int,
@@ -52,6 +53,10 @@ pub fn Image::apply_filter_id(
     17 => self.gamma(if amount <= 0.0 { 2.2 } else { amount })
     18 => self.vignette(if amount <= 0.0 { 0.5 } else { amount })
     19 => self.scharr()
+    20 => {
+      let high = if amount.to_int() <= 0 { 100 } else { amount.to_int() }
+      self.canny(high / 2, high)
+    }
     _ => self.copy()
   }
 }
