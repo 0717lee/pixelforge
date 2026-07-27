@@ -38,13 +38,16 @@ function _M0MPC15array10FixedArray4copyGyE(self) {
 function _M0MPC16double6Double7to__int(self) {
   return self !== self ? 0 : self >= 2147483647 ? 2147483647 : self <= -2147483648 ? -2147483648 : self | 0;
 }
+function _M0MPC15array5Array2atGdE(self, index) {
+  const len = self.length;
+  return index >= 0 && index < len ? self[index] : $panic();
+}
 function _M0MPC15array5Array2atGiE(self, index) {
   const len = self.length;
   return index >= 0 && index < len ? self[index] : $panic();
 }
-function _M0MPC15array5Array2atGdE(self, index) {
-  const len = self.length;
-  return index >= 0 && index < len ? self[index] : $panic();
+function _M0FPC14math3pow(_tmp, _tmp$2) {
+  return Math.pow(_tmp, _tmp$2);
 }
 function _M0MP270717lee10pixelforge5Image3new(width, height) {
   return new _M0TP270717lee10pixelforge5Image(width, height, $makebytes(Math.imul(Math.imul(width, height) | 0, 4) | 0, 0));
@@ -208,6 +211,91 @@ function _M0MP270717lee10pixelforge5Image8map__rgb(self, transform) {
   }
   return out;
 }
+function _M0MP270717lee10pixelforge5Image5gamma(self, value) {
+  const g = value <= 0 ? 1 : value;
+  const inv = 1 / g;
+  const lut = $make_array_len_and_init(256, 0);
+  let _tmp = 0;
+  while (true) {
+    const i = _tmp;
+    if (i < 256) {
+      const normalized = (i + 0) / 255;
+      $bound_check(lut, i);
+      lut[i] = _M0MPC16double6Double7to__int(_M0FPC14math3pow(normalized, inv) * 255 + 0.5);
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g$2, b) => {
+    $bound_check(lut, r);
+    const _tmp$2 = lut[r];
+    $bound_check(lut, g$2);
+    const _tmp$3 = lut[g$2];
+    $bound_check(lut, b);
+    return { _0: _tmp$2, _1: _tmp$3, _2: lut[b] };
+  });
+}
+function _M0MP270717lee10pixelforge5Image8vignette(self, strength) {
+  const s = strength < 0 ? 0 : strength > 1 ? 1 : strength;
+  const out = _M0MP270717lee10pixelforge5Image4copy(self);
+  const cx = ((self.width - 1 | 0) + 0) / 2;
+  const cy = ((self.height - 1 | 0) + 0) / 2;
+  const max_d2 = cx * cx + cy * cy;
+  if (max_d2 <= 0) {
+    return out;
+  }
+  const _bind = self.height;
+  let _tmp = 0;
+  while (true) {
+    const y = _tmp;
+    if (y < _bind) {
+      const _bind$2 = self.width;
+      let _tmp$2 = 0;
+      while (true) {
+        const x = _tmp$2;
+        if (x < _bind$2) {
+          const dx = x + 0 - cx;
+          const dy = y + 0 - cy;
+          const factor = 1 - s * (dx * dx + dy * dy) / max_d2;
+          const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
+          const _tmp$3 = out.data;
+          const _tmp$4 = out.data;
+          $bound_check(_tmp$4, base);
+          const _p = _M0MPC16double6Double7to__int((_tmp$4[base] + 0) * factor + 0.5);
+          $bound_check(_tmp$3, base);
+          _tmp$3[base] = _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
+          const _tmp$5 = out.data;
+          const _tmp$6 = base + 1 | 0;
+          const _tmp$7 = out.data;
+          const _tmp$8 = base + 1 | 0;
+          $bound_check(_tmp$7, _tmp$8);
+          const _p$2 = _M0MPC16double6Double7to__int((_tmp$7[_tmp$8] + 0) * factor + 0.5);
+          $bound_check(_tmp$5, _tmp$6);
+          _tmp$5[_tmp$6] = _p$2 < 0 ? 0 : _p$2 > 255 ? 255 : _p$2 & 255;
+          const _tmp$9 = out.data;
+          const _tmp$10 = base + 2 | 0;
+          const _tmp$11 = out.data;
+          const _tmp$12 = base + 2 | 0;
+          $bound_check(_tmp$11, _tmp$12);
+          const _p$3 = _M0MPC16double6Double7to__int((_tmp$11[_tmp$12] + 0) * factor + 0.5);
+          $bound_check(_tmp$9, _tmp$10);
+          _tmp$9[_tmp$10] = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          _tmp$2 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
 function _M0MP270717lee10pixelforge5Image9grayscale(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
     const y = (((Math.imul(299, r) | 0) + (Math.imul(587, g) | 0) | 0) + (Math.imul(114, b) | 0) | 0) / 1000 | 0;
@@ -220,11 +308,11 @@ function _M0MP270717lee10pixelforge5Image6invert(self) {
 function _M0MP270717lee10pixelforge5Image10brightness(self, delta) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: r + delta | 0, _1: g + delta | 0, _2: b + delta | 0 }));
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS143(factor, b) }));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -700,17 +788,9 @@ function _M0MP270717lee10pixelforge6Kernel6emboss() {
 function _M0MP270717lee10pixelforge5Image6emboss(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel6emboss());
 }
-function _M0MP270717lee10pixelforge6Kernel7sharpen() {
-  return _M0MP270717lee10pixelforge6Kernel3new(3, [0, -1, 0, -1, 5, -1, 0, -1, 0], 1, 0);
-}
-function _M0MP270717lee10pixelforge5Image7sharpen(self) {
-  return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel7sharpen());
-}
-function _M0MP270717lee10pixelforge5Image5sobel(self) {
+function _M0MP270717lee10pixelforge5Image15gradient__edges(self, gx, gy) {
   const gray = _M0MP270717lee10pixelforge5Image9grayscale(self);
   const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
-  const gx = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
-  const gy = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
   const _bind = self.height;
   let _tmp = 0;
   while (true) {
@@ -794,6 +874,18 @@ function _M0MP270717lee10pixelforge5Image5sobel(self) {
   }
   return out;
 }
+function _M0MP270717lee10pixelforge5Image6scharr(self) {
+  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, [-3, 0, 3, -10, 0, 10, -3, 0, 3], [-3, -10, -3, 0, 0, 0, 3, 10, 3]);
+}
+function _M0MP270717lee10pixelforge6Kernel7sharpen() {
+  return _M0MP270717lee10pixelforge6Kernel3new(3, [0, -1, 0, -1, 5, -1, 0, -1, 0], 1, 0);
+}
+function _M0MP270717lee10pixelforge5Image7sharpen(self) {
+  return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel7sharpen());
+}
+function _M0MP270717lee10pixelforge5Image5sobel(self) {
+  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, [-1, 0, 1, -2, 0, 2, -1, 0, 1], [-1, -2, -1, 0, 0, 0, 1, 2, 1]);
+}
 function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, amount) {
   switch (filter_id) {
     case 0: {
@@ -846,6 +938,15 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
     }
     case 16: {
       return _M0MP270717lee10pixelforge5Image9posterize(self, _M0MPC16double6Double7to__int(amount) < 2 ? 4 : _M0MPC16double6Double7to__int(amount));
+    }
+    case 17: {
+      return _M0MP270717lee10pixelforge5Image5gamma(self, amount <= 0 ? 2.2 : amount);
+    }
+    case 18: {
+      return _M0MP270717lee10pixelforge5Image8vignette(self, amount <= 0 ? 0.5 : amount);
+    }
+    case 19: {
+      return _M0MP270717lee10pixelforge5Image6scharr(self);
     }
     default: {
       return _M0MP270717lee10pixelforge5Image4copy(self);

@@ -21,7 +21,7 @@ async function loadWasm() {
 const wasmInstance = await loadWasm();
 
 // Filter ids must match @pixelforge.Image::apply_filter_id.
-const FILTER = { GRAYSCALE: 0, INVERT: 1, BRIGHTNESS: 2, CONTRAST: 3, BLUR: 4, SHARPEN: 5, EMBOSS: 6, EDGES: 7, SOBEL: 8, SEPIA: 9, THRESHOLD: 10, PIXELATE: 11, MEDIAN: 12, HISTEQ: 13, FLIP_H: 14, FLIP_V: 15, POSTERIZE: 16 };
+const FILTER = { GRAYSCALE: 0, INVERT: 1, BRIGHTNESS: 2, CONTRAST: 3, BLUR: 4, SHARPEN: 5, EMBOSS: 6, EDGES: 7, SOBEL: 8, SEPIA: 9, THRESHOLD: 10, PIXELATE: 11, MEDIAN: 12, HISTEQ: 13, FLIP_H: 14, FLIP_V: 15, POSTERIZE: 16, GAMMA: 17, VIGNETTE: 18, SCHARR: 19 };
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("canvas");
@@ -36,7 +36,7 @@ const contrastEl = $("contrast");
 let originalData = null;
 let imgW = 0;
 let imgH = 0;
-let currentFilter = -1;
+let activeFilters = []; // ordered stack of filter ids; empty = original
 let brightness = 0;
 let contrast = 1;
 let engine = "js"; // default to the faster zero-copy backend; WASM is a toggle
@@ -68,7 +68,7 @@ function runPipeline(eng) {
   let data = new Uint8ClampedArray(originalData.data);
   if (brightness !== 0) data = applyOne(data, imgW, imgH, FILTER.BRIGHTNESS, brightness, eng);
   if (contrast !== 1) data = applyOne(data, imgW, imgH, FILTER.CONTRAST, contrast, eng);
-  if (currentFilter >= 0) data = applyOne(data, imgW, imgH, currentFilter, 0, eng);
+  for (const id of activeFilters) data = applyOne(data, imgW, imgH, id, 0, eng);
   return data;
 }
 
@@ -96,9 +96,10 @@ function scheduleRender() {
   requestAnimationFrame(() => { rafPending = false; render(); });
 }
 
-function setActiveChip(id) {
+function setActiveChips() {
   for (const chip of filtersEl.querySelectorAll(".chip")) {
-    chip.classList.toggle("active", Number(chip.dataset.filter) === id);
+    const id = Number(chip.dataset.filter);
+    chip.classList.toggle("active", id === -1 ? activeFilters.length === 0 : activeFilters.includes(id));
   }
 }
 
@@ -109,14 +110,14 @@ function setActiveEngine(eng) {
 }
 
 function resetControls() {
-  currentFilter = -1;
+  activeFilters = [];
   brightness = 0;
   contrast = 1;
   brightnessEl.value = "0";
   contrastEl.value = "100";
   $("brightnessVal").textContent = "0";
   $("contrastVal").textContent = "1.00";
-  setActiveChip(-1);
+  setActiveChips();
 }
 
 function useImageSource(source) {
@@ -236,8 +237,15 @@ $("compareBtn").addEventListener("click", compareEngines);
 
 for (const chip of filtersEl.querySelectorAll(".chip")) {
   chip.addEventListener("click", () => {
-    currentFilter = Number(chip.dataset.filter);
-    setActiveChip(currentFilter);
+    const id = Number(chip.dataset.filter);
+    if (id === -1) {
+      activeFilters = [];
+    } else {
+      const at = activeFilters.indexOf(id);
+      if (at >= 0) activeFilters.splice(at, 1);
+      else activeFilters.push(id);
+    }
+    setActiveChips();
     render();
   });
 }
