@@ -15,9 +15,12 @@
 
 ## ✨ 特性
 
-- **20 种滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、水平/垂直翻转；另有 90° 旋转与最近邻/双线性缩放。
+- **26 种滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr/Canny 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、饱和度、色相旋转、水平/垂直翻转；另有 90° 旋转与最近邻/双线性缩放。
+- **形态学运算**：3×3 腐蚀 / 膨胀 / 开运算 / 闭运算。
+- **图像编解码**：QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
+- **色彩空间**：RGB ↔ HSV、RGB ↔ YCbCr (BT.601) 精确往返转换。
 - **通用卷积引擎**：`Kernel` + `Image::convolve`，可自定义任意奇数尺寸卷积核。
-- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现、**39 个单元测试全部手算验证**。
+- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现、**62 个单元测试全部手算验证**。
 - **零依赖**：只用 `moonbitlang/core`，不引入任何第三方库。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，处理结果一键下载 PNG。
@@ -31,10 +34,15 @@ pixelforge/
 ├── convolution.mbt        # Kernel + convolve + 模糊/锐化/浮雕/边缘/Sobel/Scharr
 ├── filters_advanced.mbt   # 棕褐色/二值化/像素化/中值/直方图均衡/色调分离
 ├── filters_effects.mbt    # 伽马校正/暗角
+├── colorspace.mbt         # RGB↔HSV、RGB↔YCbCr、饱和度/色相旋转
+├── morphology.mbt         # 3×3 腐蚀/膨胀/开/闭运算
+├── canny.mbt              # Canny 边缘检测（NMS + 滞后阈值）
+├── qoi.mbt                # QOI 图像编解码（完整规范）
+├── bmp.mbt                # BMP 编解码（无压缩 24/32 位）
 ├── transform.mbt          # 水平/垂直翻转、90° 旋转
 ├── resize.mbt             # 最近邻/双线性缩放
 ├── dispatch.mbt           # Image::apply_filter_id 统一派发（各绑定共用）
-├── *_test.mbt             # 39 个确定性测试（黑盒 + 白盒）
+├── *_test.mbt             # 62 个确定性测试（黑盒 + 白盒）
 ├── cmd/main/              # 原生 CLI 示例（moon run cmd/main）
 ├── cmd/ppm/               # PPM 图像输出示例（moon run cmd/ppm > edges.ppm）
 ├── web/                   # 浏览器绑定 + Playground（HTML/CSS/JS）
@@ -51,7 +59,7 @@ pixelforge/
 先安装 [MoonBit 工具链](https://www.moonbitlang.cn/download/)。
 
 ```bash
-moon test              # 运行 39 个单元测试
+moon test              # 运行 62 个单元测试
 moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
 moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
 ```
@@ -115,8 +123,9 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 | 17 | 伽马校正 | `gamma(value)` | 伽马值（默认 2.2） |
 | 18 | 暗角 | `vignette(strength)` | 强度 0..1（默认 0.5） |
 | 19 | Scharr 边缘 | `scharr()` | — |
+| 20 | Canny 边缘 | `canny(low, high)` | 高阈值（默认 100，低阈值取一半） |
 
-> 会改变尺寸的变换不走 id 派发，直接调用库 API：`rotate90()`、`resize_nearest(w, h)`、`resize_bilinear(w, h)`。
+> 会改变尺寸的变换不走 id 派发，直接调用库 API：`rotate90()`、`resize_nearest(w, h)`、`resize_bilinear(w, h)`。多参数 / 非图像→图像的 API 同理：`saturate(factor)`、`hue_rotate(deg)`、`erode()`/`dilate()`/`morph_open()`/`morph_close()`、`qoi_encode`/`qoi_decode`、`bmp_encode`/`bmp_decode`、`rgb_to_hsv` 等色彩空间函数。
 
 ## 🏗️ 架构与多后端
 
@@ -134,7 +143,7 @@ moon test                 # 默认后端（wasm-gc）
 moon test --target js     # js 后端
 ```
 
-39 个测试覆盖每个滤镜与变换，期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射等），在 wasm-gc 与 js 后端下均通过；GitHub Actions 持续集成。
+62 个测试覆盖每个滤镜、变换与编解码器，期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返等），在 wasm-gc 与 js 后端下均通过；GitHub Actions 持续集成。
 
 ## 📮 发布到 mooncakes.io
 

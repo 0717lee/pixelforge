@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 (2026-07-27)
+
+### 新增
+- 形态学运算：`erode` / `dilate` / `morph_open` / `morph_close`（3×3 结构元）
+- 色彩空间：`rgb_to_hsv` / `hsv_to_rgb` / `rgb_to_ycbcr` / `ycbcr_to_rgb`，及 `saturate`（饱和度）与 `hue_rotate`（色相旋转）滤镜
+- QOI 编解码：`qoi_encode` / `qoi_decode`，完整实现 QOI 规范全部 6 种 op，无损往返，畸形输入返回 `None`
+- BMP 编解码：`bmp_encode` / `bmp_decode`，无压缩 24/32 位，支持自上而下（负高度）位图
+- Canny 边缘检测：`canny(low, high)`，含非极大值抑制与 8 连通滞后阈值追踪；接入派发表 id 20 与 Playground
+
+### 变更
+- 统一派发表 `Image::apply_filter_id` 扩展至 id 0–20
+- 单元测试从 39 个增加到 62 个（含编码字节精确长度、无损往返、阶跃边缘几何等手算用例）
+
 ## 0.2.0 (2026-07-27)
 
 ### 新增
