@@ -4,6 +4,18 @@ package "0717lee/pixelforge"
 // Values
 pub fn clamp_byte(Int) -> Byte
 
+pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
+
+pub fn qoi_decode(Array[Byte]) -> Image?
+
+pub fn qoi_encode(Image) -> Array[Byte]
+
+pub fn rgb_to_hsv(Int, Int, Int) -> (Double, Double, Double)
+
+pub fn rgb_to_ycbcr(Int, Int, Int) -> (Int, Int, Int)
+
+pub fn ycbcr_to_rgb(Int, Int, Int) -> (Int, Int, Int)
+
 // Errors
 
 // Types and methods
@@ -29,6 +41,7 @@ pub fn Image::gamma(Self, Double) -> Self
 pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
+pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::invert(Self) -> Self
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
 pub fn Image::median(Self) -> Self
@@ -41,6 +54,7 @@ pub fn Image::posterize(Self, Int) -> Self
 pub fn Image::resize_bilinear(Self, Int, Int) -> Self
 pub fn Image::resize_nearest(Self, Int, Int) -> Self
 pub fn Image::rotate90(Self) -> Self
+pub fn Image::saturate(Self, Double) -> Self
 pub fn Image::scharr(Self) -> Self
 pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
