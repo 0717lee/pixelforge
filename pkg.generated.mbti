@@ -23,11 +23,29 @@ pub fn ycbcr_to_rgb(Int, Int, Int) -> (Int, Int, Int)
 // Errors
 
 // Types and methods
+pub(all) struct Affine {
+  a : Double
+  b : Double
+  c : Double
+  d : Double
+  e : Double
+  f : Double
+}
+pub fn Affine::apply(Self, Double, Double) -> (Double, Double)
+pub fn Affine::identity() -> Self
+pub fn Affine::invert(Self) -> Self?
+pub fn Affine::rotation(Double) -> Self
+pub fn Affine::scaling(Double, Double) -> Self
+pub fn Affine::shear(Double, Double) -> Self
+pub fn Affine::then(Self, Self) -> Self
+pub fn Affine::translation(Double, Double) -> Self
+
 pub(all) struct Image {
   width : Int
   height : Int
   data : FixedArray[Byte]
 }
+pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
 pub fn Image::blur(Self) -> Self
 pub fn Image::brightness(Self, Int) -> Self
@@ -58,6 +76,7 @@ pub fn Image::pixelate(Self, Int) -> Self
 pub fn Image::posterize(Self, Int) -> Self
 pub fn Image::resize_bilinear(Self, Int, Int) -> Self
 pub fn Image::resize_nearest(Self, Int, Int) -> Self
+pub fn Image::rotate(Self, Double) -> Self
 pub fn Image::rotate90(Self) -> Self
 pub fn Image::saturate(Self, Double) -> Self
 pub fn Image::scharr(Self) -> Self
@@ -66,6 +85,7 @@ pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
 pub fn Image::sobel(Self) -> Self
 pub fn Image::threshold(Self, Int) -> Self
+pub fn Image::translate(Self, Double, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self
 
 pub(all) struct Kernel {
