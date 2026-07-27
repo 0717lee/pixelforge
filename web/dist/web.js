@@ -49,6 +49,114 @@ function _M0MPC15array5Array2atGdE(self, index) {
 function _M0MP270717lee10pixelforge5Image3new(width, height) {
   return new _M0TP270717lee10pixelforge5Image(width, height, $makebytes(Math.imul(Math.imul(width, height) | 0, 4) | 0, 0));
 }
+function _M0MP270717lee10pixelforge5Image16flip__horizontal(self) {
+  const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
+  const _bind = self.height;
+  let _tmp = 0;
+  while (true) {
+    const y = _tmp;
+    if (y < _bind) {
+      const _bind$2 = self.width;
+      let _tmp$2 = 0;
+      while (true) {
+        const x = _tmp$2;
+        if (x < _bind$2) {
+          const src = Math.imul((Math.imul(y, self.width) | 0) + ((self.width - 1 | 0) - x | 0) | 0, 4) | 0;
+          const dst = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
+          const _tmp$3 = out.data;
+          const _tmp$4 = self.data;
+          $bound_check(_tmp$4, src);
+          $bound_check(_tmp$3, dst);
+          _tmp$3[dst] = _tmp$4[src];
+          const _tmp$5 = out.data;
+          const _tmp$6 = dst + 1 | 0;
+          const _tmp$7 = self.data;
+          const _tmp$8 = src + 1 | 0;
+          $bound_check(_tmp$7, _tmp$8);
+          $bound_check(_tmp$5, _tmp$6);
+          _tmp$5[_tmp$6] = _tmp$7[_tmp$8];
+          const _tmp$9 = out.data;
+          const _tmp$10 = dst + 2 | 0;
+          const _tmp$11 = self.data;
+          const _tmp$12 = src + 2 | 0;
+          $bound_check(_tmp$11, _tmp$12);
+          $bound_check(_tmp$9, _tmp$10);
+          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          const _tmp$13 = out.data;
+          const _tmp$14 = dst + 3 | 0;
+          const _tmp$15 = self.data;
+          const _tmp$16 = src + 3 | 0;
+          $bound_check(_tmp$15, _tmp$16);
+          $bound_check(_tmp$13, _tmp$14);
+          _tmp$13[_tmp$14] = _tmp$15[_tmp$16];
+          _tmp$2 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
+function _M0MP270717lee10pixelforge5Image14flip__vertical(self) {
+  const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
+  const _bind = self.height;
+  let _tmp = 0;
+  while (true) {
+    const y = _tmp;
+    if (y < _bind) {
+      const _bind$2 = self.width;
+      let _tmp$2 = 0;
+      while (true) {
+        const x = _tmp$2;
+        if (x < _bind$2) {
+          const src = Math.imul((Math.imul((self.height - 1 | 0) - y | 0, self.width) | 0) + x | 0, 4) | 0;
+          const dst = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
+          const _tmp$3 = out.data;
+          const _tmp$4 = self.data;
+          $bound_check(_tmp$4, src);
+          $bound_check(_tmp$3, dst);
+          _tmp$3[dst] = _tmp$4[src];
+          const _tmp$5 = out.data;
+          const _tmp$6 = dst + 1 | 0;
+          const _tmp$7 = self.data;
+          const _tmp$8 = src + 1 | 0;
+          $bound_check(_tmp$7, _tmp$8);
+          $bound_check(_tmp$5, _tmp$6);
+          _tmp$5[_tmp$6] = _tmp$7[_tmp$8];
+          const _tmp$9 = out.data;
+          const _tmp$10 = dst + 2 | 0;
+          const _tmp$11 = self.data;
+          const _tmp$12 = src + 2 | 0;
+          $bound_check(_tmp$11, _tmp$12);
+          $bound_check(_tmp$9, _tmp$10);
+          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          const _tmp$13 = out.data;
+          const _tmp$14 = dst + 3 | 0;
+          const _tmp$15 = self.data;
+          const _tmp$16 = src + 3 | 0;
+          $bound_check(_tmp$15, _tmp$16);
+          $bound_check(_tmp$13, _tmp$14);
+          _tmp$13[_tmp$14] = _tmp$15[_tmp$16];
+          _tmp$2 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
 function _M0MP270717lee10pixelforge5Image11from__bytes(width, height, data) {
   if (data.length !== (Math.imul(Math.imul(width, height) | 0, 4) | 0)) {
     _M0FPC15abort5abortGuE("Image::from_bytes: buffer length must equal width * height * 4");
@@ -112,11 +220,11 @@ function _M0MP270717lee10pixelforge5Image6invert(self) {
 function _M0MP270717lee10pixelforge5Image10brightness(self, delta) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: r + delta | 0, _1: g + delta | 0, _2: b + delta | 0 }));
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS133(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS133(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS133(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS133(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS141(factor, b) }));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -465,6 +573,10 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
     return { _0: e, _1: e, _2: e };
   });
 }
+function _M0MP270717lee10pixelforge5Image9posterize(self, levels) {
+  const l = levels < 2 ? 2 : levels > 256 ? 256 : levels;
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: (Math.imul((Math.imul(r, l) | 0) / 256 | 0, 255) | 0) / (l - 1 | 0) | 0, _1: (Math.imul((Math.imul(g, l) | 0) / 256 | 0, 255) | 0) / (l - 1 | 0) | 0, _2: (Math.imul((Math.imul(b, l) | 0) / 256 | 0, 255) | 0) / (l - 1 | 0) | 0 }));
+}
 function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
   const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
   const radius = kernel.size / 2 | 0;
@@ -725,6 +837,15 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
     }
     case 13: {
       return _M0MP270717lee10pixelforge5Image19histogram__equalize(self);
+    }
+    case 14: {
+      return _M0MP270717lee10pixelforge5Image16flip__horizontal(self);
+    }
+    case 15: {
+      return _M0MP270717lee10pixelforge5Image14flip__vertical(self);
+    }
+    case 16: {
+      return _M0MP270717lee10pixelforge5Image9posterize(self, _M0MPC16double6Double7to__int(amount) < 2 ? 4 : _M0MPC16double6Double7to__int(amount));
     }
     default: {
       return _M0MP270717lee10pixelforge5Image4copy(self);

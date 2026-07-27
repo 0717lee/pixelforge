@@ -21,7 +21,7 @@ async function loadWasm() {
 const wasmInstance = await loadWasm();
 
 // Filter ids must match @pixelforge.Image::apply_filter_id.
-const FILTER = { GRAYSCALE: 0, INVERT: 1, BRIGHTNESS: 2, CONTRAST: 3, BLUR: 4, SHARPEN: 5, EMBOSS: 6, EDGES: 7, SOBEL: 8, SEPIA: 9, THRESHOLD: 10, PIXELATE: 11, MEDIAN: 12, HISTEQ: 13 };
+const FILTER = { GRAYSCALE: 0, INVERT: 1, BRIGHTNESS: 2, CONTRAST: 3, BLUR: 4, SHARPEN: 5, EMBOSS: 6, EDGES: 7, SOBEL: 8, SEPIA: 9, THRESHOLD: 10, PIXELATE: 11, MEDIAN: 12, HISTEQ: 13, FLIP_H: 14, FLIP_V: 15, POSTERIZE: 16 };
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("canvas");
@@ -221,6 +221,16 @@ $("uploadBtn").addEventListener("click", () => $("fileInput").click());
 $("fileInput").addEventListener("change", (e) => loadFile(e.target.files[0]));
 $("sampleBtn").addEventListener("click", loadSample);
 $("resetBtn").addEventListener("click", () => { resetControls(); render(); });
+$("downloadBtn").addEventListener("click", () => {
+  if (!originalData) return;
+  canvas.toBlob((blob) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pixelforge.png";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, "image/png");
+});
 $("benchBtn").addEventListener("click", runBenchmark);
 $("compareBtn").addEventListener("click", compareEngines);
 
