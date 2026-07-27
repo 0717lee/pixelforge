@@ -2,6 +2,10 @@
 package "0717lee/pixelforge"
 
 // Values
+pub fn bmp_decode(Array[Byte]) -> Image?
+
+pub fn bmp_encode(Image, Bool) -> Array[Byte]
+
 pub fn clamp_byte(Int) -> Byte
 
 pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
