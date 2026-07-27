@@ -33,6 +33,8 @@ pub fn Image::new(Int, Int) -> Self
 pub fn Image::pixel_count(Self) -> Int
 pub fn Image::pixelate(Self, Int) -> Self
 pub fn Image::posterize(Self, Int) -> Self
+pub fn Image::resize_bilinear(Self, Int, Int) -> Self
+pub fn Image::resize_nearest(Self, Int, Int) -> Self
 pub fn Image::rotate90(Self) -> Self
 pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
