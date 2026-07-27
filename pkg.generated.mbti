@@ -10,6 +10,10 @@ pub fn clamp_byte(Int) -> Byte
 
 pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
 
+pub fn png_decode(Array[Byte]) -> Image?
+
+pub fn png_encode(Image) -> Array[Byte]
+
 pub fn qoi_decode(Array[Byte]) -> Image?
 
 pub fn qoi_encode(Image) -> Array[Byte]
