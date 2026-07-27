@@ -18,8 +18,10 @@ pub fn Image::brightness(Self, Int) -> Self
 pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
+pub fn Image::dilate(Self) -> Self
 pub fn Image::edges(Self) -> Self
 pub fn Image::emboss(Self) -> Self
+pub fn Image::erode(Self) -> Self
 pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
 pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
@@ -30,6 +32,8 @@ pub fn Image::histogram_equalize(Self) -> Self
 pub fn Image::invert(Self) -> Self
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
 pub fn Image::median(Self) -> Self
+pub fn Image::morph_close(Self) -> Self
+pub fn Image::morph_open(Self) -> Self
 pub fn Image::new(Int, Int) -> Self
 pub fn Image::pixel_count(Self) -> Int
 pub fn Image::pixelate(Self, Int) -> Self
