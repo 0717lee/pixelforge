@@ -1,0 +1,8 @@
+// PPM demo executable: renders a test scene, applies a filter, and prints the
+// result as an ASCII PPM (P3) image on stdout.
+// Usage: moon run cmd/ppm > edges.ppm
+import {
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")
