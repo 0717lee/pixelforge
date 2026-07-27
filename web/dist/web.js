@@ -34,6 +34,9 @@ function _M0TP270717lee10pixelforge6Kernel(param0, param1, param2, param3) {
 function _M0FPC15abort5abortGuE(msg) {
   $panic();
 }
+function _M0MPC15array5Array4pushGyE(self, value) {
+  _M0MPB7JSArray4push(self, value);
+}
 function _M0MPC15array5Array4pushGiE(self, value) {
   _M0MPB7JSArray4push(self, value);
 }
@@ -45,6 +48,10 @@ function _M0MPC16double6Double7to__int(self) {
 }
 function _M0MPC15array5Array11unsafe__popGiE(self) {
   return _M0MPB7JSArray3pop(self);
+}
+function _M0MPC15array5Array2atGyE(self, index) {
+  const len = self.length;
+  return index >= 0 && index < len ? self[index] : $panic();
 }
 function _M0MPC15array5Array2atGiE(self, index) {
   const len = self.length;
@@ -191,6 +198,207 @@ function _M0MP270717lee10pixelforge5Image14flip__vertical(self) {
       break;
     }
   }
+  return out;
+}
+function _M0FP270717lee10pixelforge8push__u8(buf, v) {
+  _M0MPC15array5Array4pushGyE(buf, (((v % 256 | 0) + 256 | 0) % 256 | 0) & 255);
+}
+function _M0FP270717lee10pixelforge13push__u32__be(buf, v) {
+  _M0FP270717lee10pixelforge8push__u8(buf, v / 16777216 | 0);
+  _M0FP270717lee10pixelforge8push__u8(buf, v / 65536 | 0);
+  _M0FP270717lee10pixelforge8push__u8(buf, v / 256 | 0);
+  _M0FP270717lee10pixelforge8push__u8(buf, v);
+}
+function _M0FP270717lee10pixelforge5crc32(data, from, to) {
+  let crc = -1;
+  let _tmp = from;
+  while (true) {
+    const i = _tmp;
+    if (i < to) {
+      const _tmp$2 = crc;
+      const _p = _M0MPC15array5Array2atGyE(data, i);
+      crc = _tmp$2 ^ _p;
+      let _tmp$3 = 0;
+      while (true) {
+        const _ = _tmp$3;
+        if (_ < 8) {
+          if ((crc & 1) !== 0) {
+            crc = crc >>> 1 ^ -306674912;
+          } else {
+            crc = crc >>> 1 | 0;
+          }
+          _tmp$3 = _ + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return crc ^ -1;
+}
+function _M0FP270717lee10pixelforge7adler32(data, from, to) {
+  let a = 1;
+  let b = 0;
+  let _tmp = from;
+  while (true) {
+    const i = _tmp;
+    if (i < to) {
+      const _tmp$2 = a;
+      const _p = _M0MPC15array5Array2atGyE(data, i);
+      a = (((_tmp$2 >>> 0) + (_p >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
+      b = (((b >>> 0) + (a >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return b << 16 | a;
+}
+function _M0FP270717lee10pixelforge14push__uint__be(buf, v) {
+  const _p = v >>> 24 & 255;
+  _M0MPC15array5Array4pushGyE(buf, _p & 255);
+  const _p$2 = v >>> 16 & 255;
+  _M0MPC15array5Array4pushGyE(buf, _p$2 & 255);
+  const _p$3 = v >>> 8 & 255;
+  _M0MPC15array5Array4pushGyE(buf, _p$3 & 255);
+  const _p$4 = v & 255;
+  _M0MPC15array5Array4pushGyE(buf, _p$4 & 255);
+}
+function _M0FP270717lee10pixelforge11push__chunk(out, ctype, payload) {
+  _M0FP270717lee10pixelforge13push__u32__be(out, payload.length);
+  const crc_start = out.length;
+  const _bind = ctype.length;
+  let _tmp = 0;
+  while (true) {
+    const _ = _tmp;
+    if (_ < _bind) {
+      const t = ctype[_];
+      _M0FP270717lee10pixelforge8push__u8(out, t);
+      _tmp = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  const _bind$2 = payload.length;
+  let _tmp$2 = 0;
+  while (true) {
+    const _ = _tmp$2;
+    if (_ < _bind$2) {
+      const b = payload[_];
+      _M0MPC15array5Array4pushGyE(out, b);
+      _tmp$2 = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  _M0FP270717lee10pixelforge14push__uint__be(out, _M0FP270717lee10pixelforge5crc32(out, crc_start, out.length));
+}
+function _M0FP270717lee10pixelforge11png__encode(img) {
+  const out = [];
+  const _bind = [137, 80, 78, 71, 13, 10, 26, 10];
+  const _bind$2 = _bind.length;
+  let _tmp = 0;
+  while (true) {
+    const _ = _tmp;
+    if (_ < _bind$2) {
+      const s = _bind[_];
+      _M0FP270717lee10pixelforge8push__u8(out, s);
+      _tmp = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  const ihdr = [];
+  _M0FP270717lee10pixelforge13push__u32__be(ihdr, img.width);
+  _M0FP270717lee10pixelforge13push__u32__be(ihdr, img.height);
+  const _bind$3 = [8, 6, 0, 0, 0];
+  const _bind$4 = _bind$3.length;
+  let _tmp$2 = 0;
+  while (true) {
+    const _ = _tmp$2;
+    if (_ < _bind$4) {
+      const v = _bind$3[_];
+      _M0FP270717lee10pixelforge8push__u8(ihdr, v);
+      _tmp$2 = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  _M0FP270717lee10pixelforge11push__chunk(out, [73, 72, 68, 82], ihdr);
+  const raw = [];
+  const _bind$5 = img.height;
+  let _tmp$3 = 0;
+  while (true) {
+    const y = _tmp$3;
+    if (y < _bind$5) {
+      _M0MPC15array5Array4pushGyE(raw, 0);
+      const _bind$6 = Math.imul(img.width, 4) | 0;
+      let _tmp$4 = 0;
+      while (true) {
+        const x = _tmp$4;
+        if (x < _bind$6) {
+          const _tmp$5 = img.data;
+          const _tmp$6 = (Math.imul(Math.imul(y, img.width) | 0, 4) | 0) + x | 0;
+          $bound_check(_tmp$5, _tmp$6);
+          _M0MPC15array5Array4pushGyE(raw, _tmp$5[_tmp$6]);
+          _tmp$4 = x + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      _tmp$3 = y + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  const idat = [];
+  _M0MPC15array5Array4pushGyE(idat, 120);
+  _M0MPC15array5Array4pushGyE(idat, 1);
+  let off = 0;
+  while (true) {
+    if (off < raw.length || raw.length === 0) {
+      const chunk = (raw.length - off | 0) > 65535 ? 65535 : raw.length - off | 0;
+      const last = (off + chunk | 0) >= raw.length;
+      _M0MPC15array5Array4pushGyE(idat, last ? 1 : 0);
+      _M0FP270717lee10pixelforge8push__u8(idat, chunk % 256 | 0);
+      _M0FP270717lee10pixelforge8push__u8(idat, chunk / 256 | 0);
+      _M0FP270717lee10pixelforge8push__u8(idat, 255 - (chunk % 256 | 0) | 0);
+      _M0FP270717lee10pixelforge8push__u8(idat, 255 - (chunk / 256 | 0) | 0);
+      let _tmp$4 = 0;
+      while (true) {
+        const i = _tmp$4;
+        if (i < chunk) {
+          _M0MPC15array5Array4pushGyE(idat, _M0MPC15array5Array2atGyE(raw, off + i | 0));
+          _tmp$4 = i + 1 | 0;
+          continue;
+        } else {
+          break;
+        }
+      }
+      off = off + chunk | 0;
+      if (last) {
+        break;
+      }
+      continue;
+    } else {
+      break;
+    }
+  }
+  _M0FP270717lee10pixelforge14push__uint__be(idat, _M0FP270717lee10pixelforge7adler32(raw, 0, raw.length));
+  _M0FP270717lee10pixelforge11push__chunk(out, [73, 68, 65, 84], idat);
+  _M0FP270717lee10pixelforge11push__chunk(out, [73, 69, 78, 68], []);
   return out;
 }
 function _M0MP270717lee10pixelforge5Image11from__bytes(width, height, data) {
@@ -341,11 +549,11 @@ function _M0MP270717lee10pixelforge5Image6invert(self) {
 function _M0MP270717lee10pixelforge5Image10brightness(self, delta) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: r + delta | 0, _1: g + delta | 0, _2: b + delta | 0 }));
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS424(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS294(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS424(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS424(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS424(factor, b) }));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -1221,4 +1429,22 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
 function _M0FP370717lee10pixelforge3web13apply__filter(data, width, height, filter_id, amount) {
   return _M0MP270717lee10pixelforge5Image17apply__filter__id(_M0MP270717lee10pixelforge5Image11from__bytes(width, height, data), filter_id, amount).data;
 }
-export { _M0FP370717lee10pixelforge3web13apply__filter as apply_filter }
+function _M0FP370717lee10pixelforge3web11encode__png(data, width, height) {
+  const bytes = _M0FP270717lee10pixelforge11png__encode(_M0MP270717lee10pixelforge5Image11from__bytes(width, height, data));
+  const out = $makebytes(bytes.length, 0);
+  const _bind = bytes.length;
+  let _tmp = 0;
+  while (true) {
+    const i = _tmp;
+    if (i < _bind) {
+      $bound_check(out, i);
+      out[i] = _M0MPC15array5Array2atGyE(bytes, i);
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
+export { _M0FP370717lee10pixelforge3web13apply__filter as apply_filter, _M0FP370717lee10pixelforge3web11encode__png as encode_png }

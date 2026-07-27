@@ -4,7 +4,7 @@
 //              canvas buffer crosses in with zero copies.
 //   * "wasm" — MoonBit compiled to a linear-memory WebAssembly module; pixels
 //              are bulk-copied into the exported memory via a Uint8Array view.
-import { apply_filter } from "./dist/web.js";
+import { apply_filter, encode_png } from "./dist/web.js";
 
 // Load the genuine-WASM module (no imports required). Fall back to JS if it
 // cannot be loaded for any reason.
@@ -19,6 +19,24 @@ async function loadWasm() {
   }
 }
 const wasmInstance = await loadWasm();
+
+// Off-main-thread pipeline: a module worker running the exact same MoonBit
+// code. Pixel buffers are posted as transferables (no structured clone).
+let worker = null;
+let workerReady = false;
+let workerSeq = 0;
+try {
+  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  worker.addEventListener("message", (e) => {
+    if (e.data.ready) { workerReady = true; return; }
+    const { seq, buffer, ms } = e.data;
+    if (seq !== workerSeq) return; // a newer render superseded this one
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(buffer), imgW, imgH), 0, 0);
+    updateStats(ms);
+  });
+} catch (err) {
+  console.warn("Worker unavailable, staying on the main thread.", err);
+}
 
 // Filter ids must match @pixelforge.Image::apply_filter_id.
 const FILTER = { GRAYSCALE: 0, INVERT: 1, BRIGHTNESS: 2, CONTRAST: 3, BLUR: 4, SHARPEN: 5, EMBOSS: 6, EDGES: 7, SOBEL: 8, SEPIA: 9, THRESHOLD: 10, PIXELATE: 11, MEDIAN: 12, HISTEQ: 13, FLIP_H: 14, FLIP_V: 15, POSTERIZE: 16, GAMMA: 17, VIGNETTE: 18, SCHARR: 19, CANNY: 20 };
@@ -40,6 +58,7 @@ let activeFilters = []; // ordered stack of filter ids; empty = original
 let brightness = 0;
 let contrast = 1;
 let engine = "js"; // default to the faster zero-copy backend; WASM is a toggle
+let threading = "main"; // "main" | "worker"
 
 // Reinterpret a MoonBit-returned Uint8Array as clamped for ImageData, no copy.
 function asClamped(buf) {
@@ -62,19 +81,27 @@ function applyOne(data, w, h, id, amount, eng) {
   return eng === "wasm" ? applyFilterWasm(data, w, h, id, amount) : apply_filter(data, w, h, id, amount);
 }
 
+// The pipeline as a flat op list (shared by main-thread and worker paths).
+function pipelineOps() {
+  const ops = [];
+  if (brightness !== 0) ops.push({ id: FILTER.BRIGHTNESS, amount: brightness });
+  if (contrast !== 1) ops.push({ id: FILTER.CONTRAST, amount: contrast });
+  for (const id of activeFilters) ops.push({ id, amount: 0 });
+  return ops;
+}
+
 // Non-destructive pipeline: brightness -> contrast -> discrete filter, from a
 // fresh copy of the source, on the requested engine.
 function runPipeline(eng) {
   let data = new Uint8ClampedArray(originalData.data);
-  if (brightness !== 0) data = applyOne(data, imgW, imgH, FILTER.BRIGHTNESS, brightness, eng);
-  if (contrast !== 1) data = applyOne(data, imgW, imgH, FILTER.CONTRAST, contrast, eng);
-  for (const id of activeFilters) data = applyOne(data, imgW, imgH, id, 0, eng);
+  for (const op of pipelineOps()) data = applyOne(data, imgW, imgH, op.id, op.amount, eng);
   return data;
 }
 
 function updateStats(ms) {
   $("statSize").textContent = `${imgW} × ${imgH}`;
-  $("statEngine").textContent = engine === "wasm" ? "WebAssembly" : "JS 后端";
+  const engineName = engine === "wasm" ? "WebAssembly" : "JS 后端";
+  $("statEngine").textContent = threading === "worker" ? `${engineName} · Worker` : engineName;
   $("statTime").textContent = `${ms.toFixed(2)} ms`;
   const mpPerSec = imgW * imgH / 1e6 / (ms / 1000);
   $("statThroughput").textContent = ms > 0 ? `${mpPerSec.toFixed(1)} MP/s` : "—";
@@ -82,6 +109,16 @@ function updateStats(ms) {
 
 function render() {
   if (!originalData) return;
+  if (threading === "worker" && workerReady) {
+    // Copy the source (we still need it) and hand the copy to the worker.
+    const copy = new Uint8ClampedArray(originalData.data);
+    workerSeq += 1;
+    worker.postMessage(
+      { seq: workerSeq, buffer: copy.buffer, w: imgW, h: imgH, ops: pipelineOps(), engine },
+      [copy.buffer],
+    );
+    return; // the worker message handler paints and updates stats
+  }
   const t0 = performance.now();
   const data = runPipeline(engine);
   const elapsed = performance.now() - t0;
@@ -224,13 +261,16 @@ $("sampleBtn").addEventListener("click", loadSample);
 $("resetBtn").addEventListener("click", () => { resetControls(); render(); });
 $("downloadBtn").addEventListener("click", () => {
   if (!originalData) return;
-  canvas.toBlob((blob) => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "pixelforge.png";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }, "image/png");
+  // Encode with the library's own pure-MoonBit PNG encoder — the download
+  // is a file produced by @pixelforge.png_encode, not canvas.toBlob.
+  const pixels = ctx.getImageData(0, 0, imgW, imgH).data;
+  const bytes = encode_png(new Uint8Array(pixels.buffer.slice(0)), imgW, imgH);
+  const blob = new Blob([bytes], { type: "image/png" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "pixelforge.png";
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
 $("benchBtn").addEventListener("click", runBenchmark);
 $("compareBtn").addEventListener("click", compareEngines);
@@ -264,6 +304,22 @@ if (!wasmInstance) {
   enginesEl.querySelector('[data-engine="wasm"]').disabled = true;
 }
 setActiveEngine(engine);
+
+// Threading toggle: main thread vs module worker.
+const threadsEl = $("threads");
+for (const chip of threadsEl.querySelectorAll(".chip")) {
+  chip.addEventListener("click", () => {
+    if (chip.dataset.thread === "worker" && !worker) return;
+    threading = chip.dataset.thread;
+    for (const c of threadsEl.querySelectorAll(".chip")) {
+      c.classList.toggle("active", c.dataset.thread === threading);
+    }
+    render();
+  });
+}
+if (!worker) {
+  threadsEl.querySelector('[data-thread="worker"]').disabled = true;
+}
 
 brightnessEl.addEventListener("input", () => {
   brightness = Number(brightnessEl.value);
