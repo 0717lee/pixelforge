@@ -4,6 +4,8 @@ package "0717lee/pixelforge/web"
 // Values
 pub fn apply_filter(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
 
+pub fn encode_png(FixedArray[Byte], Int, Int) -> FixedArray[Byte]
+
 // Errors
 
 // Types and methods
