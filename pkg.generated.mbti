@@ -70,9 +70,11 @@ pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
 pub fn Image::dilate(Self) -> Self
+pub fn Image::draw_char(Self, Int, Int, Char, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::draw_circle(Self, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::draw_line(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::draw_rect(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_text(Self, Int, Int, String, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::edges(Self) -> Self
 pub fn Image::emboss(Self) -> Self
 pub fn Image::erode(Self) -> Self
