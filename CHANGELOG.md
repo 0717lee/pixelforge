@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 (2026-07-28)
+
+### 新增
+- 可分离高斯模糊：`gaussian(radius)` 任意半径（二项式权重，行列两次 1D 扫描，每像素 O(r)；半径 1 与 3×3 高斯核一致）
+- 图层合成：`composite(top, mode)` Porter-Duff source-over，`BlendMode` 含 Normal/Multiply/Screen/Overlay/Darken/Lighten/Difference/Add，纯整数舍入运算
+- 位图文字：内置 5×7 字体（数字/A–Z/基本标点），`draw_char`/`draw_text` 整数倍缩放、小写折叠、自动裁剪
+- 英文版 README（README.en.md），中英互链
+
+### 变更
+- 单元测试从 81 个增加到 95 个（全部手算验证，含逐模式合成期望值、字形精确像素数、高斯脉冲对称性等）
+
 ## 0.4.0 (2026-07-27)
 
 ### 新增
