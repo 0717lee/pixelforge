@@ -11,7 +11,7 @@
 
 name = "0717lee/pixelforge"
 
-version = "0.4.0"
+version = "0.5.0"
 
 readme = "README.md"
 
@@ -30,4 +30,4 @@ keywords = [
 
 preferred_target = "wasm-gc"
 
-description = "Pure MoonBit image processing library: 26 filters (blur, sharpen, Sobel/Scharr/Canny edges, morphology, HSV/YCbCr color spaces), affine transforms, drawing primitives, and PNG/QOI/BMP codecs with a self-implemented DEFLATE inflate. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
+description = "Pure MoonBit image processing library: 26 filters (Sobel/Scharr/Canny edges, morphology, HSV/YCbCr), affine transforms, drawing primitives with a bitmap font, layer compositing with blend modes, separable Gaussian blur, and PNG/QOI/BMP codecs with a self-implemented DEFLATE inflate. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
