@@ -70,6 +70,7 @@ pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
 pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
 pub fn Image::gamma(Self, Double) -> Self
+pub fn Image::gaussian(Self, Int) -> Self
 pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
