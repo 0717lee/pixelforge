@@ -24,11 +24,12 @@ English | [简体中文](README.md)
 - **Drawing primitives**: Bresenham lines, rectangles, midpoint circles and fills, all bounds-clipped.
 - **Separable Gaussian blur**: `gaussian(radius)` with any radius, binomial weights split into row/column passes — O(r) per pixel instead of O(r²).
 - **Bilateral filter**: `bilateral(radius, σs, σr)` edge-preserving smoothing — denoises flat regions while keeping strong edges sharp.
+- **Image analysis**: Otsu automatic thresholding (between-class variance), Floyd–Steinberg error-diffusion dithering, 4-connected component labeling and counting.
 - **Layer compositing**: `composite(top, mode)` — Porter-Duff source-over with 8 blend modes (multiply, screen, overlay, darken, lighten, difference, add), in rounded integer math.
 - **Bitmap text**: built-in 5×7 font (digits, uppercase letters, basic punctuation), `draw_text` with integer scaling and clipping.
 - **Color spaces**: exact round-trip RGB ↔ HSV and RGB ↔ YCbCr (BT.601) conversions.
 - **Generic convolution engine**: `Kernel` + `Image::convolve` for custom odd-sized kernels.
-- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 102 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
+- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 117 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
 - **Zero dependencies**: only `moonbitlang/core`, no third-party libraries.
 - **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
 - **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
@@ -49,6 +50,9 @@ pixelforge/
 ├── drawing.mbt            # drawing primitives (Bresenham/rect/circle/fill)
 ├── gaussian.mbt           # separable Gaussian blur (any radius)
 ├── bilateral.mbt          # bilateral filter (edge-preserving)
+├── otsu.mbt               # Otsu automatic threshold
+├── dither.mbt             # Floyd–Steinberg error diffusion
+├── components.mbt         # 4-connected component labeling
 ├── blend.mbt              # layer compositing (source-over + 8 blend modes)
 ├── text.mbt               # 5×7 bitmap font draw_char/draw_text
 ├── png.mbt                # PNG codec (full DEFLATE inflate + checksums)
@@ -58,7 +62,7 @@ pixelforge/
 ├── transform.mbt          # flips, 90° rotation
 ├── resize.mbt             # nearest/bilinear resize
 ├── dispatch.mbt           # Image::apply_filter_id shared dispatch table
-├── *_test.mbt             # 102 deterministic tests (blackbox + whitebox)
+├── *_test.mbt             # 117 deterministic tests (blackbox + whitebox)
 ├── cmd/main/              # native CLI example (moon run cmd/main)
 ├── cmd/ppm/               # PPM output example (moon run cmd/ppm > edges.ppm)
 ├── web/                   # browser bindings + Playground (HTML/CSS/JS)
@@ -76,7 +80,7 @@ pixelforge/
 Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
 
 ```bash
-moon test              # run the 102 unit tests
+moon test              # run the 117 unit tests
 moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
 moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
 ```
@@ -143,8 +147,9 @@ let png_bytes = @pixelforge.png_encode(framed)
 | 18 | vignette | `vignette(strength)` | strength 0..1 (default 0.5) |
 | 19 | Scharr edges | `scharr()` | — |
 | 20 | Canny edges | `canny(low, high)` | high threshold (default 100, low = high/2) |
+| 21 | Otsu auto threshold | `otsu()` | — |
 
-> Size-changing transforms are library APIs rather than dispatch ids: `rotate90()`, `resize_nearest(w, h)`, `resize_bilinear(w, h)`. Likewise for multi-parameter APIs: `gaussian(radius)`, `bilateral(radius, σs, σr)`, `composite(top, mode)`, `draw_text(...)`, `rotate(deg)`, `translate(dx, dy)`, `affine(t)`, the drawing primitives, `saturate(factor)`, `hue_rotate(deg)`, the morphology operators, `png_encode`/`png_decode`, `gif_decode`, `qoi_encode`/`qoi_decode`, `bmp_encode`/`bmp_decode` and the color-space functions.
+> Size-changing transforms are library APIs rather than dispatch ids: `rotate90()`, `resize_nearest(w, h)`, `resize_bilinear(w, h)`. Likewise for multi-parameter APIs: `gaussian(radius)`, `bilateral(radius, σs, σr)`, `dither_grayscale(levels)`/`dither_mono()`, `otsu_threshold()`, `label_components(t)`/`count_components(t)`, `composite(top, mode)`, `draw_text(...)`, `rotate(deg)`, `translate(dx, dy)`, `affine(t)`, the drawing primitives, `saturate(factor)`, `hue_rotate(deg)`, the morphology operators, `png_encode`/`png_decode`, `gif_decode`, `qoi_encode`/`qoi_decode`, `bmp_encode`/`bmp_decode` and the color-space functions.
 
 ## 🏗️ Architecture & backends
 
@@ -162,7 +167,7 @@ moon test                 # default backend (wasm-gc)
 moon test --target js     # js backend
 ```
 
-102 tests cover every filter, transform, drawing primitive, blend mode, the font and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
+117 tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
 
 ## 📮 Published on mooncakes.io
 
