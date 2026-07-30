@@ -64,6 +64,7 @@ pub(all) struct Image {
 }
 pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
+pub fn Image::auto_contrast(Self) -> Self
 pub fn Image::bilateral(Self, Int, Double, Double) -> Self
 pub fn Image::blur(Self) -> Self
 pub fn Image::box_blur(Self, Int) -> Self
@@ -102,6 +103,7 @@ pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
 pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
+pub fn Image::levels(Self, Int, Int, Double) -> Self
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
 pub fn Image::median(Self) -> Self
 pub fn Image::morph_close(Self) -> Self
@@ -123,6 +125,7 @@ pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
 pub fn Image::sobel(Self) -> Self
+pub fn Image::stats(Self) -> Stats
 pub fn Image::threshold(Self, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
 pub fn Image::unsharp_mask(Self, Int, Double) -> Self
@@ -147,6 +150,21 @@ pub fn Kernel::emboss() -> Self
 pub fn Kernel::gaussian_blur() -> Self
 pub fn Kernel::new(Int, Array[Double], Double, Double) -> Self
 pub fn Kernel::sharpen() -> Self
+
+pub(all) struct Stats {
+  min_r : Int
+  max_r : Int
+  mean_r : Int
+  min_g : Int
+  max_g : Int
+  mean_g : Int
+  min_b : Int
+  max_b : Int
+  mean_b : Int
+  luma_min : Int
+  luma_max : Int
+  luma_mean : Int
+}
 
 // Type aliases
 
