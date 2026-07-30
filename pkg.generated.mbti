@@ -76,6 +76,7 @@ pub fn Image::copy(Self) -> Self
 pub fn Image::count_components(Self, Int) -> Int
 pub fn Image::crop(Self, Int, Int, Int, Int) -> Self
 pub fn Image::dilate(Self) -> Self
+pub fn Image::distance_transform(Self, Int) -> Self
 pub fn Image::dither_grayscale(Self, Int) -> Self
 pub fn Image::dither_mono(Self) -> Self
 pub fn Image::draw_char(Self, Int, Int, Char, Int, Byte, Byte, Byte, Byte) -> Unit
