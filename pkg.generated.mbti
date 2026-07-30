@@ -66,6 +66,7 @@ pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
 pub fn Image::bilateral(Self, Int, Double, Double) -> Self
 pub fn Image::blur(Self) -> Self
+pub fn Image::box_blur(Self, Int) -> Self
 pub fn Image::brightness(Self, Int) -> Self
 pub fn Image::canny(Self, Int, Int) -> Self
 pub fn Image::composite(Self, Self, BlendMode) -> Self
@@ -96,6 +97,7 @@ pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
 pub fn Image::hue_rotate(Self, Double) -> Self
+pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
 pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
@@ -123,6 +125,13 @@ pub fn Image::threshold(Self, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
 pub fn Image::unsharp_mask(Self, Int, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self
+
+pub(all) struct Integral {
+  width : Int
+  height : Int
+  sat : Array[Int64]
+}
+pub fn Integral::rect_sum(Self, Int, Int, Int, Int, Int) -> Int64
 
 pub(all) struct Kernel {
   size : Int
