@@ -5,3 +5,7 @@ target
 .mooncakes/
 .moonagent/
 _screenshots/
+# Personal / competition documents - must NEVER ship in git or mooncakes packages
+项目申报书*.md
+申报*.md
+*.pdf
