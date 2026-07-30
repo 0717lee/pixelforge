@@ -119,6 +119,7 @@ pub fn Image::sharpen(Self) -> Self
 pub fn Image::sobel(Self) -> Self
 pub fn Image::threshold(Self, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
+pub fn Image::unsharp_mask(Self, Int, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self
 
 pub(all) struct Kernel {
