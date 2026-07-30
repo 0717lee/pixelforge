@@ -90,6 +90,7 @@ pub fn Image::fill_circle(Self, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::fill_rect(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
+pub fn Image::flood_fill(Self, Int, Int, Byte, Byte, Byte, Byte, Int) -> Self
 pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
 pub fn Image::gamma(Self, Double) -> Self
 pub fn Image::gaussian(Self, Int) -> Self
