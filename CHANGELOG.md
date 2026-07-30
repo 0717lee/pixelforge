@@ -4,6 +4,8 @@
 
 首个稳定版里程碑：公开 API 进入稳定期，后续遵循语义化版本（主版号内保持向后兼容）。
 
+> 说明：mooncakes.io 目前要求主版号为 0，故该里程碑在 mooncakes 上以 **0.10.0** 发布；GitHub 保留 **v1.0.0** tag/release 作为稳定版标记。
+
 ### 新增
 - 图像统计：`stats()` 返回逐通道 min/max/mean 与 luma 统计（Int64 累加，防溢出）
 - 自动对比度：`auto_contrast()` 将 luma 线性拉伸至全量程，保持色相
