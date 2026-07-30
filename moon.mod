@@ -1,6 +1,6 @@
 name = "0717lee/pixelforge"
 
-version = "0.9.0"
+version = "1.0.0"
 
 readme = "README.md"
 
