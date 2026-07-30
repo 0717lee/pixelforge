@@ -1,9 +1,9 @@
 ///|
 /// PixelForge showcase: builds one image that exercises a wide slice of the
-/// public API — a gradient background, a translucent blended panel, drawing
-/// primitives (rectangles, circles, lines), bitmap text, and a final
-/// auto-contrast pass — then verifies it survives a PNG encode/decode round
-/// trip before printing it as ASCII PPM.
+/// public API — a box-blurred gradient background, a translucent blended
+/// panel, drawing primitives (rectangles, circles, lines), bitmap text, and a
+/// final auto-contrast pass — then verifies it survives a PNG encode/decode
+/// round trip (aborting on mismatch) before printing it as ASCII PPM.
 ///
 ///   moon run cmd/showcase > showcase.ppm
 fn main {
@@ -25,10 +25,12 @@ fn main {
     }
   }
 
-  // 2) A translucent panel blended over the gradient (multiply).
+  // 2) Soften the background with a classic filter pass, then blend a
+  //    translucent panel over it (multiply).
+  let background = img.box_blur(1)
   let panel = @pixelforge.Image::new(w, h)
   panel.fill_rect(20, 20, 120, 60, b'\xFF', b'\xE0', b'\x80', b'\x80')
-  let composed = img.composite(panel, @pixelforge.BlendMode::Multiply)
+  let composed = background.composite(panel, @pixelforge.BlendMode::Multiply)
 
   // 3) Drawing primitives on top of the composed image.
   composed.draw_rect(20, 20, 120, 60, b'\xFF', b'\xFF', b'\xFF', b'\xFF')
@@ -55,11 +57,11 @@ fn main {
     None => false
   }
   if !ok {
-    println("# WARNING: PNG round trip failed")
-  } else {
-    println("# PNG round trip: OK (\{png.length()} bytes)")
+    abort("showcase: PNG round trip failed")
   }
-  print_ppm(final_img)
+  // Emit the status as a PPM comment *after* the magic number, so stdout
+  // stays a strictly valid PPM stream.
+  print_ppm(final_img, "# PNG round trip: OK (\{png.length()} bytes)")
 }
 
 ///|
@@ -77,11 +79,12 @@ fn images_equal(a : @pixelforge.Image, b : @pixelforge.Image) -> Bool {
 }
 
 ///|
-/// Writes an image as ASCII PPM (P3): header lines then one "r g b" triple
-/// per pixel in row-major order. The leading '#' lines above are PPM
-/// comments, so the output is still a valid PPM file.
-fn print_ppm(img : @pixelforge.Image) -> Unit {
+/// Writes an image as ASCII PPM (P3): the magic number, an optional comment
+/// line (valid only *after* the magic), the dimensions and maxval, then one
+/// "r g b" triple per pixel in row-major order.
+fn print_ppm(img : @pixelforge.Image, comment : String) -> Unit {
   println("P3")
+  println(comment)
   println("\{img.width} \{img.height}")
   println("255")
   for y in 0..<img.height {

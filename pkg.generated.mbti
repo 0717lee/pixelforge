@@ -151,7 +151,7 @@ pub fn Kernel::gaussian_blur() -> Self
 pub fn Kernel::new(Int, Array[Double], Double, Double) -> Self
 pub fn Kernel::sharpen() -> Self
 
-pub(all) struct Stats {
+pub struct Stats {
   min_r : Int
   max_r : Int
   mean_r : Int
