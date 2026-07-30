@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 (2026-07-30)
+
+### 新增
+- Otsu 自动阈值：`otsu_threshold()` 类间方差最大化（Double 累加避免大图整数溢出），`otsu()` 一键二值化，接入派发表 id 21
+- Floyd–Steinberg 抖动：`dither_grayscale(levels)` / `dither_mono()`，经典 7/16、3/16、5/16、1/16 误差扩散
+- 连通域标记：`label_components(threshold)` 返回标签图与数量，`count_components` 便捷计数（四连通、显式栈泛洪填充）
+
+### 变更
+- 模块清单由 moon fmt 归一化回 moon.mod（exclude 保留在 options() 块内，发布包仍排除 assets 与个人文档）
+- 单元测试从 102 个增加到 117 个
+
 ## 0.6.2 (2026-07-30)
 
 ### 变更
