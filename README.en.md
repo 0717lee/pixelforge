@@ -6,6 +6,8 @@ English | [简体中文](README.md)
 
 > An image processing library written in pure [MoonBit](https://www.moonbitlang.com/), with a browser Playground that runs it live.
 > The backend-agnostic core compiles to **JavaScript / WebAssembly (wasm-gc & linear-memory wasm) / native**.
+>
+> **v1.0 is out**: the public API is stable and follows semantic versioning (backward-compatible within the major version).
 
 ![PixelForge browser Playground](assets/playground-original.png)
 
@@ -33,7 +35,8 @@ English | [简体中文](README.md)
 - **Bitmap text**: built-in 5×7 font (digits, uppercase letters, basic punctuation), `draw_text` with integer scaling and clipping.
 - **Color spaces**: exact round-trip RGB ↔ HSV and RGB ↔ YCbCr (BT.601) conversions.
 - **Generic convolution engine**: `Kernel` + `Image::convolve` for custom odd-sized kernels.
-- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 141 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
+- **Image statistics & tone**: `stats()` per-channel min/max/mean (Int64 accumulation), `auto_contrast()` automatic contrast stretch, `levels(black, white, gamma)` tonal remap.
+- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 147 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
 - **Zero dependencies**: only `moonbitlang/core`, no third-party libraries.
 - **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
 - **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
@@ -58,6 +61,7 @@ pixelforge/
 ├── integral.mbt           # integral image (SAT) + O(1) box blur
 ├── floodfill.mbt          # flood fill (4-connected seed fill)
 ├── distance.mbt           # chamfer (3,4) distance transform
+├── stats.mbt              # statistics / auto-contrast / levels
 ├── bilateral.mbt          # bilateral filter (edge-preserving)
 ├── otsu.mbt               # Otsu automatic threshold
 ├── dither.mbt             # Floyd–Steinberg error diffusion
@@ -71,9 +75,10 @@ pixelforge/
 ├── transform.mbt          # flips, 90° rotation
 ├── resize.mbt             # nearest/bilinear resize
 ├── dispatch.mbt           # Image::apply_filter_id shared dispatch table
-├── *_test.mbt             # 141 deterministic tests (blackbox + whitebox)
+├── *_test.mbt             # 147 deterministic tests (blackbox + whitebox)
 ├── cmd/main/              # native CLI example (moon run cmd/main)
 ├── cmd/ppm/               # PPM output example (moon run cmd/ppm > edges.ppm)
+├── cmd/showcase/          # capstone demo (drawing+text+filter+PNG round trip)
 ├── web/                   # browser bindings + Playground (HTML/CSS/JS)
 │   ├── bindings.mbt       #   js-backend bindings (zero-copy) incl. encode_png
 │   ├── worker.js          #   Web Worker running the same pipeline off-thread
@@ -89,7 +94,7 @@ pixelforge/
 Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
 
 ```bash
-moon test              # run the 141 unit tests
+moon test              # run the 147 unit tests
 moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
 moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
 ```
@@ -177,7 +182,7 @@ moon test                 # default backend (wasm-gc)
 moon test --target js     # js backend
 ```
 
-141 tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
+147 tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
 
 ## 📮 Published on mooncakes.io
 
