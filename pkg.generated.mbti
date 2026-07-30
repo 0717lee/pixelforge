@@ -73,6 +73,7 @@ pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
 pub fn Image::count_components(Self, Int) -> Int
+pub fn Image::crop(Self, Int, Int, Int, Int) -> Self
 pub fn Image::dilate(Self) -> Self
 pub fn Image::dither_grayscale(Self, Int) -> Self
 pub fn Image::dither_mono(Self) -> Self
@@ -104,6 +105,7 @@ pub fn Image::morph_open(Self) -> Self
 pub fn Image::new(Int, Int) -> Self
 pub fn Image::otsu(Self) -> Self
 pub fn Image::otsu_threshold(Self) -> Int
+pub fn Image::pad(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Self
 pub fn Image::pixel_count(Self) -> Int
 pub fn Image::pixelate(Self, Int) -> Self
 pub fn Image::posterize(Self, Int) -> Self
