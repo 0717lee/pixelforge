@@ -17,3 +17,20 @@ test "apply_filter_id dispatches to the selected filter" {
     42,
   )
 }
+
+///|
+test "filter id 21 dispatches to otsu" {
+  // A bimodal image: id 21 must equal a direct otsu() call, byte for byte.
+  let img = @pixelforge.Image::new(8, 8)
+  for y in 0..<8 {
+    for x in 0..<8 {
+      let v : Byte = if x < 4 { b'\x1E' } else { b'\xD2' } // 30 / 210
+      img.set_pixel(x, y, v, v, v, b'\xFF')
+    }
+  }
+  let via_id = img.apply_filter_id(21, 0.0)
+  let direct = img.otsu()
+  for i in 0..<(8 * 8 * 4) {
+    assert_eq(via_id.data[i].to_int(), direct.data[i].to_int())
+  }
+}
