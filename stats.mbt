@@ -7,8 +7,10 @@
 
 ///|
 /// Per-channel and luma summary of an image. Means are rounded to the
-/// nearest integer.
-pub(all) struct Stats {
+/// nearest integer. The fields are read-only (`pub`): the struct is a
+/// result type, so keeping construction internal lets it gain fields later
+/// without breaking downstream code.
+pub struct Stats {
   min_r : Int
   max_r : Int
   mean_r : Int
@@ -30,6 +32,24 @@ pub(all) struct Stats {
 /// are `Int64`.
 pub fn Image::stats(self : Image) -> Stats {
   let n = self.pixel_count()
+  // Degenerate (empty) image: return an all-zero, self-consistent summary
+  // instead of the sentinel min=255 / max=0 the scan would otherwise leave.
+  if n == 0 {
+    return {
+      min_r: 0,
+      max_r: 0,
+      mean_r: 0,
+      min_g: 0,
+      max_g: 0,
+      mean_g: 0,
+      min_b: 0,
+      max_b: 0,
+      mean_b: 0,
+      luma_min: 0,
+      luma_max: 0,
+      luma_mean: 0,
+    }
+  }
   let mut mnr = 255
   let mut mxr = 0
   let mut mng = 255
@@ -107,8 +127,13 @@ pub fn Image::auto_contrast(self : Image) -> Image {
     return self.copy()
   }
   let span = hi - lo
+  let half = span / 2
   self.map_rgb(fn(r, g, b) {
-    ((r - lo) * 255 / span, (g - lo) * 255 / span, (b - lo) * 255 / span)
+    (
+      ((r - lo) * 255 + half) / span,
+      ((g - lo) * 255 + half) / span,
+      ((b - lo) * 255 + half) / span,
+    )
   })
 }
 
