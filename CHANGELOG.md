@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 (2026-07-30)
+
+### 新增
+- 积分图与 O(1) 盒式模糊：`integral_image()` 构建 Int64 求和面积表（防溢出），`Integral::rect_sum()` 四次查询得任意矩形和，`box_blur(radius)` 任意半径每像素 O(1)
+- 泛洪填充：`flood_fill(x, y, r, g, b, a, tolerance)`，四连通显式栈种子填充，逐通道容差
+- 距离变换：`distance_transform(threshold)`，两遍 chamfer (3,4) 距离，归一化为灰度
+
+### 变更
+- 单元测试从 126 个增加到 141 个
+
 ## 0.8.0 (2026-07-30)
 
 ### 新增
