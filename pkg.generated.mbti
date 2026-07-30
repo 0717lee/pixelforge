@@ -72,6 +72,7 @@ pub fn Image::composite(Self, Self, BlendMode) -> Self
 pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
+pub fn Image::count_components(Self, Int) -> Int
 pub fn Image::dilate(Self) -> Self
 pub fn Image::dither_grayscale(Self, Int) -> Self
 pub fn Image::dither_mono(Self) -> Self
@@ -95,6 +96,7 @@ pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
 pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::invert(Self) -> Self
+pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
 pub fn Image::median(Self) -> Self
 pub fn Image::morph_close(Self) -> Self
