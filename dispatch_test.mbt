@@ -34,3 +34,19 @@ test "filter id 21 dispatches to otsu" {
     assert_eq(via_id.data[i].to_int(), direct.data[i].to_int())
   }
 }
+
+///|
+test "filter id 22 dispatches to dither_mono" {
+  let img = @pixelforge.Image::new(8, 8)
+  for y in 0..<8 {
+    for x in 0..<8 {
+      let v = @pixelforge.clamp_byte(x * 30)
+      img.set_pixel(x, y, v, v, v, b'\xFF')
+    }
+  }
+  let via_id = img.apply_filter_id(22, 0.0)
+  let direct = img.dither_mono()
+  for i in 0..<(8 * 8 * 4) {
+    assert_eq(via_id.data[i].to_int(), direct.data[i].to_int())
+  }
+}

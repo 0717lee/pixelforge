@@ -27,6 +27,7 @@
 /// | 19 | scharr edges | — |
 /// | 20 | canny edges | high threshold (default 100, low = high/2) |
 /// | 21 | otsu auto threshold | — |
+/// | 22 | floyd–steinberg dither (mono) | — |
 pub fn Image::apply_filter_id(
   self : Image,
   filter_id : Int,
@@ -59,6 +60,7 @@ pub fn Image::apply_filter_id(
       self.canny(high / 2, high)
     }
     21 => self.otsu()
+    22 => self.dither_mono()
     _ => self.copy()
   }
 }
