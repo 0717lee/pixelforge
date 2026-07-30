@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 (2026-07-30)
+
+### 变更
+- 将 `moon.mod` 迁移为 `moon.mod.json`，并通过 `exclude` 字段将 `assets/`、`_screenshots/` 及个人文档排除出发布包（发布包从 83 项减至 72 项，图片仍保留在 GitHub 供 README 显示）
+
 ## 0.6.1 (2026-07-30)
 
 ### 安全
