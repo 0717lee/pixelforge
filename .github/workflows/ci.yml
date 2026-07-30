@@ -32,3 +32,8 @@ jobs:
         run: |
           moon build --release --target js
           moon build --release --target wasm
+
+      - name: Run CLI demos (end-to-end smoke test)
+        run: |
+          moon run cmd/ppm > /dev/null
+          moon run cmd/showcase > /dev/null

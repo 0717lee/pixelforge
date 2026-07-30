@@ -1,0 +1,9 @@
+// Showcase demo executable: composes drawing primitives, bitmap text, a
+// blend and a filter into one image, then prints it as ASCII PPM on stdout.
+// It also round-trips the image through the library's own PNG codec as an
+// end-to-end smoke test. Usage: moon run cmd/showcase > showcase.ppm
+import {
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")
