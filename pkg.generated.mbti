@@ -8,6 +8,8 @@ pub fn bmp_encode(Image, Bool) -> Array[Byte]
 
 pub fn clamp_byte(Int) -> Byte
 
+pub fn gif_decode(Array[Byte]) -> Image?
+
 pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
 
 pub fn png_decode(Array[Byte]) -> Image?
