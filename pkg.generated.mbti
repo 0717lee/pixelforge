@@ -98,6 +98,8 @@ pub fn Image::median(Self) -> Self
 pub fn Image::morph_close(Self) -> Self
 pub fn Image::morph_open(Self) -> Self
 pub fn Image::new(Int, Int) -> Self
+pub fn Image::otsu(Self) -> Self
+pub fn Image::otsu_threshold(Self) -> Int
 pub fn Image::pixel_count(Self) -> Int
 pub fn Image::pixelate(Self, Int) -> Self
 pub fn Image::posterize(Self, Int) -> Self
