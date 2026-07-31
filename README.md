@@ -33,11 +33,12 @@
 - **泛洪填充**：`flood_fill(x, y, color, tolerance)` 四连通种子填充，逐通道容差。
 - **图层合成**：`composite(top, mode)` Porter-Duff source-over + 8 种混合模式（正片叠底/滤色/叠加/变暗/变亮/差值/线性减淡等），纯整数舍入运算。
 - **位图文字**：内置 5×7 字体（数字/大写字母/基本标点），`draw_text` 整数倍缩放、自动裁剪。
-- **色彩空间**：RGB ↔ HSV、RGB ↔ YCbCr (BT.601) 精确往返转换。
+- **色彩空间**：RGB ↔ HSV、RGB ↔ HSL（含 `adjust_lightness`）、RGB ↔ YCbCr (BT.601) 精确往返转换。
+- **直方图**：`histogram_luma()` / `histogram_rgb()` 256 桶统计；Playground 内置实时亮度直方图面板。
 - **通用卷积引擎**：`Kernel` + `Image::convolve`，可自定义任意奇数尺寸卷积核。
 - **图像统计与色调**：`stats()` 逐通道 min/max/mean（Int64 累加）、`auto_contrast()` 自动对比度拉伸、`levels(black, white, gamma)` 色阶重映射。
 - **确定性噪声**：`add_gaussian_noise(seed, σ)` / `add_salt_pepper(seed, density)`，64 位 LCG 驱动，同 seed 跨后端逐字节一致。
-- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现、**163 个单元测试全部手算验证**（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
+- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现、**172 个单元测试全部手算验证**（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
 - **零依赖**：只用 `moonbitlang/core`，不引入任何第三方库。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
@@ -66,6 +67,8 @@ pixelforge/
 ├── bicubic.mbt            # 双三次缩放（Catmull-Rom）
 ├── phash.mbt              # 感知哈希（aHash/dHash + 汉明距离）
 ├── noise.mbt              # 确定性噪声（高斯 / 椒盐，LCG）
+├── hsl.mbt                # HSL 色彩空间 + 亮度调整
+├── histogram.mbt          # 直方图 API（亮度 / RGB）
 ├── bilateral.mbt          # 双边滤波（保边平滑）
 ├── otsu.mbt               # Otsu 自动阈值（类间方差最大化）
 ├── dither.mbt             # Floyd–Steinberg 误差扩散抖动
@@ -79,7 +82,7 @@ pixelforge/
 ├── transform.mbt          # 水平/垂直翻转、90° 旋转
 ├── resize.mbt             # 最近邻/双线性缩放
 ├── dispatch.mbt           # Image::apply_filter_id 统一派发（各绑定共用）
-├── *_test.mbt             # 163 个确定性测试（黑盒 + 白盒）
+├── *_test.mbt             # 172 个确定性测试（黑盒 + 白盒）
 ├── cmd/main/              # 原生 CLI 示例（moon run cmd/main）
 ├── cmd/ppm/               # PPM 图像输出示例（moon run cmd/ppm > edges.ppm）
 ├── cmd/showcase/          # 综合展示（绘图+文字+滤镜+PNG 往返自检）
@@ -97,7 +100,7 @@ pixelforge/
 先安装 [MoonBit 工具链](https://www.moonbitlang.cn/download/)。
 
 ```bash
-moon test              # 运行 163 个单元测试
+moon test              # 运行 172 个单元测试
 moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
 moon run cmd/showcase > showcase.ppm   # 综合展示：绘图+文字+滤镜+PNG 往返自检
 moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
@@ -166,7 +169,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 | 21 | Otsu 自动阈值 | `otsu()` | — |
 | 22 | Floyd–Steinberg 抖动（二值） | `dither_mono()` | — |
 
-> 会改变尺寸的变换不走 id 派发，直接调用库 API：`rotate90()`、`resize_nearest(w, h)`、`resize_bilinear(w, h)`、`resize_bicubic(w, h)`。多参数 / 非图像→图像的 API 同理：`average_hash()`/`difference_hash()`/`hamming_distance`、`add_gaussian_noise`/`add_salt_pepper`、`box_blur(radius)`、`flood_fill(x, y, color, tol)`、`distance_transform(t)`、`gaussian(radius)`、`unsharp_mask(radius, amount)`、`crop(x, y, w, h)`、`pad(l, t, r, b, color)`、`bilateral(radius, σs, σr)`、`dither_grayscale(levels)`/`dither_mono()`、`otsu_threshold()`、`label_components(t)`/`count_components(t)`、`composite(top, mode)`、`draw_text(...)`、`rotate(deg)`、`translate(dx, dy)`、`affine(t)`、`draw_line`/`draw_rect`/`draw_circle` 等绘图原语、`saturate(factor)`、`hue_rotate(deg)`、`erode()`/`dilate()`/`morph_open()`/`morph_close()`、`png_encode`/`png_decode`、`gif_decode`、`qoi_encode`/`qoi_decode`、`bmp_encode`/`bmp_decode`、`rgb_to_hsv` 等色彩空间函数。
+> 会改变尺寸的变换不走 id 派发，直接调用库 API：`rotate90()`、`resize_nearest(w, h)`、`resize_bilinear(w, h)`、`resize_bicubic(w, h)`。多参数 / 非图像→图像的 API 同理：`average_hash()`/`difference_hash()`/`hamming_distance`、`add_gaussian_noise`/`add_salt_pepper`、`histogram_luma()`/`histogram_rgb()`、`rgb_to_hsl`/`hsl_to_rgb`/`adjust_lightness`、`box_blur(radius)`、`flood_fill(x, y, color, tol)`、`distance_transform(t)`、`gaussian(radius)`、`unsharp_mask(radius, amount)`、`crop(x, y, w, h)`、`pad(l, t, r, b, color)`、`bilateral(radius, σs, σr)`、`dither_grayscale(levels)`/`dither_mono()`、`otsu_threshold()`、`label_components(t)`/`count_components(t)`、`composite(top, mode)`、`draw_text(...)`、`rotate(deg)`、`translate(dx, dy)`、`affine(t)`、`draw_line`/`draw_rect`/`draw_circle` 等绘图原语、`saturate(factor)`、`hue_rotate(deg)`、`erode()`/`dilate()`/`morph_open()`/`morph_close()`、`png_encode`/`png_decode`、`gif_decode`、`qoi_encode`/`qoi_decode`、`bmp_encode`/`bmp_decode`、`rgb_to_hsv` 等色彩空间函数。
 
 ## 🏗️ 架构与多后端
 
@@ -184,7 +187,7 @@ moon test                 # 默认后端（wasm-gc）
 moon test --target js     # js 后端
 ```
 
-163 个测试覆盖每个滤镜、变换、绘图原语、合成模式、字体、分析算法与编解码器，期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返、CRC-32/Adler-32 公开参考向量、手工汇编的 DEFLATE 与 GIF LZW 位流等），在 wasm-gc 与 js 后端下均通过；GitHub Actions 持续集成。
+172 个测试覆盖每个滤镜、变换、绘图原语、合成模式、字体、分析算法与编解码器，期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返、CRC-32/Adler-32 公开参考向量、手工汇编的 DEFLATE 与 GIF LZW 位流等），在 wasm-gc 与 js 后端下均通过；GitHub Actions 持续集成。
 
 ## 📮 发布到 mooncakes.io
 
