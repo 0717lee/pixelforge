@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 (2026-07-31)
+
+### 新增
+- 双三次缩放：`resize_bicubic(w, h)`，Catmull-Rom 4×4 核、中心对齐采样，同尺寸缩放为恒等
+- 感知哈希：`average_hash()` / `difference_hash()` 返回 64 位指纹，`hamming_distance(a, b)` 度量相似度；区域均值缩略图保证跨后端确定性
+- 确定性噪声：`add_gaussian_noise(seed, sigma)`（CLT 12 均匀和）与 `add_salt_pepper(seed, density)`，64 位 LCG 驱动，同 seed 逐字节可重现
+
+### 变更
+- 单元测试从 147 个增加到 163 个（含反相恰好翻转全部 64 位、中值滤波清除 ≥75% 椒盐噪声等强断言）
+
 ## 0.11.0 (2026-07-30)
 
 代码审查驱动的加固（三视角审查后全量修复）：

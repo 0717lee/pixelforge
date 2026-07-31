@@ -19,7 +19,7 @@ English | [简体中文](README.md)
 
 ## ✨ Features
 
-- **26 filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear resize.
+- **26 filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear/bicubic (Catmull-Rom) resize.
 - **Morphology**: 3×3 erode / dilate / open / close.
 - **Image codecs**: PNG (self-implemented full DEFLATE inflate with CRC-32/Adler-32 verification), GIF decoding (variable-width LZW, interlacing, transparency), QOI (complete spec, lossless round trip) and BMP (uncompressed 24/32-bit) — all in pure MoonBit.
 - **Affine transforms**: an `Affine` matrix type (rotate/translate/scale/shear + composition + inversion) rendered by inverse mapping with bilinear sampling; arbitrary-angle `rotate(degrees)`.
@@ -28,7 +28,7 @@ English | [简体中文](README.md)
 - **Unsharp mask**: `unsharp_mask(radius, amount)` reuses the Gaussian to extract and re-add high-frequency detail, sharpening edges.
 - **Crop & pad**: `crop(x, y, w, h)` (clamped to bounds) and `pad(l, t, r, b, color)` (colored borders); `crop∘pad` round-trips losslessly.
 - **Bilateral filter**: `bilateral(radius, σs, σr)` edge-preserving smoothing — denoises flat regions while keeping strong edges sharp.
-- **Image analysis**: Otsu automatic thresholding (between-class variance), Floyd–Steinberg error-diffusion dithering, 4-connected component labeling and counting, chamfer (3,4) distance transform.
+- **Image analysis**: Otsu automatic thresholding (between-class variance), Floyd–Steinberg error-diffusion dithering, 4-connected component labeling and counting, chamfer (3,4) distance transform, perceptual hashes (aHash/dHash + Hamming distance).
 - **Integral image & O(1) box blur**: `integral_image()` builds a summed-area table (Int64, overflow-safe) that drives `box_blur(radius)` at O(1) per pixel for any radius.
 - **Flood fill**: `flood_fill(x, y, color, tolerance)` 4-connected seed fill with per-channel tolerance.
 - **Layer compositing**: `composite(top, mode)` — Porter-Duff source-over with 8 blend modes (multiply, screen, overlay, darken, lighten, difference, add), in rounded integer math.
@@ -36,7 +36,8 @@ English | [简体中文](README.md)
 - **Color spaces**: exact round-trip RGB ↔ HSV and RGB ↔ YCbCr (BT.601) conversions.
 - **Generic convolution engine**: `Kernel` + `Image::convolve` for custom odd-sized kernels.
 - **Image statistics & tone**: `stats()` per-channel min/max/mean (Int64 accumulation), `auto_contrast()` automatic contrast stretch, `levels(black, white, gamma)` tonal remap.
-- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 147 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
+- **Deterministic noise**: `add_gaussian_noise(seed, σ)` / `add_salt_pepper(seed, density)` driven by a 64-bit LCG — the same seed is byte-identical on every backend.
+- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible and **all 163 unit tests are hand-verified** (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
 - **Zero dependencies**: only `moonbitlang/core`, no third-party libraries.
 - **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
 - **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
@@ -62,6 +63,9 @@ pixelforge/
 ├── floodfill.mbt          # flood fill (4-connected seed fill)
 ├── distance.mbt           # chamfer (3,4) distance transform
 ├── stats.mbt              # statistics / auto-contrast / levels
+├── bicubic.mbt            # bicubic resize (Catmull-Rom)
+├── phash.mbt              # perceptual hashes (aHash/dHash + Hamming)
+├── noise.mbt              # deterministic noise (gaussian / salt-pepper)
 ├── bilateral.mbt          # bilateral filter (edge-preserving)
 ├── otsu.mbt               # Otsu automatic threshold
 ├── dither.mbt             # Floyd–Steinberg error diffusion
@@ -75,7 +79,7 @@ pixelforge/
 ├── transform.mbt          # flips, 90° rotation
 ├── resize.mbt             # nearest/bilinear resize
 ├── dispatch.mbt           # Image::apply_filter_id shared dispatch table
-├── *_test.mbt             # 147 deterministic tests (blackbox + whitebox)
+├── *_test.mbt             # 163 deterministic tests (blackbox + whitebox)
 ├── cmd/main/              # native CLI example (moon run cmd/main)
 ├── cmd/ppm/               # PPM output example (moon run cmd/ppm > edges.ppm)
 ├── cmd/showcase/          # capstone demo (drawing+text+filter+PNG round trip)
@@ -94,7 +98,7 @@ pixelforge/
 Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
 
 ```bash
-moon test              # run the 147 unit tests
+moon test              # run the 163 unit tests
 moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
 moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
 ```
@@ -164,7 +168,7 @@ let png_bytes = @pixelforge.png_encode(framed)
 | 21 | Otsu auto threshold | `otsu()` | — |
 | 22 | Floyd–Steinberg dither (mono) | `dither_mono()` | — |
 
-> Size-changing transforms are library APIs rather than dispatch ids: `rotate90()`, `resize_nearest(w, h)`, `resize_bilinear(w, h)`. Likewise for multi-parameter APIs: `box_blur(radius)`, `flood_fill(x, y, color, tol)`, `distance_transform(t)`, `gaussian(radius)`, `unsharp_mask(radius, amount)`, `crop(x, y, w, h)`, `pad(l, t, r, b, color)`, `bilateral(radius, σs, σr)`, `dither_grayscale(levels)`/`dither_mono()`, `otsu_threshold()`, `label_components(t)`/`count_components(t)`, `composite(top, mode)`, `draw_text(...)`, `rotate(deg)`, `translate(dx, dy)`, `affine(t)`, the drawing primitives, `saturate(factor)`, `hue_rotate(deg)`, the morphology operators, `png_encode`/`png_decode`, `gif_decode`, `qoi_encode`/`qoi_decode`, `bmp_encode`/`bmp_decode` and the color-space functions.
+> Size-changing transforms are library APIs rather than dispatch ids: `rotate90()`, `resize_nearest(w, h)`, `resize_bilinear(w, h)`, `resize_bicubic(w, h)`. Likewise for multi-parameter APIs: `average_hash()`/`difference_hash()`/`hamming_distance`, `add_gaussian_noise`/`add_salt_pepper`, `box_blur(radius)`, `flood_fill(x, y, color, tol)`, `distance_transform(t)`, `gaussian(radius)`, `unsharp_mask(radius, amount)`, `crop(x, y, w, h)`, `pad(l, t, r, b, color)`, `bilateral(radius, σs, σr)`, `dither_grayscale(levels)`/`dither_mono()`, `otsu_threshold()`, `label_components(t)`/`count_components(t)`, `composite(top, mode)`, `draw_text(...)`, `rotate(deg)`, `translate(dx, dy)`, `affine(t)`, the drawing primitives, `saturate(factor)`, `hue_rotate(deg)`, the morphology operators, `png_encode`/`png_decode`, `gif_decode`, `qoi_encode`/`qoi_decode`, `bmp_encode`/`bmp_decode` and the color-space functions.
 
 ## 🏗️ Architecture & backends
 
@@ -182,7 +186,7 @@ moon test                 # default backend (wasm-gc)
 moon test --target js     # js backend
 ```
 
-147 tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
+163 tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on both the wasm-gc and js backends, with GitHub Actions CI.
 
 ## 📮 Published on mooncakes.io
 
