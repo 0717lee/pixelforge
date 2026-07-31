@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0 (2026-07-31)
+
+### 新增
+- 直方图 API：`histogram_luma()`（复用 Otsu 的 256 桶 BT.601 分桶）与 `histogram_rgb()`（逐通道）
+- HSL 色彩空间：`rgb_to_hsl` / `hsl_to_rgb`（与 HSV 风格一致、精确 8 位往返）与 `adjust_lightness(delta)`（保色相明暗调整）
+- Playground：新增实时亮度直方图面板（经 `luma_histogram` js 绑定，每次渲染后更新）
+- `cmd/showcase`：扩展“噪声 → 中值降噪 → 感知哈希”分析自检（受控平坦色块，median 必然降噪）
+
+### 变更
+- 单元测试从 163 个增加到 172 个
+
 ## 0.12.0 (2026-07-31)
 
 ### 新增
