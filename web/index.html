@@ -125,6 +125,11 @@
           <p class="bench-result" id="benchResult"></p>
         </section>
 
+        <section class="group">
+          <h2>亮度直方图</h2>
+          <canvas id="histCanvas" width="256" height="80" style="width:100%;height:80px;display:block;border-radius:6px;background:rgba(255,255,255,0.04);"></canvas>
+        </section>
+
         <p class="footnote">
           像素缓冲区以 <code>Uint8ClampedArray</code> 直接进出 MoonBit
           （<code>FixedArray[Byte]</code>），无需序列化拷贝。
