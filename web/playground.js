@@ -4,7 +4,7 @@
 //              canvas buffer crosses in with zero copies.
 //   * "wasm" — MoonBit compiled to a linear-memory WebAssembly module; pixels
 //              are bulk-copied into the exported memory via a Uint8Array view.
-import { apply_filter, encode_png } from "./dist/web.js";
+import { apply_filter, encode_png, luma_histogram } from "./dist/web.js";
 
 // Load the genuine-WASM module (no imports required). Fall back to JS if it
 // cannot be loaded for any reason.
@@ -105,6 +105,25 @@ function updateStats(ms) {
   $("statTime").textContent = `${ms.toFixed(2)} ms`;
   const mpPerSec = imgW * imgH / 1e6 / (ms / 1000);
   $("statThroughput").textContent = ms > 0 ? `${mpPerSec.toFixed(1)} MP/s` : "—";
+  drawHistogram();
+}
+
+// Live luma histogram of whatever is currently on the canvas, computed by
+// the library's own histogram_luma through the js binding.
+function drawHistogram() {
+  const hc = $("histCanvas");
+  if (!hc || !originalData) return;
+  const hctx = hc.getContext("2d");
+  const pixels = ctx.getImageData(0, 0, imgW, imgH).data;
+  const bins = luma_histogram(new Uint8Array(pixels.buffer.slice(0)), imgW, imgH);
+  let max = 1;
+  for (let i = 0; i < 256; i++) if (bins[i] > max) max = bins[i];
+  hctx.clearRect(0, 0, hc.width, hc.height);
+  hctx.fillStyle = "rgba(96, 165, 250, 0.9)";
+  for (let i = 0; i < 256; i++) {
+    const h = Math.round(bins[i] / max * (hc.height - 4));
+    if (h > 0) hctx.fillRect(i, hc.height - h, 1, h);
+  }
 }
 
 function render() {

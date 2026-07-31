@@ -203,6 +203,48 @@ function _M0MP270717lee10pixelforge5Image14flip__vertical(self) {
   }
   return out;
 }
+function _M0MP270717lee10pixelforge5Image8map__rgb(self, transform) {
+  const out = _M0MP270717lee10pixelforge5Image4copy(self);
+  const n = Math.imul(self.width, self.height) | 0;
+  let _tmp = 0;
+  while (true) {
+    const p = _tmp;
+    if (p < n) {
+      const base = Math.imul(p, 4) | 0;
+      const _tmp$2 = self.data;
+      $bound_check(_tmp$2, base);
+      const r = _tmp$2[base];
+      const _tmp$3 = self.data;
+      const _tmp$4 = base + 1 | 0;
+      $bound_check(_tmp$3, _tmp$4);
+      const g = _tmp$3[_tmp$4];
+      const _tmp$5 = self.data;
+      const _tmp$6 = base + 2 | 0;
+      $bound_check(_tmp$5, _tmp$6);
+      const b = _tmp$5[_tmp$6];
+      const _bind = transform(r, g, b);
+      const _nr = _bind._0;
+      const _ng = _bind._1;
+      const _nb = _bind._2;
+      const _tmp$7 = out.data;
+      $bound_check(_tmp$7, base);
+      _tmp$7[base] = _nr < 0 ? 0 : _nr > 255 ? 255 : _nr & 255;
+      const _tmp$8 = out.data;
+      const _tmp$9 = base + 1 | 0;
+      $bound_check(_tmp$8, _tmp$9);
+      _tmp$8[_tmp$9] = _ng < 0 ? 0 : _ng > 255 ? 255 : _ng & 255;
+      const _tmp$10 = out.data;
+      const _tmp$11 = base + 2 | 0;
+      $bound_check(_tmp$10, _tmp$11);
+      _tmp$10[_tmp$11] = _nb < 0 ? 0 : _nb > 255 ? 255 : _nb & 255;
+      _tmp = p + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
 function _M0FP270717lee10pixelforge8push__u8(buf, v) {
   _M0MPC15array5Array4pushGyE(buf, (((v % 256 | 0) + 256 | 0) % 256 | 0) & 255);
 }
@@ -494,48 +536,6 @@ function _M0MP270717lee10pixelforge5Image15otsu__threshold(self) {
   }
   return best_t;
 }
-function _M0MP270717lee10pixelforge5Image8map__rgb(self, transform) {
-  const out = _M0MP270717lee10pixelforge5Image4copy(self);
-  const n = Math.imul(self.width, self.height) | 0;
-  let _tmp = 0;
-  while (true) {
-    const p = _tmp;
-    if (p < n) {
-      const base = Math.imul(p, 4) | 0;
-      const _tmp$2 = self.data;
-      $bound_check(_tmp$2, base);
-      const r = _tmp$2[base];
-      const _tmp$3 = self.data;
-      const _tmp$4 = base + 1 | 0;
-      $bound_check(_tmp$3, _tmp$4);
-      const g = _tmp$3[_tmp$4];
-      const _tmp$5 = self.data;
-      const _tmp$6 = base + 2 | 0;
-      $bound_check(_tmp$5, _tmp$6);
-      const b = _tmp$5[_tmp$6];
-      const _bind = transform(r, g, b);
-      const _nr = _bind._0;
-      const _ng = _bind._1;
-      const _nb = _bind._2;
-      const _tmp$7 = out.data;
-      $bound_check(_tmp$7, base);
-      _tmp$7[base] = _nr < 0 ? 0 : _nr > 255 ? 255 : _nr & 255;
-      const _tmp$8 = out.data;
-      const _tmp$9 = base + 1 | 0;
-      $bound_check(_tmp$8, _tmp$9);
-      _tmp$8[_tmp$9] = _ng < 0 ? 0 : _ng > 255 ? 255 : _ng & 255;
-      const _tmp$10 = out.data;
-      const _tmp$11 = base + 2 | 0;
-      $bound_check(_tmp$10, _tmp$11);
-      _tmp$10[_tmp$11] = _nb < 0 ? 0 : _nb > 255 ? 255 : _nb & 255;
-      _tmp = p + 1 | 0;
-      continue;
-    } else {
-      break;
-    }
-  }
-  return out;
-}
 function _M0MP270717lee10pixelforge5Image4otsu(self) {
   const t = _M0MP270717lee10pixelforge5Image15otsu__threshold(self);
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -549,6 +549,9 @@ function _M0MP270717lee10pixelforge5Image11from__bytes(width, height, data) {
     _M0FPC15abort5abortGuE("Image::from_bytes: buffer length must equal width * height * 4");
   }
   return new _M0TP270717lee10pixelforge5Image(width, height, data);
+}
+function _M0MP270717lee10pixelforge5Image15histogram__luma(self) {
+  return _M0MP270717lee10pixelforge5Image15luma__histogram(self);
 }
 function _M0MP270717lee10pixelforge5Image5gamma(self, value) {
   const g = value <= 0 ? 1 : value;
@@ -647,11 +650,11 @@ function _M0MP270717lee10pixelforge5Image6invert(self) {
 function _M0MP270717lee10pixelforge5Image10brightness(self, delta) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: r + delta | 0, _1: g + delta | 0, _2: b + delta | 0 }));
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS561(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS630(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS561(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS561(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS561(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS630(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS630(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS630(factor, b) }));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -1653,4 +1656,7 @@ function _M0FP370717lee10pixelforge3web11encode__png(data, width, height) {
   }
   return out;
 }
-export { _M0FP370717lee10pixelforge3web13apply__filter as apply_filter, _M0FP370717lee10pixelforge3web11encode__png as encode_png }
+function _M0FP370717lee10pixelforge3web15luma__histogram(data, width, height) {
+  return _M0MP270717lee10pixelforge5Image15histogram__luma(_M0MP270717lee10pixelforge5Image11from__bytes(width, height, data));
+}
+export { _M0FP370717lee10pixelforge3web13apply__filter as apply_filter, _M0FP370717lee10pixelforge3web11encode__png as encode_png, _M0FP370717lee10pixelforge3web15luma__histogram as luma_histogram }

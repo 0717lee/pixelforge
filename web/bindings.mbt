@@ -34,3 +34,15 @@ pub fn encode_png(
   }
   out
 }
+
+///|
+/// 256-bin luma histogram of an RGBA buffer, for the playground's live
+/// histogram panel. Returns a `FixedArray[Int]` (a plain JS array of 256
+/// numbers on the js backend).
+pub fn luma_histogram(
+  data : FixedArray[Byte],
+  width : Int,
+  height : Int,
+) -> FixedArray[Int] {
+  @pixelforge.Image::from_bytes(width, height, data).histogram_luma()
+}

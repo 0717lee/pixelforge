@@ -59,9 +59,49 @@ fn main {
   if !ok {
     abort("showcase: PNG round trip failed")
   }
-  // Emit the status as a PPM comment *after* the magic number, so stdout
+  // Analysis self-check on a controlled flat tile: salt-and-pepper noise
+  // then a median filter, which on a uniform field provably restores almost
+  // every pixel. Confirms the noise + median + phash APIs compose; the
+  // perceptual-hash distances (clean vs noisy vs denoised) are reported as a
+  // diagnostic. (The median is deliberately not run on the detailed showcase
+  // image itself, where it would also reshape genuine edges.)
+  let tile = @pixelforge.Image::new(32, 32)
+  tile.fill_rect(0, 0, 32, 32, b'\x80', b'\x80', b'\x80', b'\xFF')
+  let clean_hash = tile.average_hash()
+  let noisy = tile.add_salt_pepper(2026UL, 0.08)
+  let denoised = noisy.median()
+  let noisy_diff = pixel_diff(tile, noisy)
+  let denoised_diff = pixel_diff(tile, denoised)
+  if denoised_diff >= noisy_diff {
+    abort("showcase: median denoise did not reduce the pixel difference")
+  }
+  let noisy_dist = @pixelforge.hamming_distance(
+    clean_hash,
+    noisy.average_hash(),
+  )
+  let denoised_dist = @pixelforge.hamming_distance(
+    clean_hash,
+    denoised.average_hash(),
+  )
+  // Emit the status as PPM comments *after* the magic number, so stdout
   // stays a strictly valid PPM stream.
-  print_ppm(final_img, "# PNG round trip: OK (\{png.length()} bytes)")
+  print_ppm(
+    final_img,
+    "# PNG round trip: OK (\{png.length()} bytes); denoise diff \{noisy_diff}->\{denoised_diff}; phash noisy=\{noisy_dist} denoised=\{denoised_dist}",
+  )
+}
+
+///|
+/// Counts channels that differ between two same-size images (a coarse
+/// distance used only for the showcase self-check).
+fn pixel_diff(a : @pixelforge.Image, b : @pixelforge.Image) -> Int {
+  let mut diff = 0
+  for i in 0..<(a.width * a.height * 4) {
+    if a.data[i].to_int() != b.data[i].to_int() {
+      diff = diff + 1
+    }
+  }
+  diff
 }
 
 ///|
