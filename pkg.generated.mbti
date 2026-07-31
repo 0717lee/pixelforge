@@ -12,6 +12,8 @@ pub fn gif_decode(Array[Byte]) -> Image?
 
 pub fn hamming_distance(UInt64, UInt64) -> Int
 
+pub fn hsl_to_rgb(Double, Double, Double) -> (Int, Int, Int)
+
 pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
 
 pub fn png_decode(Array[Byte]) -> Image?
@@ -21,6 +23,8 @@ pub fn png_encode(Image) -> Array[Byte]
 pub fn qoi_decode(Array[Byte]) -> Image?
 
 pub fn qoi_encode(Image) -> Array[Byte]
+
+pub fn rgb_to_hsl(Int, Int, Int) -> (Double, Double, Double)
 
 pub fn rgb_to_hsv(Int, Int, Int) -> (Double, Double, Double)
 
@@ -66,6 +70,7 @@ pub(all) struct Image {
 }
 pub fn Image::add_gaussian_noise(Self, UInt64, Double) -> Self
 pub fn Image::add_salt_pepper(Self, UInt64, Double) -> Self
+pub fn Image::adjust_lightness(Self, Double) -> Self
 pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
 pub fn Image::auto_contrast(Self) -> Self
