@@ -64,6 +64,8 @@ pub(all) struct Image {
   height : Int
   data : FixedArray[Byte]
 }
+pub fn Image::add_gaussian_noise(Self, UInt64, Double) -> Self
+pub fn Image::add_salt_pepper(Self, UInt64, Double) -> Self
 pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
 pub fn Image::auto_contrast(Self) -> Self
