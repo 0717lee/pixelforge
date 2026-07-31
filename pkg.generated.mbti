@@ -105,6 +105,8 @@ pub fn Image::gaussian(Self, Int) -> Self
 pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
 pub fn Image::histogram_equalize(Self) -> Self
+pub fn Image::histogram_luma(Self) -> FixedArray[Int]
+pub fn Image::histogram_rgb(Self) -> (FixedArray[Int], FixedArray[Int], FixedArray[Int])
 pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
