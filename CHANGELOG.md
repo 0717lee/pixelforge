@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1 (2026-08-19)
+
+### 文档
+- README（中英）新增“与 MoonBit 生态中其他图像库的关系”章节，说明与 millow / MoonVision / shunge/image 的定位差异与 PixelForge 独有能力
+
 ## 0.13.0 (2026-07-31)
 
 ### 新增
