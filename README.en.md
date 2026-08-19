@@ -43,6 +43,28 @@ English | [简体中文](README.md)
 - **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
 - **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
 
+## 🆚 Relation to other MoonBit image libraries
+
+The MoonBit ecosystem already hosts several image packages with overlapping directions (e.g. `megemini/millow`, `PingGuoMiaoMiao/MoonVision`, `shunge/image`). PixelForge unavoidably overlaps with them on basic filters (blur, edge detection, thresholding — the common foundation every image library shares, here all independently hand-written and test-driven), but its **positioning and core capabilities are clearly different**:
+
+| Existing project | Positioning | Difference from PixelForge |
+| --- | --- | --- |
+| `megemini/millow` | Pillow-style computer vision library (corner detection, contours, HOG/LBP/moments, augmentation, SSIM, ...) | CV-focused; no codec breadth, browser interactivity or perceptual analysis |
+| `PingGuoMiaoMiao/MoonVision` | Lightweight image processing + basic CV (grayscale-first, template matching) | Grayscale-focused; no full RGBA codecs, drawing/text, noise or hashing |
+| `shunge/image` | Pure decoder (BMP/QOI/TGA/PNG/GIF/JPEG) | Decode only; no filters, encoding, drawing or analysis |
+
+**Capabilities unique to PixelForge** (not offered by the projects above):
+
+- **Codec breadth**: PNG (self-implemented full DEFLATE inflate with CRC-32/Adler-32 verification), QOI, BMP **encode + decode** and GIF decoding, all in pure MoonBit
+- **Browser Playground**: live JS/WASM engine comparison, Web Worker background thread, real-time luma histogram panel, downloads via the library's own `png_encode`
+- **Bitmap text**: built-in 5×7 font `draw_text` for typesetting directly on images
+- **Perceptual hashing**: aHash / dHash + Hamming distance for deduplication and similarity search
+- **Deterministic noise**: 64-bit LCG-driven gaussian / salt-and-pepper noise, byte-identical across backends for a given seed; pairs with median/bilateral filters into a denoise demo loop
+- **Statistics & tone**: per-channel min/max/mean, auto_contrast, levels
+- **Engineering transparency**: full evolution across 13 releases, bilingual docs, CI end-to-end smoke tests
+
+If you found this library on `mooncakes.io`, you can use it directly with `moon add 0717lee/pixelforge`; we also hope the codec and Playground implementations serve as useful ecosystem references.
+
 ## 📦 Project layout
 
 ```

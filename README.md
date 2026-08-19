@@ -43,6 +43,28 @@
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
 
+## 🆚 与 MoonBit 生态中其他图像库的关系
+
+MoonBit 生态中已经存在若干方向相近的图像处理包（如 `megemini/millow`、`PingGuoMiaoMiao/MoonVision`、`shunge/image` 等）。PixelForge 与它们在基础滤镜上不可避免地有重叠（模糊、边缘检测、阈值等是所有图像库的共同基础能力，且本库的实现全部独立手写、以确定性测试驱动），但**定位与核心能力有明显差异**：
+
+| 现有项目 | 定位 | 与 PixelForge 的差异 |
+| --- | --- | --- |
+| `megemini/millow` | Pillow 风格的计算机视觉库（角点检测、轮廓查找、HOG/LBP/矩、数据增强、SSIM 等） | 侧重 CV 算法；不提供编解码器广度、浏览器交互与感知分析 |
+| `PingGuoMiaoMiao/MoonVision` | 轻量图像处理 + 基础 CV（灰度图为主、模板匹配） | 侧重灰度图像处理；不提供 RGBA 全彩编解码、绘图/文字、噪声与哈希 |
+| `shunge/image` | 纯解码器（BMP/QOI/TGA/PNG/GIF/JPEG 六格式解码） | 仅解码；不提供滤镜、编码、绘图与分析能力 |
+
+**PixelForge 的独有能力**（上述项目均不具备）：
+
+- **编解码器广度**：PNG（自实现完整 DEFLATE inflate + CRC-32/Adler-32 校验）、QOI、BMP 的**编+解**与 GIF 解码，全部纯 MoonBit 实现
+- **浏览器 Playground**：JS/WASM 双引擎实时对比、Web Worker 后台线程、实时亮度直方图面板、用自家 `png_encode` 下载结果
+- **位图字体**：内置 5×7 字体 `draw_text`，可直接在图像上排版文字
+- **感知哈希**：aHash / dHash + 汉明距离，图像去重与相似度检索
+- **确定性噪声**：64 位 LCG 驱动的高斯 / 椒盐噪声，同 seed 跨后端逐字节重现，配合中值/双边滤波形成降噪演示闭环
+- **图像统计与色调**：逐通道 min/max/mean、auto_contrast、levels 色阶
+- **工程透明度**：13 个版本的完整演进记录、双语文档、CI 端到端冒烟测试
+
+如果您的项目在 `mooncakes.io` 上看到本库，可通过 `moon add 0717lee/pixelforge` 直接使用；也希望本库的编解码器与 Playground 实现能为生态提供参考。
+
 ## 📦 项目结构
 
 ```
