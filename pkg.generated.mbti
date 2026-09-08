@@ -12,6 +12,8 @@ pub fn gif_decode(Array[Byte]) -> Image?
 
 pub fn gif_decode_all(Array[Byte]) -> Array[GifFrame]?
 
+pub fn gif_encode(Image) -> Array[Byte]
+
 pub fn hamming_distance(UInt64, UInt64) -> Int
 
 pub fn hsl_to_rgb(Double, Double, Double) -> (Int, Int, Int)

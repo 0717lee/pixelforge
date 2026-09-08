@@ -326,6 +326,16 @@ body {
 .status[data-kind="success"] { color: #247a4d; }
 .status[data-kind="error"] { color: #b42318; }
 
+.animation-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  background: var(--inset);
+}
+
 /* ---- Chips (filters + engine) ---- */
 .filters {
   display: grid;

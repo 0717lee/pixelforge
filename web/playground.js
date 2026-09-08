@@ -97,6 +97,7 @@ const canvas = $("canvas");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const stage = $("stage");
 const dropHint = $("dropHint");
+const animationPreview = $("animationPreview");
 const filtersEl = $("filters");
 const enginesEl = $("engines");
 const pipelineListEl = $("pipelineList");
@@ -104,6 +105,8 @@ const pipelineListEl = $("pipelineList");
 let originalData = null;
 let imgW = 0;
 let imgH = 0;
+let animationUrl = null;
+let animationPreviewActive = false;
 // Ordered non-destructive operation stack. Each operation is { id, amount }.
 let activeFilters = [];
 let undoStack = [];
@@ -161,6 +164,21 @@ function applyOne(data, w, h, id, amount, eng) {
 // The pipeline as a flat op list (shared by main-thread and worker paths).
 function pipelineOps() {
   return activeFilters.map((op) => ({ id: op.id, amount: op.amount }));
+}
+
+function syncAnimationPreview() {
+  if (!animationPreview) return;
+  animationPreview.hidden = !(animationPreviewActive && activeFilters.length === 0);
+}
+
+function revokeAnimationUrl() {
+  if (animationUrl) URL.revokeObjectURL(animationUrl);
+  animationUrl = null;
+  animationPreviewActive = false;
+  if (animationPreview) {
+    animationPreview.removeAttribute("src");
+    animationPreview.hidden = true;
+  }
 }
 
 // Non-destructive pipeline from a fresh copy of the source, on the requested
@@ -255,6 +273,7 @@ function resetControls() {
   setActiveChips();
   renderPipelineList();
   updateHistoryButtons();
+  syncAnimationPreview();
 }
 
 function snapshot() { return activeFilters.map((op) => ({ ...op })); }
@@ -273,6 +292,7 @@ function applyStack(next, { history = true } = {}) {
   activeFilters = next.map((op) => ({ id: op.id, amount: op.amount }));
   setActiveChips();
   renderPipelineList();
+  syncAnimationPreview();
   invalidateWorkerResults();
   scheduleRender();
 }
@@ -362,16 +382,28 @@ function loadFile(file) {
     setStatus(`图片文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），限制为 ${MAX_FILE_BYTES / 1024 / 1024} MB。`, "error");
     return;
   }
+  revokeAnimationUrl();
   const url = URL.createObjectURL(file);
+  const isGif = file.type === "image/gif" || /\.gif$/i.test(file.name || "");
+  if (isGif) {
+    animationUrl = url;
+    animationPreviewActive = true;
+    if (animationPreview) animationPreview.src = url;
+    syncAnimationPreview();
+  }
   const img = new Image();
-  const cleanup = () => URL.revokeObjectURL(url);
+  const cleanup = () => { if (!isGif) URL.revokeObjectURL(url); };
   img.onload = () => {
     cleanup();
-    if (token !== sourceLoadToken) return;
+    if (token !== sourceLoadToken) {
+      if (isGif && animationUrl === url) revokeAnimationUrl();
+      return;
+    }
     useImageSource(img);
   };
   img.onerror = () => {
     cleanup();
+    if (isGif && animationUrl === url) revokeAnimationUrl();
     if (token === sourceLoadToken) setStatus("图片无法读取或格式不受支持。", "error");
   };
   img.src = url;
@@ -380,6 +412,7 @@ function loadFile(file) {
 // A colorful procedural scene so the demo is usable with zero setup.
 function loadSample() {
   sourceLoadToken += 1;
+  revokeAnimationUrl();
   imgW = 900;
   imgH = 600;
   canvas.width = imgW;
@@ -533,6 +566,7 @@ pipelineListEl.addEventListener("input", (event) => {
   const meta = FILTER_META[activeFilters[index].id];
   if (value && meta) value.textContent = meta.format(amount);
   setActiveChips();
+  syncAnimationPreview();
   invalidateWorkerResults();
   scheduleRender();
 });
@@ -542,13 +576,13 @@ $("undoBtn").addEventListener("click", () => {
   if (!undoStack.length) return;
   redoStack.push(snapshot());
   activeFilters = undoStack.pop();
-  setActiveChips(); renderPipelineList(); invalidateWorkerResults(); scheduleRender();
+  setActiveChips(); renderPipelineList(); syncAnimationPreview(); invalidateWorkerResults(); scheduleRender();
 });
 $("redoBtn").addEventListener("click", () => {
   if (!redoStack.length) return;
   undoStack.push(snapshot());
   activeFilters = redoStack.pop();
-  setActiveChips(); renderPipelineList(); invalidateWorkerResults(); scheduleRender();
+  setActiveChips(); renderPipelineList(); syncAnimationPreview(); invalidateWorkerResults(); scheduleRender();
 });
 
 for (const chip of enginesEl.querySelectorAll(".chip")) {

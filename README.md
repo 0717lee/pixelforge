@@ -21,8 +21,8 @@
 
 - **丰富的滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr/Canny 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、饱和度、色相旋转、水平/垂直翻转；另有 90° 旋转与最近邻/双线性/双三次 (Catmull-Rom) 缩放。
 - **形态学运算**：3×3 腐蚀 / 膨胀 / 开运算 / 闭运算。
-- **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 解码（变长 LZW、交错、透明索引）、QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
-- **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。
+- **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 编码/解码（单帧 GIF89a 编码、变长 LZW、交错、透明索引）、QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
+- **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
 - **仿射变换**：`Affine` 矩阵（旋转/平移/缩放/错切 + 复合 + 求逆），逆映射双线性采样；任意角度 `rotate(degrees)`。
 - **绘图原语**：Bresenham 直线、矩形、中点圆、填充，全部自动边界裁剪。
 - **可分离高斯模糊**：`gaussian(radius)` 任意半径，二项式权重行列分离，每像素 O(r) 而非 O(r²)。
@@ -44,7 +44,7 @@
 - **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现；测试覆盖正常、边界和畸形输入（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
 - **核心库零第三方依赖**：图像处理包只使用 `moonbitlang/core`；native CLI 的文件模式单独使用官方 `moonbitlang/x/fs`。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
-- **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
+- **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，GIF 保持动画预览，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
 
 ## 🆚 与 MoonBit 生态中其他图像库的关系
 
