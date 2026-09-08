@@ -42,7 +42,7 @@ English | [简体中文](README.md)
 - **Image-quality metrics**: `mse()` / `psnr()` compare all RGBA channels; `luma_mse()` / `ssim()` use Rec.601 luma and ignore alpha.
 - **Local thresholding and region statistics**: `sauvola()` / `adaptive_mean()` use summed-area tables for local windows; `regionprops()` reports component area, bounding boxes, and centroids.
 - **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible, with tests covering normal, boundary, and malformed inputs (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
-- **Zero dependencies**: only `moonbitlang/core`, no third-party libraries.
+- **Zero third-party dependencies in the core**: the image package uses only `moonbitlang/core`; native CLI file mode separately uses the official `moonbitlang/x/fs` package.
 - **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
 - **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
 
@@ -115,7 +115,7 @@ pixelforge/
 ├── cmd/main/              # native CLI example (moon run cmd/main)
 ├── cmd/ppm/               # PPM output example (moon run cmd/ppm > edges.ppm)
 ├── cmd/showcase/          # capstone demo (drawing+text+filter+PNG round trip)
-├── cmd/cli/               # portable info/convert codec CLI (hex input)
+├── cmd/cli/               # native info/convert CLI plus hex mode
 ├── web/                   # browser bindings + Playground (HTML/CSS/JS)
 │   ├── bindings.mbt       #   js-backend bindings (zero-copy) incl. encode_png
 │   ├── worker.js          #   Web Worker running the same pipeline off-thread
@@ -135,7 +135,7 @@ Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
 moon test              # run the complete unit-test suite
 moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
 moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
-moon run cmd/cli -- --help     # show the portable codec CLI help
+moon run --target native cmd/cli -- --help # show the file codec CLI help
 ```
 
 Start the browser Playground (prebuilt bundles ship in `web/dist/`):

@@ -15,18 +15,28 @@ try {
   // JS backend remains available; the main thread already reports this.
 }
 
-function applyFilterWasm(src, w, h, id, amount) {
+function applyPipelineWasm(src, w, h, ops) {
   const ex = wasmInstance.exports;
   const len = w * h * 4;
   const ptr = ex.alloc(len);
   new Uint8Array(ex.memory.buffer, ptr, len).set(src);
-  const resPtr = ex.process(ptr, w, h, id, amount);
-  return new Uint8ClampedArray(new Uint8Array(ex.memory.buffer).subarray(resPtr, resPtr + len));
+  for (const op of ops) {
+    if (typeof ex.process_in_place === "function") {
+      const returned = ex.process_in_place(ptr, w, h, op.id, op.amount);
+      if (returned !== ptr) throw new Error("WASM in-place buffer pointer changed");
+    } else {
+      const resultPtr = ex.process(ptr, w, h, op.id, op.amount);
+      const memoryView = new Uint8Array(ex.memory.buffer);
+      if (resultPtr < 0 || resultPtr + len > memoryView.byteLength) throw new Error("WASM returned an invalid result pointer");
+      new Uint8Array(ex.memory.buffer, ptr, len).set(memoryView.subarray(resultPtr, resultPtr + len));
+    }
+  }
+  return new Uint8ClampedArray(new Uint8Array(ex.memory.buffer).subarray(ptr, ptr + len));
 }
 
 function applyOne(data, w, h, id, amount, engine) {
   return engine === "wasm" && wasmInstance
-    ? applyFilterWasm(data, w, h, id, amount)
+    ? applyPipelineWasm(data, w, h, [{ id, amount }])
     : apply_filter(data, w, h, id, amount);
 }
 
@@ -41,7 +51,8 @@ self.onmessage = (e) => {
     if (!buffer || buffer.byteLength !== w * h * 4) throw new Error("像素缓冲区大小无效");
     const t0 = performance.now();
     let data = new Uint8ClampedArray(buffer);
-    for (const op of ops || []) data = applyOne(data, w, h, op.id, op.amount, engine);
+    if (engine === "wasm" && wasmInstance) data = applyPipelineWasm(data, w, h, ops || []);
+    else for (const op of ops || []) data = applyOne(data, w, h, op.id, op.amount, engine);
     const out = data.byteLength === w * h * 4 ? data : data.slice();
     self.postMessage({ seq, generation, w, h, buffer: out.buffer, ms: performance.now() - t0 }, [out.buffer]);
   } catch (err) {

@@ -132,19 +132,30 @@ function asClamped(buf) {
   return new Uint8ClampedArray(buf.buffer, buf.byteOffset, buf.length);
 }
 
-// Genuine-WASM filter: bulk-copy src into linear memory, process, copy result
-// out (memory may have grown during the call, so re-view before reading).
-function applyFilterWasm(src, w, h, id, amount) {
+// Genuine-WASM pipeline: allocate one linear-memory input buffer, apply every
+// operation in place, then copy the final result out (memory may have grown
+// during a call, so each view is recreated).
+function applyPipelineWasm(src, w, h, ops) {
   const ex = wasmInstance.exports;
   const len = w * h * 4;
   const ptr = ex.alloc(len);
   new Uint8Array(ex.memory.buffer, ptr, len).set(src);
-  const resPtr = ex.process(ptr, w, h, id, amount);
-  return new Uint8ClampedArray(new Uint8Array(ex.memory.buffer).subarray(resPtr, resPtr + len));
+  for (const op of ops) {
+    if (typeof ex.process_in_place === "function") {
+      const returned = ex.process_in_place(ptr, w, h, op.id, op.amount);
+      if (returned !== ptr) throw new Error("WASM in-place buffer pointer changed");
+    } else {
+      const resultPtr = ex.process(ptr, w, h, op.id, op.amount);
+      const memoryView = new Uint8Array(ex.memory.buffer);
+      if (resultPtr < 0 || resultPtr + len > memoryView.byteLength) throw new Error("WASM returned an invalid result pointer");
+      new Uint8Array(ex.memory.buffer, ptr, len).set(memoryView.subarray(resultPtr, resultPtr + len));
+    }
+  }
+  return new Uint8ClampedArray(new Uint8Array(ex.memory.buffer).subarray(ptr, ptr + len));
 }
 
 function applyOne(data, w, h, id, amount, eng) {
-  return eng === "wasm" ? applyFilterWasm(data, w, h, id, amount) : apply_filter(data, w, h, id, amount);
+  return eng === "wasm" ? applyPipelineWasm(data, w, h, [{ id, amount }]) : apply_filter(data, w, h, id, amount);
 }
 
 // The pipeline as a flat op list (shared by main-thread and worker paths).
@@ -156,6 +167,7 @@ function pipelineOps() {
 // engine. The order is exactly the order shown in the operation list.
 function runPipeline(eng) {
   let data = new Uint8ClampedArray(originalData.data);
+  if (eng === "wasm") return applyPipelineWasm(data, imgW, imgH, pipelineOps());
   for (const op of pipelineOps()) data = applyOne(data, imgW, imgH, op.id, op.amount, eng);
   return data;
 }

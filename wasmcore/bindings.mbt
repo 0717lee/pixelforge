@@ -5,7 +5,8 @@
 /// inside the module's exported linear `memory` (verified: zero header offset),
 /// so the JS host creates a `Uint8Array` view and bulk-copies canvas pixels in
 /// with no per-element FFI. `process` runs a filter and returns the address of
-/// a fresh result buffer, which the host must read out before its next call.
+/// a fresh result buffer, while `process_in_place` copies each result back into
+/// the caller-owned allocation for pointer-stable multi-operation pipelines.
 pub fn alloc(len : Int) -> FixedArray[Byte] {
   FixedArray::make(len, b'\x00')
 }
@@ -23,4 +24,30 @@ pub fn process(
   @pixelforge.Image::from_bytes(width, height, buf).apply_filter_id(
     filter_id, amount,
   ).data
+}
+
+///|
+/// Applies one filter and copies the result back into `buf`.
+///
+/// The returned array is the exact input array, allowing a host to allocate
+/// one linear-memory buffer for a whole pipeline. Filter implementations may
+/// still allocate temporary MoonBit arrays internally; this API guarantees
+/// pointer stability for the caller's buffer, not zero internal allocation.
+pub fn process_in_place(
+  buf : FixedArray[Byte],
+  width : Int,
+  height : Int,
+  filter_id : Int,
+  amount : Double,
+) -> FixedArray[Byte] {
+  let result = @pixelforge.Image::from_bytes(width, height, buf).apply_filter_id(
+      filter_id, amount,
+    ).data
+  if result.length() != buf.length() {
+    abort("process_in_place: filter changed the image buffer length")
+  }
+  for i in 0..<buf.length() {
+    buf[i] = result[i]
+  }
+  buf
 }

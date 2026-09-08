@@ -1,12 +1,11 @@
 ///|
-/// PixelForge's small, cross-backend CLI.
+/// PixelForge's small native CLI (with a portable hexadecimal mode).
 ///
-/// The command deliberately accepts bytes as hex instead of opening files. MoonBit's
-/// portable core has no common filesystem API across native, JS and wasm-gc. A shell
-/// can feed a file as hex (`xxd -p`) and the same command then works on every backend.
+/// Native builds accept file paths. `--input-hex` remains available for
+/// deterministic host-independent invocations.
 ///
-///   moon run cmd/cli -- info --input-hex <png-hex>
-///   moon run cmd/cli -- convert --from png --to qoi --input-hex <png-hex>
+///   moon run --target native cmd/cli -- info --input image.png
+///   moon run --target native cmd/cli -- convert --from png --to qoi --input image.png --output image.qoi
 fn main {
   let args = @env.args()
   if args.length() < 2 {
@@ -30,20 +29,21 @@ fn main {
 ///|
 fn print_help() -> Unit {
   println("PixelForge CLI 0.15")
-  println("Portable codec utility (input is hexadecimal bytes)")
+  println("Native codec utility (file paths or hexadecimal bytes)")
   println("")
   println("Usage:")
+  println("  pixelforge info --input PATH")
+  println("  pixelforge convert --from FORMAT --to FORMAT --input PATH --output PATH")
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
   println("")
   println("Formats: png, qoi, bmp, gif (GIF output is not supported yet)")
-  println("The command prints metadata and converted bytes as hexadecimal.")
+  println("File mode writes converted bytes to --output; hex mode prints bytes as hexadecimal.")
 }
 
 ///|
 fn info(args : Array[String], start : Int) -> Unit {
-  let hex = option(args, start, "--input-hex")
-  let bytes = decode_hex(hex)
+  let bytes = input_bytes(args, start)
   let format = detect_format(bytes)
   let image = decode_image(format, bytes)
   println("format=\{format}")
@@ -57,18 +57,64 @@ fn info(args : Array[String], start : Int) -> Unit {
 fn convert(args : Array[String], start : Int) -> Unit {
   let from = option(args, start, "--from")
   let to = option(args, start, "--to")
-  let bytes = decode_hex(option(args, start, "--input-hex"))
+  let file_mode = has_option(args, start, "--input")
+  let bytes = input_bytes(args, start)
   let actual = detect_format(bytes)
   if actual != from {
     abort("pixelforge: input format is \{actual}, but --from=\{from}")
   }
   let image = decode_image(from, bytes)
   let output = encode_image(to, image)
-  println("format=\{to}")
-  println("width=\{image.width}")
-  println("height=\{image.height}")
-  println("bytes=\{output.length()}")
-  println("hex=\{encode_hex(output)}")
+  if file_mode {
+    let output_path = option(args, start, "--output")
+    write_file(output_path, output)
+    println("format=\{to}")
+    println("width=\{image.width}")
+    println("height=\{image.height}")
+    println("bytes=\{output.length()}")
+    println("output=\{output_path}")
+  } else {
+    println("format=\{to}")
+    println("width=\{image.width}")
+    println("height=\{image.height}")
+    println("bytes=\{output.length()}")
+    println("hex=\{encode_hex(output)}")
+  }
+}
+
+/// Read either a native file path or portable hexadecimal bytes.
+fn input_bytes(args : Array[String], start : Int) -> Array[Byte] {
+  if has_option(args, start, "--input") {
+    if has_option(args, start, "--input-hex") {
+      abort("pixelforge: use only one of --input and --input-hex")
+    }
+    read_file(option(args, start, "--input"))
+  } else {
+    decode_hex(option(args, start, "--input-hex"))
+  }
+}
+
+fn has_option(args : Array[String], start : Int, name : String) -> Bool {
+  let mut i = start
+  while i < args.length() {
+    if args[i] == name {
+      return true
+    }
+    i += 1
+  }
+  false
+}
+
+fn read_file(path : String) -> Array[Byte] {
+  Bytes::to_array(@fs.read_file_to_bytes(path) catch {
+    @fs.IOError(message) => abort("pixelforge: cannot read '\{path}': \{message}")
+  })
+}
+
+fn write_file(path : String, bytes : Array[Byte]) -> Unit {
+  @fs.write_bytes_to_file(path, Bytes::from_array(bytes)) catch {
+    @fs.IOError(message) => abort("pixelforge: cannot write '\{path}': \{message}")
+  }
 }
 
 ///|

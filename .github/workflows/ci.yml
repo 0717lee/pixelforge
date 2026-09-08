@@ -55,4 +55,4 @@ jobs:
         run: |
           moon run cmd/ppm > /dev/null
           moon run cmd/showcase > /dev/null
-          moon run cmd/cli -- --help > /dev/null
+          moon run --target native cmd/cli -- --help > /dev/null

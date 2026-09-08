@@ -42,7 +42,7 @@
 - **图像质量指标**：`mse()` / `psnr()` 比较 RGBA 四通道；`luma_mse()` / `ssim()` 使用 Rec.601 亮度并忽略 alpha。
 - **局部阈值与区域统计**：`sauvola()` / `adaptive_mean()` 使用积分图处理局部窗口；`regionprops()` 返回连通域面积、边界框和质心。
 - **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现；测试覆盖正常、边界和畸形输入（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
-- **零依赖**：只用 `moonbitlang/core`，不引入任何第三方库。
+- **核心库零第三方依赖**：图像处理包只使用 `moonbitlang/core`；native CLI 的文件模式单独使用官方 `moonbitlang/x/fs`。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
 
@@ -115,7 +115,7 @@ pixelforge/
 ├── cmd/main/              # 原生 CLI 示例（moon run cmd/main）
 ├── cmd/ppm/               # PPM 图像输出示例（moon run cmd/ppm > edges.ppm）
 ├── cmd/showcase/          # 综合展示（绘图+文字+滤镜+PNG 往返自检）
-├── cmd/cli/               # 跨后端 info/convert 编解码 CLI（十六进制输入）
+├── cmd/cli/               # native info/convert 编解码 CLI + 十六进制模式
 ├── web/                   # 浏览器绑定 + Playground（HTML/CSS/JS）
 │   ├── bindings.mbt       #   js 后端绑定 apply_filter（零拷贝）
 │   ├── dist/web.js        #   已构建的 MoonBit→JS 产物
@@ -135,7 +135,7 @@ moon test              # 运行完整单元测试套件
 moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
 moon run cmd/showcase > showcase.ppm   # 综合展示：绘图+文字+滤镜+PNG 往返自检
 moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
-moon run cmd/cli -- --help     # 查看可移植编解码 CLI
+moon run --target native cmd/cli -- --help # 查看文件编解码 CLI
 ```
 
 启动浏览器 Playground（`web/dist/` 中已包含构建好的产物）：

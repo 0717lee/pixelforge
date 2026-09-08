@@ -9,7 +9,7 @@ pkgtype(kind: "foreign_library")
 options(
   link: {
     "wasm": {
-      "exports": [ "alloc", "process" ],
+      "exports": [ "alloc", "process", "process_in_place" ],
       "export-memory-name": "memory",
     },
   },

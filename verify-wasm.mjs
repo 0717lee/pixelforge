@@ -7,13 +7,16 @@ import { readFile } from "node:fs/promises";
 
 const bytes = await readFile(new URL("./web/dist/wasmcore.wasm", import.meta.url));
 const { instance } = await WebAssembly.instantiate(bytes, {});
-const { memory, alloc, process } = instance.exports;
+const { memory, alloc, process, process_in_place } = instance.exports;
 
 if (!(memory instanceof WebAssembly.Memory)) {
   throw new Error("wasmcore.wasm does not export a linear memory named `memory`");
 }
 if (typeof alloc !== "function" || typeof process !== "function") {
   throw new Error("wasmcore.wasm must export alloc and process functions");
+}
+if (typeof process_in_place !== "function") {
+  throw new Error("wasmcore.wasm must export process_in_place for reusable pipelines");
 }
 
 function runFilter(src, w, h, id, amount) {
@@ -37,6 +40,22 @@ function runFilter(src, w, h, id, amount) {
   return Array.from(new Uint8Array(memory.buffer).subarray(r, r + len));
 }
 
+function runPipelineInPlace(src, w, h, ops) {
+  const len = w * h * 4;
+  if (src.length !== len) throw new Error("invalid pipeline input length");
+  const p = alloc(len);
+  if (!Number.isInteger(p) || p < 0 || p + len > memory.buffer.byteLength) {
+    throw new Error(`alloc returned invalid pointer ${p} for ${len} bytes`);
+  }
+  new Uint8Array(memory.buffer, p, len).set(src);
+  for (const [id, amount] of ops) {
+    const returned = process_in_place(p, w, h, id, amount);
+    if (returned !== p) throw new Error(`process_in_place moved buffer ${p} -> ${returned}`);
+    if (p + len > memory.buffer.byteLength) throw new Error("buffer fell outside linear memory");
+  }
+  return Array.from(new Uint8Array(memory.buffer).subarray(p, p + len));
+}
+
 let failures = 0;
 const check = (label, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -52,6 +71,16 @@ check("wasm invert (id 1)", runFilter(src, 2, 2, 1, 0), [155, 55, 225, 128, 255,
 check("wasm grayscale (id 0)", runFilter(src, 2, 2, 0, 0), [150, 150, 150, 128, 0, 0, 0, 255, 255, 255, 255, 255, 18, 18, 18, 40]);
 // A convolution filter allocates internally — good pointer-stability stress.
 check("wasm gaussian blur runs (id 4) length", [runFilter(src, 2, 2, 4, 0).length], [16]);
+check(
+  "wasm in-place pipeline reuses pointer",
+  runPipelineInPlace(src, 2, 2, [[1, 0], [0, 0], [2, 10]]),
+  [114, 114, 114, 128, 255, 255, 255, 255, 10, 10, 10, 255, 246, 246, 246, 40],
+);
+const stressSrc = new Array(64).fill(0).map((_, i) => i & 255);
+const stressOps = Array.from({ length: 200 }, (_, i) => [i % 2, 0]);
+const stress = runPipelineInPlace(stressSrc, 4, 4, stressOps);
+check("wasm in-place stress length", [stress.length], [64]);
+check("wasm in-place stress preserves alpha", [stress[3], stress[7]], [3, 7]);
 
 if (failures > 0) {
   console.error(`WASM verification failed: ${failures} check(s)`);

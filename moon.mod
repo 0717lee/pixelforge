@@ -31,3 +31,7 @@ options(
     "*.pdf",
   ],
 )
+
+import {
+  "moonbitlang/x@0.5.1",
+}

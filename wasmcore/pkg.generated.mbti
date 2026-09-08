@@ -6,6 +6,8 @@ pub fn alloc(Int) -> FixedArray[Byte]
 
 pub fn process(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
 
+pub fn process_in_place(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
+
 // Errors
 
 // Types and methods
@@ -13,4 +15,3 @@ pub fn process(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
 // Type aliases
 
 // Traits
-
