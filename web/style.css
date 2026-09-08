@@ -196,6 +196,75 @@ body {
   gap: 8px;
 }
 
+.group-heading-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-heading-row h2 { margin-bottom: 0; }
+
+.compact-actions { gap: 4px; }
+
+.btn.mini {
+  flex: none;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.pipeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pipeline-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--faint);
+  background: var(--inset);
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.pipeline-item {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--inset);
+}
+
+.pipeline-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pipeline-item-title {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pipeline-item-actions { display: flex; gap: 3px; }
+
+.pipeline-action {
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 3px 5px;
+}
+
+.pipeline-action:hover { color: var(--ink); border-color: var(--accent); }
+
+.pipeline-control { margin-top: 8px; }
+.pipeline-control span { margin-bottom: 4px; }
+
 /* ---- Buttons ---- */
 .btn {
   flex: 1;
@@ -246,6 +315,16 @@ body {
   background: var(--surface);
   border-color: var(--line-strong);
 }
+
+.status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status[data-kind="success"] { color: #247a4d; }
+.status[data-kind="error"] { color: #b42318; }
 
 /* ---- Chips (filters + engine) ---- */
 .filters {

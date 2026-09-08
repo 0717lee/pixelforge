@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.15.0 (unreleased)
+
+- Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
+- Added deterministic hexadecimal input/output so the utility works on native,
+  JS, and wasm-gc without a target-specific filesystem dependency.
+- Added adaptive PNG row filters and fixed-Huffman DEFLATE output with lossless
+  round-trip coverage.
+- Added multi-frame GIF metadata decoding and deterministic MSE/PSNR/SSIM
+  image-quality metrics.
+- Added Sauvola/local-mean thresholding, connected-component region statistics,
+  and common 8-bit grayscale/palette PNG decode paths with `tRNS` support.
+
+## 0.14.0 (unreleased)
+
+### 修复与工程化
+- Playground 的 Worker 渲染加入代际校验，避免切换图片或线程模式时旧结果覆盖新结果。
+- Playground 增加上传失败、尺寸限制、缩放提示和下载错误反馈。
+- WASM 验证、Web 构建产物和 CI 检查链路改为可复现并在失败时正确退出。
+- 核心图像构造增加尺寸与溢出保护；补充编解码器畸形输入测试。
+- 补充安全策略、贡献指南、行为准则和 Issue/PR 模板。
+- 新增类型安全的 `Filter` / `Pipeline` API，支持可复用的顺序处理管线。
+- Playground 支持带参数的操作栈、上移/下移、删除、撤销、重做和清空。
+
 ## 0.13.1 (2026-08-19)
 
 ### 文档

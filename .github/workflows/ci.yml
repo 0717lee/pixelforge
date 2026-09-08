@@ -4,6 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Keep the workflow read-only unless a future job explicitly needs another scope.
+permissions:
+  contents: read
+
+concurrency:
+  group: pixelforge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The installer accepts an exact release argument. Update deliberately when
+  # upgrading MoonBit so local and CI diagnostics remain reproducible.
+  MOONBIT_VERSION: 0.1.20260827
 
 jobs:
   check-and-test:
@@ -11,12 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MoonBit toolchain
+      - name: Install pinned MoonBit toolchain
         run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOONBIT_VERSION"
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
-      - name: moon version
+      - name: Show toolchain versions
         run: moon version --all
 
       - name: Type check
@@ -25,15 +39,20 @@ jobs:
       - name: Test (wasm-gc)
         run: moon test
 
-      - name: Test (js)
+      - name: Test (JavaScript)
         run: moon test --target js
 
-      - name: Build web artifacts
-        run: |
-          moon build --release --target js
-          moon build --release --target wasm
+      - name: Test (native)
+        run: moon test --target native
+
+      - name: Verify committed web artifacts are reproducible
+        run: node scripts/build-web.mjs --check
+
+      - name: Verify linear-memory WebAssembly integration
+        run: node verify-wasm.mjs
 
       - name: Run CLI demos (end-to-end smoke test)
         run: |
           moon run cmd/ppm > /dev/null
           moon run cmd/showcase > /dev/null
+          moon run cmd/cli -- --help > /dev/null

@@ -6,6 +6,7 @@
 import { apply_filter } from "./dist/web.js";
 
 let wasmInstance = null;
+const MAX_PIXELS = 16_000_000;
 try {
   const res = await fetch("./dist/wasmcore.wasm");
   const { instance } = await WebAssembly.instantiate(await res.arrayBuffer(), {});
@@ -29,15 +30,23 @@ function applyOne(data, w, h, id, amount, engine) {
     : apply_filter(data, w, h, id, amount);
 }
 
-// { seq, buffer, w, h, ops: [{ id, amount }], engine } ->
-// { seq, buffer, ms } (buffer transferred back).
+// { seq, generation, buffer, w, h, ops: [{ id, amount }], engine } ->
+// { seq, generation, w, h, buffer, ms } (buffer transferred back), or error.
 self.onmessage = (e) => {
-  const { seq, buffer, w, h, ops, engine } = e.data;
-  const t0 = performance.now();
-  let data = new Uint8ClampedArray(buffer);
-  for (const op of ops) data = applyOne(data, w, h, op.id, op.amount, engine);
-  const out = data.buffer.byteLength === w * h * 4 ? data : data.slice();
-  self.postMessage({ seq, buffer: out.buffer, ms: performance.now() - t0 }, [out.buffer]);
+  const { seq, generation, buffer, w, h, ops, engine } = e.data || {};
+  try {
+    if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w * h > MAX_PIXELS) {
+      throw new Error("图像尺寸超出 Worker 限制");
+    }
+    if (!buffer || buffer.byteLength !== w * h * 4) throw new Error("像素缓冲区大小无效");
+    const t0 = performance.now();
+    let data = new Uint8ClampedArray(buffer);
+    for (const op of ops || []) data = applyOne(data, w, h, op.id, op.amount, engine);
+    const out = data.byteLength === w * h * 4 ? data : data.slice();
+    self.postMessage({ seq, generation, w, h, buffer: out.buffer, ms: performance.now() - t0 }, [out.buffer]);
+  } catch (err) {
+    self.postMessage({ seq, generation, w, h, error: err?.message || String(err) });
+  }
 };
 
 self.postMessage({ ready: true });

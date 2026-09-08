@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible defect
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Please search existing issues before opening a new report. Do not include secrets or private data."
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.13.1 or abc1234"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest input and command or browser action that reproduces the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, MoonBit version, target (wasm-gc/js/native), and browser if relevant.
+    validations:
+      required: true

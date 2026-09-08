@@ -7,7 +7,7 @@
 > 一个纯 [MoonBit](https://www.moonbitlang.cn/) 实现的图像处理库，附带一个在浏览器里实时运行的 Playground。
 > 后端无关的核心库可编译到 **JavaScript / WebAssembly (wasm-gc & 线性内存 wasm) / native**。
 >
-> **v1.0 已发布**：公开 API 进入稳定期，遵循语义化版本（主版号内保持向后兼容）。
+> **稳定 API 里程碑已发布**：GitHub 保留 `v1.0.0` 作为稳定版标记；当前 MoonBit 包版本为 `0.14.0`（mooncakes.io 要求主版本号为 0）。公开 API 在 0.x 系列中保持兼容，破坏性变更会记录在 CHANGELOG。
 
 ![PixelForge 浏览器 Playground](assets/playground-original.png)
 
@@ -19,9 +19,10 @@
 
 ## ✨ 特性
 
-- **26 种滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr/Canny 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、饱和度、色相旋转、水平/垂直翻转；另有 90° 旋转与最近邻/双线性/双三次 (Catmull-Rom) 缩放。
+- **丰富的滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr/Canny 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、饱和度、色相旋转、水平/垂直翻转；另有 90° 旋转与最近邻/双线性/双三次 (Catmull-Rom) 缩放。
 - **形态学运算**：3×3 腐蚀 / 膨胀 / 开运算 / 闭运算。
-- **图像编解码**：PNG（自实现完整 DEFLATE inflate + CRC-32/Adler-32 校验）、GIF 解码（变长 LZW、交错、透明索引）、QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
+- **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 解码（变长 LZW、交错、透明索引）、QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
+- **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。
 - **仿射变换**：`Affine` 矩阵（旋转/平移/缩放/错切 + 复合 + 求逆），逆映射双线性采样；任意角度 `rotate(degrees)`。
 - **绘图原语**：Bresenham 直线、矩形、中点圆、填充，全部自动边界裁剪。
 - **可分离高斯模糊**：`gaussian(radius)` 任意半径，二项式权重行列分离，每像素 O(r) 而非 O(r²)。
@@ -38,7 +39,9 @@
 - **通用卷积引擎**：`Kernel` + `Image::convolve`，可自定义任意奇数尺寸卷积核。
 - **图像统计与色调**：`stats()` 逐通道 min/max/mean（Int64 累加）、`auto_contrast()` 自动对比度拉伸、`levels(black, white, gamma)` 色阶重映射。
 - **确定性噪声**：`add_gaussian_noise(seed, σ)` / `add_salt_pepper(seed, density)`，64 位 LCG 驱动，同 seed 跨后端逐字节一致。
-- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现、**172 个单元测试全部手算验证**（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
+- **图像质量指标**：`mse()` / `psnr()` 比较 RGBA 四通道；`luma_mse()` / `ssim()` 使用 Rec.601 亮度并忽略 alpha。
+- **局部阈值与区域统计**：`sauvola()` / `adaptive_mean()` 使用积分图处理局部窗口；`regionprops()` 返回连通域面积、边界框和质心。
+- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现；测试覆盖正常、边界和畸形输入（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
 - **零依赖**：只用 `moonbitlang/core`，不引入任何第三方库。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
@@ -49,11 +52,11 @@ MoonBit 生态中已经存在若干方向相近的图像处理包（如 `megemin
 
 | 现有项目 | 定位 | 与 PixelForge 的差异 |
 | --- | --- | --- |
-| `megemini/millow` | Pillow 风格的计算机视觉库（角点检测、轮廓查找、HOG/LBP/矩、数据增强、SSIM 等） | 侧重 CV 算法；不提供编解码器广度、浏览器交互与感知分析 |
+| `megemini/millow` | 更广的计算机视觉算法库（增强、轮廓/区域特征、HOG/LBP、SSIM 等） | 侧重 CV 算法；PixelForge 侧重零依赖、多后端编解码和浏览器交互 |
 | `PingGuoMiaoMiao/MoonVision` | 轻量图像处理 + 基础 CV（灰度图为主、模板匹配） | 侧重灰度图像处理；不提供 RGBA 全彩编解码、绘图/文字、噪声与哈希 |
 | `shunge/image` | 纯解码器（BMP/QOI/TGA/PNG/GIF/JPEG 六格式解码） | 仅解码；不提供滤镜、编码、绘图与分析能力 |
 
-**PixelForge 的独有能力**（上述项目均不具备）：
+**PixelForge 当前重点打磨的能力**：
 
 - **编解码器广度**：PNG（自实现完整 DEFLATE inflate + CRC-32/Adler-32 校验）、QOI、BMP 的**编+解**与 GIF 解码，全部纯 MoonBit 实现
 - **浏览器 Playground**：JS/WASM 双引擎实时对比、Web Worker 后台线程、实时亮度直方图面板、用自家 `png_encode` 下载结果
@@ -104,16 +107,22 @@ pixelforge/
 ├── transform.mbt          # 水平/垂直翻转、90° 旋转
 ├── resize.mbt             # 最近邻/双线性缩放
 ├── dispatch.mbt           # Image::apply_filter_id 统一派发（各绑定共用）
-├── *_test.mbt             # 172 个确定性测试（黑盒 + 白盒）
+├── pipeline.mbt           # 类型安全、可复用的 Filter / Pipeline 管线 API
+├── metrics.mbt            # MSE / PSNR / luma MSE / SSIM
+├── adaptive_threshold.mbt # Sauvola / 局部均值阈值
+├── regionprops.mbt        # 连通域面积、边界框、质心
+├── *_test.mbt             # 确定性测试（黑盒 + 白盒）
 ├── cmd/main/              # 原生 CLI 示例（moon run cmd/main）
 ├── cmd/ppm/               # PPM 图像输出示例（moon run cmd/ppm > edges.ppm）
 ├── cmd/showcase/          # 综合展示（绘图+文字+滤镜+PNG 往返自检）
+├── cmd/cli/               # 跨后端 info/convert 编解码 CLI（十六进制输入）
 ├── web/                   # 浏览器绑定 + Playground（HTML/CSS/JS）
 │   ├── bindings.mbt       #   js 后端绑定 apply_filter（零拷贝）
 │   ├── dist/web.js        #   已构建的 MoonBit→JS 产物
 │   ├── dist/wasmcore.wasm #   已构建的线性内存 wasm 产物
 │   └── index.html / playground.js / style.css
 ├── wasmcore/              # 线性内存 wasm 绑定（alloc/process + 导出 memory）
+├── scripts/build-web.mjs  # 构建并校验 web/dist 产物
 └── serve.mjs              # 零依赖静态服务器
 ```
 
@@ -122,10 +131,11 @@ pixelforge/
 先安装 [MoonBit 工具链](https://www.moonbitlang.cn/download/)。
 
 ```bash
-moon test              # 运行 172 个单元测试
+moon test              # 运行完整单元测试套件
 moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
 moon run cmd/showcase > showcase.ppm   # 综合展示：绘图+文字+滤镜+PNG 往返自检
 moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
+moon run cmd/cli -- --help     # 查看可移植编解码 CLI
 ```
 
 启动浏览器 Playground（`web/dist/` 中已包含构建好的产物）：
@@ -134,12 +144,13 @@ moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
 node serve.mjs         # 然后打开 http://localhost:8123
 ```
 
+Playground 默认把上传图片缩放到最长边 1024 像素作为预览，以避免浏览器在连续渲染时占用过多内存；页面会显示实际预览尺寸，下载结果也使用该尺寸。需要处理原始分辨率时，请直接调用库 API 或在宿主中自行设置像素上限。
+
 如需从源码重新构建 Web 产物：
 
 ```bash
-moon build --release --target js     # 生成 _build/js/release/build/web/web.js
-moon build --release --target wasm   # 生成 _build/wasm/release/build/wasmcore/wasmcore.wasm
-# 将上述两个产物复制到 web/dist/ 下（web.js、wasmcore.wasm）
+node scripts/build-web.mjs           # 构建并同步 web/dist/
+node scripts/build-web.mjs --check   # 仅检查提交的产物是否同步
 ```
 
 ## 🧑‍💻 库用法
@@ -159,9 +170,30 @@ let sharp = img.convolve(kernel)
 // 按数字 id 派发（供各宿主绑定 / CLI 共用）
 let out = img.apply_filter_id(8, 0.0) // 8 = Sobel
 
+// 类型安全的可复用管线（按追加顺序执行）
+let pipeline = @pixelforge.Pipeline::new()
+  .append(@pixelforge.Filter::Grayscale)
+  .append(@pixelforge.Filter::Contrast(1.25))
+  .append(@pixelforge.Filter::Sobel)
+let out2 = img.apply_pipeline(pipeline)
+
+// 质量指标：RGBA 误差与 Rec.601 亮度相似度
+let error = img.mse(out2)
+let score = img.psnr(out2)
+let similarity = img.ssim(out2)
+
 // 取回处理后的像素
 let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 ```
+
+`mse`/`psnr` 比较 RGBA 四通道；`luma_mse`/`ssim` 使用 Rec.601 luma 并忽略 alpha。`ssim` 使用覆盖整张图的单个 population-statistics 窗口（无滑动窗口补边），相同尺寸的空图返回 1；比较尺寸不一致会拒绝。
+
+### 错误与边界
+
+- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode` 对格式错误或不支持的输入返回 `None`。
+- `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
+- 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
+- Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。
 
 ## 🎛️ 滤镜清单
 
@@ -209,7 +241,7 @@ moon test                 # 默认后端（wasm-gc）
 moon test --target js     # js 后端
 ```
 
-172 个测试覆盖每个滤镜、变换、绘图原语、合成模式、字体、分析算法与编解码器，期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返、CRC-32/Adler-32 公开参考向量、手工汇编的 DEFLATE 与 GIF LZW 位流等），在 wasm-gc 与 js 后端下均通过；GitHub Actions 持续集成。
+测试覆盖每个滤镜、变换、绘图原语、合成模式、字体、分析算法与编解码器，并包含畸形输入和尺寸边界；期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返、CRC-32/Adler-32 公开参考向量、手工汇编的 DEFLATE 与 GIF LZW 位流等），在 wasm-gc、js 与 native 后端下均通过；GitHub Actions 持续集成。
 
 ## 📮 发布到 mooncakes.io
 

@@ -1,11 +1,12 @@
 ///|
 /// PNG codec in pure MoonBit.
 ///
-/// Encoder: 8-bit RGBA, non-interlaced, filter 0 rows, zlib stream with
-/// stored DEFLATE blocks — small, spec-valid files every viewer opens.
+/// Encoder: 8-bit RGBA, non-interlaced, adaptive row filters and a fixed
+/// Huffman DEFLATE stream. Decoder accepts stored, fixed and dynamic blocks.
 /// Decoder: full DEFLATE inflate (stored, fixed and dynamic Huffman),
 /// zlib + Adler-32 and per-chunk CRC-32 verification, all five row filters
-/// (None/Sub/Up/Average/Paeth), 8-bit truecolor with or without alpha.
+/// (None/Sub/Up/Average/Paeth), 8-bit truecolor, grayscale, and indexed
+/// color with optional transparency.
 
 ///|
 /// CRC-32 (ISO-HDLC) over `data[from..<to]`, bitwise implementation.
@@ -63,10 +64,110 @@ fn push_chunk(
   push_uint_be(out, crc32(out, crc_start, out.length()))
 }
 
+/// Reverse the low `n` bits of a canonical DEFLATE code.
+fn reverse_bits(code : Int, n : Int) -> Int {
+  let mut value = 0
+  let mut remaining = code
+  for _ in 0..<n {
+    value = (value << 1) | (remaining & 1)
+    remaining = remaining >> 1
+  }
+  value
+}
+
+/// Returns a fixed-Huffman literal/length code and its bit length.
+fn fixed_code(symbol : Int) -> (Int, Int) {
+  if symbol <= 143 {
+    (reverse_bits(0x30 + symbol, 8), 8)
+  } else if symbol <= 255 {
+    (reverse_bits(0x190 + symbol - 144, 9), 9)
+  } else if symbol <= 279 {
+    (reverse_bits(symbol - 256, 7), 7)
+  } else {
+    (reverse_bits(0xC0 + symbol - 280, 8), 8)
+  }
+}
+
+fn fixed_dist_code(symbol : Int) -> (Int, Int) {
+  (reverse_bits(symbol, 5), 5)
+}
+
+priv struct BitWriter {
+  out : Array[Byte]
+  mut current : Int
+  mut bits : Int
+}
+
+fn BitWriter::write(self : BitWriter, value : Int, count : Int) -> Unit {
+  let mut remaining = value
+  for _ in 0..<count {
+    self.current = self.current | ((remaining & 1) << self.bits)
+    self.bits = self.bits + 1
+    remaining = remaining >> 1
+    if self.bits == 8 {
+      self.out.push(self.current.to_byte())
+      self.current = 0
+      self.bits = 0
+    }
+  }
+}
+
+fn BitWriter::finish(self : BitWriter) -> Unit {
+  if self.bits > 0 {
+    self.out.push(self.current.to_byte())
+    self.current = 0
+    self.bits = 0
+  }
+}
+
+/// Encodes filtered scanlines as one deterministic fixed-Huffman block.
+/// A distance-one match is used only when the preceding byte is identical;
+/// otherwise a literal is emitted to preserve the exact byte stream.
+fn deflate_fixed(raw : Array[Byte]) -> Array[Byte] {
+  let writer : BitWriter = { out: [], current: 0, bits: 0, }
+  writer.write(1, 1) // BFINAL
+  writer.write(1, 2) // BTYPE=01 (fixed Huffman)
+  let length_base = [
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67,
+    83, 99, 115, 131, 163, 195, 227, 258,
+  ]
+  let length_extra = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5,
+    5, 5, 0,
+  ]
+  let mut pos = 0
+  while pos < raw.length() {
+    let mut run = 1
+    while pos + run < raw.length() && run < 258 && raw[pos + run] == raw[pos] {
+      run = run + 1
+    }
+    if pos > 0 && run >= 3 && raw[pos - 1] == raw[pos] {
+      let mut index = 0
+      while index < 28 && run > length_base[index] + ((1 << length_extra[index]) - 1) {
+        index = index + 1
+      }
+      let (code, bits) = fixed_code(257 + index)
+      writer.write(code, bits)
+      writer.write(run - length_base[index], length_extra[index])
+      let (distance_code, distance_bits) = fixed_dist_code(0)
+      writer.write(distance_code, distance_bits)
+      pos = pos + run
+    } else {
+      let (code, bits) = fixed_code(raw[pos].to_int())
+      writer.write(code, bits)
+      pos = pos + 1
+    }
+  }
+  let (end_code, end_bits) = fixed_code(256)
+  writer.write(end_code, end_bits)
+  writer.finish()
+  writer.out
+}
+
 ///|
-/// Encodes an image as an 8-bit RGBA non-interlaced PNG. Rows use filter 0
-/// and the zlib stream holds stored (uncompressed) DEFLATE blocks, so the
-/// output is spec-valid and byte-size predictable rather than small.
+/// Encodes an image as an 8-bit RGBA non-interlaced PNG. Each row chooses
+/// the filter with the smallest sum of absolute signed residuals, then the
+/// filtered scanlines are written as one fixed-Huffman DEFLATE block.
 pub fn png_encode(img : Image) -> Array[Byte] {
   let out : Array[Byte] = []
   // Signature.
@@ -82,38 +183,68 @@ pub fn png_encode(img : Image) -> Array[Byte] {
     push_u8(ihdr, v)
   }
   push_chunk(out, [73, 72, 68, 82], ihdr)
-  // Raw scanlines: one filter byte (0) then w*4 RGBA bytes per row.
+  // Raw scanlines: choose among PNG's five filters per row.
   let raw : Array[Byte] = []
+  let bpp = 4
+  let stride = img.width * bpp
+  let prev : Array[Int] = Array::make(stride, 0)
+  let cur : Array[Int] = Array::make(stride, 0)
   for y in 0..<img.height {
-    raw.push(b'\x00')
-    for x in 0..<(img.width * 4) {
-      raw.push(img.data[y * img.width * 4 + x])
+    let mut best_filter = 0
+    let mut best_score = -1
+    for filter in 0..<5 {
+      let mut score = 0
+      for i in 0..<stride {
+        let x = img.data[y * stride + i].to_int()
+        let a = if i >= bpp {
+          img.data[y * stride + i - bpp].to_int()
+        } else {
+          0
+        }
+        let b = prev[i]
+        let c = if i >= bpp { prev[i - bpp] } else { 0 }
+        let pred = match filter {
+          0 => 0
+          1 => a
+          2 => b
+          3 => (a + b) / 2
+          _ => paeth(a, b, c)
+        }
+        let d = ((x - pred) % 256 + 256) % 256
+        let signed = if d > 127 { d - 256 } else { d }
+        score = score + iabs(signed)
+      }
+      if best_score < 0 || score < best_score {
+        best_score = score
+        best_filter = filter
+      }
+    }
+    raw.push(best_filter.to_byte())
+    for i in 0..<stride {
+      let x = img.data[y * stride + i].to_int()
+      let a = if i >= bpp { img.data[y * stride + i - bpp].to_int() } else { 0 }
+      let b = prev[i]
+      let c = if i >= bpp { prev[i - bpp] } else { 0 }
+      let pred = match best_filter {
+        0 => 0
+        1 => a
+        2 => b
+        3 => (a + b) / 2
+        _ => paeth(a, b, c)
+      }
+      raw.push((((x - pred) % 256 + 256) % 256).to_byte())
+      cur[i] = x
+    }
+    for i in 0..<stride {
+      prev[i] = cur[i]
     }
   }
-  // zlib wrapper with stored DEFLATE blocks (max 65535 bytes each).
+  // zlib wrapper with a deterministic fixed-Huffman DEFLATE block.
   let idat : Array[Byte] = []
   idat.push(b'\x78')
-  idat.push(b'\x01')
-  let mut off = 0
-  while off < raw.length() || raw.length() == 0 {
-    let chunk = if raw.length() - off > 65535 {
-      65535
-    } else {
-      raw.length() - off
-    }
-    let last = off + chunk >= raw.length()
-    idat.push(if last { b'\x01' } else { b'\x00' })
-    push_u8(idat, chunk % 256)
-    push_u8(idat, chunk / 256)
-    push_u8(idat, 255 - chunk % 256)
-    push_u8(idat, 255 - chunk / 256)
-    for i in 0..<chunk {
-      idat.push(raw[off + i])
-    }
-    off = off + chunk
-    if last {
-      break
-    }
+  idat.push(b'\x9C')
+  for b in deflate_fixed(raw) {
+    idat.push(b)
   }
   push_uint_be(idat, adler32(raw, 0, raw.length()))
   push_chunk(out, [73, 68, 65, 84], idat)
@@ -168,7 +299,7 @@ fn huff_build(lengths : Array[Int], n : Int) -> Huffman? {
   }
   if count[0] == n {
     // No codes at all — legal for an unused distance table.
-    return Some({ count, symbol: FixedArray::make(n, 0) })
+    return Some({ count, symbol: FixedArray::make(n, 0), })
   }
   let mut left = 1
   for len in 1..<16 {
@@ -188,7 +319,7 @@ fn huff_build(lengths : Array[Int], n : Int) -> Huffman? {
       offs[lengths[i]] = offs[lengths[i]] + 1
     }
   }
-  Some({ count, symbol })
+  Some({ count, symbol, })
 }
 
 ///|
@@ -445,7 +576,7 @@ fn zlib_inflate(data : Array[Byte], from : Int, to : Int) -> Array[Byte]? {
   if flg / 32 % 2 == 1 {
     return None // preset dictionaries are not used by PNG
   }
-  let br : BitReader = { data, limit: to - 4, pos: from + 2, bit: 0 }
+  let br : BitReader = { data, limit: to - 4, pos: from + 2, bit: 0, }
   let raw = match inflate(br) {
     Some(r) => r
     None => return None
@@ -476,7 +607,8 @@ fn paeth(a : Int, b : Int, c : Int) -> Int {
 }
 
 ///|
-/// Decodes an 8-bit truecolor PNG (color type 6 RGBA or 2 RGB, no
+/// Decodes an 8-bit PNG (color type 6 RGBA, 2 RGB, 0 grayscale, 4
+/// grayscale+alpha, or 3 indexed palette, no
 /// interlacing). Verifies the signature, every chunk CRC and the zlib
 /// checksum; understands all five row filters. Returns `None` on anything
 /// malformed or unsupported.
@@ -494,9 +626,14 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
   let mut width = 0
   let mut height = 0
   let mut color = -1
+  let mut depth = 0
   let idat : Array[Byte] = []
+  let palette : Array[Byte] = []
+  let trns : Array[Byte] = []
   let mut seen_ihdr = false
   let mut seen_iend = false
+  let mut seen_plte = false
+  let mut seen_trns = false
   while pos + 12 <= data.length() && !seen_iend {
     let len = data[pos].to_int() * 16777216 +
       data[pos + 1].to_int() * 65536 +
@@ -533,14 +670,45 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
         data[d + 5].to_int() * 65536 +
         data[d + 6].to_int() * 256 +
         data[d + 7].to_int()
-      let depth = data[d + 8].to_int()
+      depth = data[d + 8].to_int()
       color = data[d + 9].to_int()
       let interlace = data[d + 12].to_int()
-      if width <= 0 || height <= 0 || width * height > 100000000 {
+      if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
         return None
       }
-      if depth != 8 || (color != 6 && color != 2) || interlace != 0 {
+      if depth != 8 ||
+        (color != 6 && color != 2 && color != 0 && color != 4 && color != 3) ||
+        interlace != 0 {
         return None
+      }
+    } else if t0 == 80 && t1 == 76 && t2 == 84 && t3 == 69 {
+      // PLTE: RGB triples, with at most 256 entries.
+      if !seen_ihdr || seen_plte || len == 0 || len % 3 != 0 || len > 768 {
+        return None
+      }
+      seen_plte = true
+      for i in 0..<len {
+        palette.push(data[pos + 8 + i])
+      }
+    } else if t0 == 116 && t1 == 82 && t2 == 78 && t3 == 83 {
+      // tRNS: transparent sample/color or indexed alpha table.
+      if !seen_ihdr || seen_trns || color == 4 || color == 6 || len == 0 {
+        return None
+      }
+      if (color == 0 && len != 2) || (color == 2 && len != 6) ||
+        (color == 3 && len > 256) {
+        return None
+      }
+      // For 8-bit samples, the 16-bit tRNS values must have zero high bytes.
+      if (color == 0 && data[pos + 8] != b'\x00') ||
+        (color == 2 &&
+          (data[pos + 8] != b'\x00' || data[pos + 10] != b'\x00' ||
+            data[pos + 12] != b'\x00')) {
+        return None
+      }
+      seen_trns = true
+      for i in 0..<len {
+        trns.push(data[pos + 8 + i])
       }
     } else if t0 == 73 && t1 == 68 && t2 == 65 && t3 == 84 {
       // IDAT — concatenate; the zlib stream spans all IDAT chunks.
@@ -558,11 +726,22 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
   if !seen_ihdr || !seen_iend || idat.length() == 0 {
     return None
   }
+  if color == 3 && (!seen_plte || palette.length() == 0) {
+    return None
+  }
+  if color == 3 && seen_trns && trns.length() > palette.length() / 3 {
+    return None
+  }
   let raw = match zlib_inflate(idat, 0, idat.length()) {
     Some(r) => r
     None => return None
   }
-  let bpp = if color == 6 { 4 } else { 3 }
+  let bpp = match color {
+    6 => 4
+    2 => 3
+    4 => 2
+    _ => 1
+  }
   let stride = width * bpp
   if raw.length() != (stride + 1) * height {
     return None
@@ -592,13 +771,52 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
     }
     for x in 0..<width {
       let base = (y * width + x) * 4
-      img.data[base] = cur[x * bpp].to_byte()
-      img.data[base + 1] = cur[x * bpp + 1].to_byte()
-      img.data[base + 2] = cur[x * bpp + 2].to_byte()
-      img.data[base + 3] = if bpp == 4 {
-        cur[x * bpp + 3].to_byte()
+      let sample = x * bpp
+      if color == 3 {
+        let palette_index = cur[sample]
+        if palette_index >= palette.length() / 3 {
+          return None
+        }
+        let p = palette_index * 3
+        img.data[base] = palette[p]
+        img.data[base + 1] = palette[p + 1]
+        img.data[base + 2] = palette[p + 2]
+        img.data[base + 3] = if seen_trns && palette_index < trns.length() {
+          trns[palette_index]
+        } else {
+          b'\xFF'
+        }
+      } else if color == 0 {
+        let gray = cur[sample].to_byte()
+        img.data[base] = gray
+        img.data[base + 1] = gray
+        img.data[base + 2] = gray
+        img.data[base + 3] = if seen_trns && trns[0].to_int() == 0 &&
+          trns[1] == gray {
+          b'\x00'
+        } else {
+          b'\xFF'
+        }
+      } else if color == 4 {
+        let gray = cur[sample].to_byte()
+        img.data[base] = gray
+        img.data[base + 1] = gray
+        img.data[base + 2] = gray
+        img.data[base + 3] = cur[sample + 1].to_byte()
       } else {
-        b'\xFF'
+        img.data[base] = cur[sample].to_byte()
+        img.data[base + 1] = cur[sample + 1].to_byte()
+        img.data[base + 2] = cur[sample + 2].to_byte()
+        img.data[base + 3] = if color == 6 {
+          cur[sample + 3].to_byte()
+        } else if seen_trns && trns[0].to_int() == 0 &&
+          trns[1] == cur[sample].to_byte() && trns[2].to_int() == 0 &&
+          trns[3] == cur[sample + 1].to_byte() && trns[4].to_int() == 0 &&
+          trns[5] == cur[sample + 2].to_byte() {
+          b'\x00'
+        } else {
+          b'\xFF'
+        }
       }
     }
     for i in 0..<stride {

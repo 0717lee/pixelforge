@@ -120,7 +120,7 @@ pub fn bmp_decode(data : Array[Byte]) -> Image? {
   let height = if top_down { -raw_height } else { raw_height }
   let bpp = read_u16_le(data, 28)
   let compression = read_u32_le(data, 30)
-  if width <= 0 || height <= 0 || width * height > 100000000 {
+  if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
     return None
   }
   if (bpp != 24 && bpp != 32) || compression != 0 {

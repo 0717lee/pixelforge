@@ -52,14 +52,17 @@
           <button class="btn block" id="resetBtn">还原原图</button>
           <button class="btn block" id="downloadBtn">下载处理结果 PNG</button>
           <input type="file" id="fileInput" accept="image/*" hidden />
+          <p class="status" id="status" role="status" aria-live="polite"></p>
         </section>
 
         <section class="group">
-          <h2>滤镜 · 点击可叠加</h2>
+          <h2>滤镜 · 点击添加到流程</h2>
           <div class="filters" id="filters">
             <button class="chip active" data-filter="-1">原图</button>
             <button class="chip" data-filter="0">灰度</button>
             <button class="chip" data-filter="1">反色</button>
+            <button class="chip" data-filter="2">亮度</button>
+            <button class="chip" data-filter="3">对比度</button>
             <button class="chip" data-filter="4">高斯模糊</button>
             <button class="chip" data-filter="5">锐化</button>
             <button class="chip" data-filter="6">浮雕</button>
@@ -83,6 +86,20 @@
         </section>
 
         <section class="group">
+          <div class="group-heading-row">
+            <h2>处理流程</h2>
+            <div class="row compact-actions">
+              <button class="btn mini" id="undoBtn" title="撤销">撤销</button>
+              <button class="btn mini" id="redoBtn" title="重做">重做</button>
+              <button class="btn mini" id="clearPipelineBtn">清空</button>
+            </div>
+          </div>
+          <div id="pipelineList" class="pipeline-list" aria-live="polite">
+            <p class="pipeline-empty" id="pipelineEmpty">点击上方滤镜添加操作。</p>
+          </div>
+        </section>
+
+        <section class="group">
           <h2>引擎</h2>
           <div class="filters" id="engines">
             <button class="chip" data-engine="wasm">WebAssembly</button>
@@ -96,18 +113,6 @@
             <button class="chip active" data-thread="main">主线程</button>
             <button class="chip" data-thread="worker">Worker 后台线程</button>
           </div>
-        </section>
-
-        <section class="group">
-          <h2>调整</h2>
-          <label class="slider">
-            <span>亮度 <b id="brightnessVal">0</b></span>
-            <input type="range" id="brightness" min="-120" max="120" value="0" />
-          </label>
-          <label class="slider">
-            <span>对比度 <b id="contrastVal">1.00</b></span>
-            <input type="range" id="contrast" min="0" max="300" value="100" />
-          </label>
         </section>
 
         <section class="group">

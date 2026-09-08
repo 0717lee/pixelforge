@@ -138,6 +138,202 @@ fn gif_lzw(
 }
 
 ///|
+/// A decoded GIF image descriptor.  `image` contains the descriptor's own
+/// pixels (without compositing against the logical screen); `left`/`top`
+/// locate it in that screen.  `delay_cs` is the Graphic Control Extension
+/// delay in hundredths of a second.  `disposal` is the GIF disposal method
+/// (0 when unspecified), and `transparent_index` is -1 when transparency is
+/// not enabled for this frame.
+pub(all) struct GifFrame {
+  image : Image
+  left : Int
+  top : Int
+  delay_cs : Int
+  disposal : Int
+  transparent_index : Int
+}
+
+///|
+/// Decodes every image descriptor in a GIF into independent RGBA frames.
+///
+/// Frames are intentionally not composited: callers can use `left`, `top`,
+/// and `disposal` to implement the animation policy they need while keeping
+/// this decoder deterministic and allocation-bounded.  Returns `None` for
+/// malformed input, including truncated extensions, invalid color tables,
+/// invalid LZW data, and files without an image descriptor.
+pub fn gif_decode_all(data : Array[Byte]) -> Array[GifFrame]? {
+  if data.length() < 13 {
+    return None
+  }
+  if data[0].to_int() != 71 || data[1].to_int() != 73 || data[2].to_int() != 70 {
+    return None
+  }
+  if data[3].to_int() != 56 ||
+    (data[4].to_int() != 55 && data[4].to_int() != 57) ||
+    data[5].to_int() != 97 {
+    return None
+  }
+  let screen_w = gif_u16(data, 6)
+  let screen_h = gif_u16(data, 8)
+  if screen_w <= 0 || screen_h <= 0 || screen_w > MAX_IMAGE_PIXELS / screen_h {
+    return None
+  }
+  let packed = data[10].to_int()
+  let has_gct = packed / 128 == 1
+  let gct_size = 2 << (packed % 8)
+  let mut pos = 13
+  let mut gct_at = -1
+  if has_gct {
+    gct_at = pos
+    pos = pos + gct_size * 3
+    if pos > data.length() {
+      return None
+    }
+  }
+  let frames : Array[GifFrame] = []
+  let mut delay_cs = 0
+  let mut disposal = 0
+  let mut transparent = -1
+  while true {
+    if pos >= data.length() {
+      return None
+    }
+    let block = data[pos].to_int()
+    pos = pos + 1
+    if block == 0x3B {
+      if frames.length() == 0 {
+        return None
+      }
+      return Some(frames)
+    } else if block == 0x21 {
+      if pos >= data.length() {
+        return None
+      }
+      let label = data[pos].to_int()
+      pos = pos + 1
+      if label == 0xF9 {
+        // Graphic Control Extension: fixed-size payload, then terminator.
+        if pos + 6 > data.length() || data[pos].to_int() != 4 {
+          return None
+        }
+        let flags = data[pos + 1].to_int()
+        disposal = flags / 4 % 8
+        delay_cs = gif_u16(data, pos + 2)
+        transparent = if flags % 2 == 1 { data[pos + 4].to_int() } else { -1 }
+      }
+      match gif_subblocks(data, pos) {
+        Some((_, p2)) => pos = p2
+        None => return None
+      }
+    } else if block == 0x2C {
+      if pos + 9 > data.length() {
+        return None
+      }
+      let left = gif_u16(data, pos)
+      let top = gif_u16(data, pos + 2)
+      let width = gif_u16(data, pos + 4)
+      let height = gif_u16(data, pos + 6)
+      let ipacked = data[pos + 8].to_int()
+      pos = pos + 9
+      if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
+        return None
+      }
+      if left > screen_w ||
+        top > screen_h ||
+        width > screen_w - left ||
+        height > screen_h - top {
+        return None
+      }
+      let interlaced = ipacked / 64 % 2 == 1
+      let mut table_at = gct_at
+      let mut table_len = gct_size
+      if ipacked / 128 == 1 {
+        table_at = pos
+        table_len = 2 << (ipacked % 8)
+        pos = pos + table_len * 3
+        if pos > data.length() {
+          return None
+        }
+      }
+      if table_at < 0 || pos >= data.length() {
+        return None
+      }
+      let min_code = data[pos].to_int()
+      pos = pos + 1
+      let lzw = match gif_subblocks(data, pos) {
+        Some((bytes, p2)) => {
+          pos = p2
+          bytes
+        }
+        None => return None
+      }
+      let indices = match gif_lzw(lzw, min_code, width * height) {
+        Some(ix) => ix
+        None => return None
+      }
+      if indices.length() < width * height {
+        return None
+      }
+      let rows : Array[Int] = []
+      if interlaced {
+        for y = 0; y < height; y = y + 8 {
+          rows.push(y)
+        }
+        for y = 4; y < height; y = y + 8 {
+          rows.push(y)
+        }
+        for y = 2; y < height; y = y + 4 {
+          rows.push(y)
+        }
+        for y = 1; y < height; y = y + 2 {
+          rows.push(y)
+        }
+      } else {
+        for y in 0..<height {
+          rows.push(y)
+        }
+      }
+      let img = Image::new(width, height)
+      for r in 0..<height {
+        let y = rows[r]
+        for x in 0..<width {
+          let idx = indices[r * width + x]
+          if idx >= table_len {
+            return None
+          }
+          let c = table_at + idx * 3
+          let base = (y * width + x) * 4
+          img.data[base] = data[c]
+          img.data[base + 1] = data[c + 1]
+          img.data[base + 2] = data[c + 2]
+          img.data[base + 3] = if idx == transparent {
+            b'\x00'
+          } else {
+            b'\xFF'
+          }
+        }
+      }
+      frames.push({
+        image: img,
+        left,
+        top,
+        delay_cs,
+        disposal,
+        transparent_index: transparent,
+      })
+      // GCE applies to one image descriptor only.
+      delay_cs = 0
+      disposal = 0
+      transparent = -1
+    } else {
+      return None
+    }
+  } nobreak {
+    None
+  }
+}
+
+///|
 /// Decodes the first frame of a GIF87a/GIF89a file into an RGBA image.
 /// Supports global/local color tables, interlacing and the transparent
 /// index from the graphic control extension. Returns `None` on anything
@@ -205,7 +401,7 @@ pub fn gif_decode(data : Array[Byte]) -> Image? {
       let height = gif_u16(data, pos + 6)
       let ipacked = data[pos + 8].to_int()
       pos = pos + 9
-      if width <= 0 || height <= 0 || width * height > 100000000 {
+      if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
         return None
       }
       let interlaced = ipacked / 64 % 2 == 1

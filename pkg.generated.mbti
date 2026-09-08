@@ -10,6 +10,8 @@ pub fn clamp_byte(Int) -> Byte
 
 pub fn gif_decode(Array[Byte]) -> Image?
 
+pub fn gif_decode_all(Array[Byte]) -> Array[GifFrame]?
+
 pub fn hamming_distance(UInt64, UInt64) -> Int
 
 pub fn hsl_to_rgb(Double, Double, Double) -> (Int, Int, Int)
@@ -63,16 +65,73 @@ pub(all) enum BlendMode {
   Add
 }
 
+pub(all) struct BoundingBox {
+  min_x : Int
+  min_y : Int
+  max_x : Int
+  max_y : Int
+}
+
+pub(all) struct ComponentStats {
+  label : Int
+  area : Int
+  bbox : BoundingBox
+  centroid : (Double, Double)
+  min_x : Int
+  min_y : Int
+  max_x : Int
+  max_y : Int
+  centroid_x : Double
+  centroid_y : Double
+}
+
+pub(all) enum Filter {
+  Grayscale
+  Invert
+  Brightness(Int)
+  Contrast(Double)
+  Blur
+  Sharpen
+  Emboss
+  Edges
+  Sobel
+  Sepia
+  Threshold(Int)
+  Pixelate(Int)
+  Median
+  HistogramEqualize
+  FlipHorizontal
+  FlipVertical
+  Posterize(Int)
+  Gamma(Double)
+  Vignette(Double)
+  Scharr
+  Canny(Int)
+  Otsu
+  DitherMono
+}
+
+pub(all) struct GifFrame {
+  image : Image
+  left : Int
+  top : Int
+  delay_cs : Int
+  disposal : Int
+  transparent_index : Int
+}
+
 pub(all) struct Image {
   width : Int
   height : Int
   data : FixedArray[Byte]
 }
+pub fn Image::adaptive_mean(Self, Int, Int) -> Self
 pub fn Image::add_gaussian_noise(Self, UInt64, Double) -> Self
 pub fn Image::add_salt_pepper(Self, UInt64, Double) -> Self
 pub fn Image::adjust_lightness(Self, Double) -> Self
 pub fn Image::affine(Self, Affine) -> Self
 pub fn Image::apply_filter_id(Self, Int, Double) -> Self
+pub fn Image::apply_pipeline(Self, Pipeline) -> Self
 pub fn Image::auto_contrast(Self) -> Self
 pub fn Image::average_hash(Self) -> UInt64
 pub fn Image::bilateral(Self, Int, Double, Double) -> Self
@@ -117,10 +176,12 @@ pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
 pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
 pub fn Image::levels(Self, Int, Int, Double) -> Self
+pub fn Image::luma_mse(Self, Self) -> Double
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
 pub fn Image::median(Self) -> Self
 pub fn Image::morph_close(Self) -> Self
 pub fn Image::morph_open(Self) -> Self
+pub fn Image::mse(Self, Self) -> Double
 pub fn Image::new(Int, Int) -> Self
 pub fn Image::otsu(Self) -> Self
 pub fn Image::otsu_threshold(Self) -> Int
@@ -128,17 +189,21 @@ pub fn Image::pad(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Self
 pub fn Image::pixel_count(Self) -> Int
 pub fn Image::pixelate(Self, Int) -> Self
 pub fn Image::posterize(Self, Int) -> Self
+pub fn Image::psnr(Self, Self) -> Double
+pub fn Image::regionprops(Self, Int) -> Array[ComponentStats]
 pub fn Image::resize_bicubic(Self, Int, Int) -> Self
 pub fn Image::resize_bilinear(Self, Int, Int) -> Self
 pub fn Image::resize_nearest(Self, Int, Int) -> Self
 pub fn Image::rotate(Self, Double) -> Self
 pub fn Image::rotate90(Self) -> Self
 pub fn Image::saturate(Self, Double) -> Self
+pub fn Image::sauvola(Self, Int, Double, Int) -> Self
 pub fn Image::scharr(Self) -> Self
 pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
 pub fn Image::sobel(Self) -> Self
+pub fn Image::ssim(Self, Self) -> Double
 pub fn Image::stats(Self) -> Stats
 pub fn Image::threshold(Self, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
@@ -165,6 +230,17 @@ pub fn Kernel::gaussian_blur() -> Self
 pub fn Kernel::new(Int, Array[Double], Double, Double) -> Self
 pub fn Kernel::sharpen() -> Self
 
+pub struct Pipeline {
+  operations : Array[Filter]
+}
+pub fn Pipeline::append(Self, Filter) -> Self
+pub fn Pipeline::apply(Self, Image) -> Image
+pub fn Pipeline::from_filter(Filter) -> Self
+pub fn Pipeline::is_empty(Self) -> Bool
+pub fn Pipeline::length(Self) -> Int
+pub fn Pipeline::new() -> Self
+pub fn Pipeline::then(Self, Self) -> Self
+
 pub struct Stats {
   min_r : Int
   max_r : Int
@@ -183,4 +259,3 @@ pub struct Stats {
 // Type aliases
 
 // Traits
-

@@ -49,6 +49,28 @@ fn four_color_gif() -> Array[Byte] {
 }
 
 ///|
+/// Two 1x1 frames sharing a global black/white palette.  The first frame is
+/// transparent black with a 5cs delay; the second is opaque white with a
+/// disposal method of 2 and a 7cs delay.
+fn two_frame_gif() -> Array[Byte] {
+  let src = [
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+    // GCE: transparency index 0, delay 5.
+     0x21, 0xF9, 0x04, 0x01, 0x05, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00,
+    // GCE: disposal 2, delay 7, opaque.
+     0x21, 0xF9, 0x04, 0x08, 0x07, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x4C, 0x01, 0x00, 0x3B,
+  ]
+  let out : Array[Byte] = []
+  for v in src {
+    out.push(v.to_byte())
+  }
+  out
+}
+
+///|
 test "gif_decode reads the canonical 1x1 transparent GIF" {
   let img = gif_decode(tiny_transparent_gif()).unwrap()
   assert_eq(img.width, 1)
@@ -79,6 +101,33 @@ test "gif_decode reads a hand-assembled 2x2 four-color image" {
 }
 
 ///|
+test "gif_decode_all returns independent frames and GCE metadata" {
+  let frames = gif_decode_all(two_frame_gif()).unwrap()
+  assert_eq(frames.length(), 2)
+  assert_eq(frames[0].image.width, 1)
+  assert_eq(frames[0].delay_cs, 5)
+  assert_eq(frames[0].disposal, 0)
+  assert_eq(frames[0].transparent_index, 0)
+  assert_eq(frames[0].image.get_pixel(0, 0).3.to_int(), 0)
+  assert_eq(frames[1].delay_cs, 7)
+  assert_eq(frames[1].disposal, 2)
+  assert_eq(frames[1].transparent_index, -1)
+  assert_eq(frames[1].image.get_pixel(0, 0).3.to_int(), 255)
+  assert_eq(frames[1].image.get_pixel(0, 0).0.to_int(), 255)
+}
+
+///|
+test "gif_decode_all rejects malformed trailing and GCE blocks" {
+  let truncated = two_frame_gif()
+  // Remove the trailer: the decoder must not silently accept an incomplete file.
+  ignore(truncated.pop())
+  assert_true(gif_decode_all(truncated) is None)
+  let bad_gce = two_frame_gif()
+  bad_gce[21] = b'\x03' // GCE block size must be exactly four bytes.
+  assert_true(gif_decode_all(bad_gce) is None)
+}
+
+///|
 test "gif_decode rejects malformed input" {
   assert_true(gif_decode([]) is None)
   // Wrong signature.
@@ -100,4 +149,32 @@ test "gif_decode rejects malformed input" {
   bad[36] = b'\xFF'
   bad[37] = b'\xFF'
   assert_true(gif_decode(bad) is None)
+}
+
+///|
+/// GIF logical-screen and image-descriptor parameters are validated before
+/// color-table and LZW reads.
+test "gif_decode rejects invalid dimensions, tables and LZW parameters" {
+  let zero_width = four_color_gif()
+  // Image descriptor starts at byte 25; width is little-endian at 30..31.
+  zero_width[30] = b'\x00'
+  zero_width[31] = b'\x00'
+  assert_true(gif_decode(zero_width) is None)
+
+  let zero_height = four_color_gif()
+  zero_height[32] = b'\x00'
+  zero_height[33] = b'\x00'
+  assert_true(gif_decode(zero_height) is None)
+
+  let no_table = four_color_gif()
+  no_table[10] = b'\x00' // clear the global color-table flag
+  assert_true(gif_decode(no_table) is None)
+
+  let bad_min_code = four_color_gif()
+  bad_min_code[35] = b'\x01' // GIF LZW minimum code size must be 2..8.
+  assert_true(gif_decode(bad_min_code) is None)
+
+  let truncated_block = four_color_gif()
+  truncated_block[35] = b'\xFF' // sub-block claims bytes past the file end
+  assert_true(gif_decode(truncated_block) is None)
 }

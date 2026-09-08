@@ -3,9 +3,9 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { extname, join, normalize } from "node:path";
+import { extname, join, relative, resolve, isAbsolute, sep } from "node:path";
 
-const rootDir = join(fileURLToPath(new URL(".", import.meta.url)), "web");
+const rootDir = resolve(join(fileURLToPath(new URL(".", import.meta.url)), "web"));
 const port = 8123;
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -21,17 +21,27 @@ const types = {
 
 createServer(async (req, res) => {
   try {
-    let urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.writeHead(405, { allow: "GET, HEAD" }).end("405 Method Not Allowed");
+      return;
+    }
+    let urlPath = decodeURIComponent(new URL(req.url || "/", "http://localhost").pathname);
     if (urlPath === "/") urlPath = "/index.html";
-    const filePath = normalize(join(rootDir, urlPath));
-    if (!filePath.startsWith(rootDir)) {
+    const filePath = resolve(rootDir, `.${urlPath}`);
+    const rel = relative(rootDir, filePath);
+    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || filePath === rootDir) {
       res.writeHead(403).end("403 Forbidden");
       return;
     }
     const data = await readFile(filePath);
     res.writeHead(200, { "content-type": types[extname(filePath)] || "application/octet-stream" });
+    if (req.method === "HEAD") { res.end(); return; }
     res.end(data);
-  } catch {
+  } catch (err) {
+    if (err instanceof URIError) {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("400 Bad Request");
+      return;
+    }
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("404 Not Found");
   }
-}).listen(port, () => console.log(`PixelForge Playground running at http://localhost:${port}`));
+}).listen(port, "127.0.0.1", () => console.log(`PixelForge Playground running at http://127.0.0.1:${port}`));

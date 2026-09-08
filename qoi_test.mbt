@@ -73,3 +73,54 @@ test "qoi_decode rejects malformed input" {
   }
   assert_true(qoi_decode(cut) is None)
 }
+
+///|
+/// Header limits are checked before allocating an image or reading opcodes.
+test "qoi_decode rejects zero dimensions, huge images and bad channels" {
+  let base = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+
+  let zero_width = base
+  for i in 4..<8 {
+    zero_width[i] = b'\x00'
+  }
+  assert_true(qoi_decode(zero_width) is None)
+
+  let zero_height = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  for i in 8..<12 {
+    zero_height[i] = b'\x00'
+  }
+  assert_true(qoi_decode(zero_height) is None)
+
+  let bad_channels = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  bad_channels[12] = b'\x02'
+  assert_true(qoi_decode(bad_channels) is None)
+
+  let huge = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  // 10001 * 10000 = 100010000 pixels, above the decoder safety limit.
+  huge[4] = b'\x00'
+  huge[5] = b'\x00'
+  huge[6] = b'\x27'
+  huge[7] = b'\x11' // 10001
+  huge[8] = b'\x00'
+  huge[9] = b'\x00'
+  huge[10] = b'\x27'
+  huge[11] = b'\x10' // 10000
+  assert_true(qoi_decode(huge) is None)
+}
+
+///|
+/// RGB/RGBA op payloads must not read beyond the reserved end marker.
+test "qoi_decode rejects truncated pixel op payloads" {
+  let bytes = qoi_encode(single(9, 8, 7, 255))
+  // Keep the header and replace the first opcode with an RGB marker, without
+  // supplying its three channel bytes before the end marker.
+  bytes[14] = b'\xFE'
+  bytes[15] = b'\x00'
+  bytes[16] = b'\x00'
+  bytes[17] = b'\x00'
+  let cut : Array[Byte] = []
+  for i in 0..<17 {
+    cut.push(bytes[i])
+  }
+  assert_true(qoi_decode(cut) is None)
+}

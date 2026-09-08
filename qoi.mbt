@@ -144,7 +144,7 @@ pub fn qoi_decode(data : Array[Byte]) -> Image? {
   if width <= 0 || height <= 0 || (channels != 3 && channels != 4) {
     return None
   }
-  if width * height > 100000000 {
+  if width * height > MAX_IMAGE_PIXELS {
     return None
   }
   let img = Image::new(width, height)

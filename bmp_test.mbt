@@ -67,3 +67,47 @@ test "bmp_decode rejects malformed input" {
   }
   assert_true(bmp_decode(cut) is None)
 }
+
+///|
+/// Header fields that are outside the supported uncompressed BMP subset must
+/// be rejected before any pixel reads. Keep the payload from a valid file so
+/// these cases exercise the parameter checks rather than truncation handling.
+test "bmp_decode rejects unsupported parameters and dimensions" {
+  let good = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+
+  let bad_bpp = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  bad_bpp[28] = b'\x10' // 16-bit, outside the supported 24/32-bit subset.
+  bad_bpp[29] = b'\x00'
+  assert_true(bmp_decode(bad_bpp) is None)
+
+  let bad_compression = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  bad_compression[30] = b'\x01' // BI_RLE8, unsupported by this decoder.
+  assert_true(bmp_decode(bad_compression) is None)
+
+  let bad_offset = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  bad_offset[10] = b'\x00'
+  bad_offset[11] = b'\x00'
+  bad_offset[12] = b'\x00'
+  bad_offset[13] = b'\x00'
+  assert_true(bmp_decode(bad_offset) is None)
+
+  let zero_width = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  for i in 18..<22 {
+    zero_width[i] = b'\x00'
+  }
+  assert_true(bmp_decode(zero_width) is None)
+
+  let zero_height = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  for i in 22..<26 {
+    zero_height[i] = b'\x00'
+  }
+  assert_true(bmp_decode(zero_height) is None)
+
+  // A valid top-down orientation with a negative height must remain accepted.
+  let top_down = good
+  top_down[22] = b'\xFE'
+  top_down[23] = b'\xFF'
+  top_down[24] = b'\xFF'
+  top_down[25] = b'\xFF'
+  assert_true(bmp_decode(top_down) is Some(_))
+}

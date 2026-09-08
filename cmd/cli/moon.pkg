@@ -1,0 +1,10 @@
+// Cross-backend command-line codec utility.
+//
+// File-system access is intentionally left to the host for now: `--input-hex`
+// makes the codec pipeline deterministic on native, JS, and wasm targets.
+import {
+  "moonbitlang/core/env",
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")
