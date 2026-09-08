@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.15.0 (unreleased)
+## 0.15.0 (2026-09-09)
 
 - Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
 - Added deterministic hexadecimal input/output so the utility works on native,
@@ -17,7 +17,7 @@
 - Added zero-copy tile/row traversal, Harris corner detection, and WASM
   identity fast paths that avoid allocating for no-op or unknown dispatches.
 
-## 0.14.0 (unreleased)
+## 0.14.0
 
 ### 修复与工程化
 - Playground 的 Worker 渲染加入代际校验，避免切换图片或线程模式时旧结果覆盖新结果。
