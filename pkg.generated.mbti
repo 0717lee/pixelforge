@@ -91,6 +91,11 @@ pub(all) struct ComponentStats {
   centroid_y : Double
 }
 
+pub(all) struct ContourPoint {
+  x : Int
+  y : Int
+}
+
 pub(all) struct Corner {
   x : Int
   y : Int
@@ -152,6 +157,7 @@ pub fn Image::box_blur(Self, Int) -> Self
 pub fn Image::brightness(Self, Int) -> Self
 pub fn Image::canny(Self, Int, Int) -> Self
 pub fn Image::composite(Self, Self, BlendMode) -> Self
+pub fn Image::contours(Self, Int) -> Array[Array[ContourPoint]]
 pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
@@ -186,6 +192,7 @@ pub fn Image::harris_corners(Self, Double, Int) -> Array[Corner]
 pub fn Image::histogram_equalize(Self) -> Self
 pub fn Image::histogram_luma(Self) -> FixedArray[Int]
 pub fn Image::histogram_rgb(Self) -> (FixedArray[Int], FixedArray[Int], FixedArray[Int])
+pub fn Image::hog(Self, Int, Int, Int) -> Array[Double]
 pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
@@ -219,6 +226,7 @@ pub fn Image::scharr(Self) -> Self
 pub fn Image::sepia(Self) -> Self
 pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
+pub fn Image::skeletonize(Self, Int, Int) -> Self
 pub fn Image::sobel(Self) -> Self
 pub fn Image::ssim(Self, Self) -> Double
 pub fn Image::stats(Self) -> Stats

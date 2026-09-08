@@ -23,6 +23,7 @@
 - **形态学运算**：3×3 腐蚀 / 膨胀 / 开运算 / 闭运算。
 - **纹理描述**：`lbp_codes()` / `lbp_histogram()` 提供 8 邻域局部二值模式特征。
 - **高级特征**：`harris_corners()` 提供确定性的 Harris 角点检测与非极大值抑制。
+- **高级特征**：`hog()` 提供可配置 cell/block 的方向梯度直方图，`contours()` 提取阈值连通域边界像素，`skeletonize()` 使用有界 Zhang–Suen 细化生成骨架。
 - **流式遍历**：`for_each_tile()` / `for_each_row()` 提供不复制像素缓冲的分块与逐行访问；需要独立图像时再调用 tile 的 `copy()`。
 - **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 编码/解码（单帧 GIF89a 编码、变长 LZW、交错、透明索引）、QOI（完整规范，无损往返）与 BMP（无压缩 24/32 位）纯 MoonBit 实现。
 - **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
