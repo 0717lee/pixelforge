@@ -11,6 +11,9 @@
   image-quality metrics.
 - Added Sauvola/local-mean thresholding, connected-component region statistics,
   and common 8-bit grayscale/palette PNG decode paths with `tRNS` support.
+- Added deterministic format sniffing and lightweight dimension metadata for
+  JPEG, WebP, AVIF and TIFF containers, plus an 8-neighbour LBP texture
+  descriptor and histogram.
 
 ## 0.14.0 (unreleased)
 

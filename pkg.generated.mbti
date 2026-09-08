@@ -8,6 +8,8 @@ pub fn bmp_encode(Image, Bool) -> Array[Byte]
 
 pub fn clamp_byte(Int) -> Byte
 
+pub fn detect_image_format(Array[Byte]) -> ImageFormat?
+
 pub fn gif_decode(Array[Byte]) -> Image?
 
 pub fn gif_decode_all(Array[Byte]) -> Array[GifFrame]?
@@ -19,6 +21,8 @@ pub fn hamming_distance(UInt64, UInt64) -> Int
 pub fn hsl_to_rgb(Double, Double, Double) -> (Int, Int, Int)
 
 pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
+
+pub fn image_metadata(Array[Byte]) -> ImageMetadata?
 
 pub fn png_decode(Array[Byte]) -> Image?
 
@@ -177,6 +181,8 @@ pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
 pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
+pub fn Image::lbp_codes(Self) -> FixedArray[Byte]
+pub fn Image::lbp_histogram(Self) -> FixedArray[Int]
 pub fn Image::levels(Self, Int, Int, Double) -> Self
 pub fn Image::luma_mse(Self, Self) -> Double
 pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
@@ -211,6 +217,25 @@ pub fn Image::threshold(Self, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
 pub fn Image::unsharp_mask(Self, Int, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self
+
+pub(all) enum ImageFormat {
+  Png
+  Gif
+  Qoi
+  Bmp
+  Jpeg
+  Webp
+  Avif
+  Tiff
+}
+pub fn ImageFormat::name(Self) -> String
+
+pub(all) struct ImageMetadata {
+  format : ImageFormat
+  width : Int
+  height : Int
+  animated : Bool
+}
 
 pub(all) struct Integral {
   width : Int
