@@ -3,6 +3,7 @@
 import {
   "moonbitlang/core/bytes",
   "moonbitlang/core/env",
+  "moonbitlang/core/string",
   "moonbitlang/x/fs",
   "0717lee/pixelforge",
 }

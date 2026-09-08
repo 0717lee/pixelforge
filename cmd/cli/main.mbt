@@ -6,6 +6,7 @@
 ///
 ///   moon run --target native cmd/cli -- info --input image.png
 ///   moon run --target native cmd/cli -- convert --from png --to qoi --input image.png --output image.qoi
+///   moon run --target native cmd/cli -- convert --from png --to png --pipeline grayscale,invert --input image.png --output filtered.png
 fn main {
   let args = @env.args()
   if args.length() < 2 {
@@ -33,11 +34,12 @@ fn print_help() -> Unit {
   println("")
   println("Usage:")
   println("  pixelforge info --input PATH")
-  println("  pixelforge convert --from FORMAT --to FORMAT --input PATH --output PATH")
+  println("  pixelforge convert --from FORMAT --to FORMAT [--pipeline OPS] --input PATH --output PATH")
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
   println("")
-  println("Formats: png, qoi, bmp, gif (GIF output is not supported yet)")
+  println("Formats: png, qoi, bmp, gif")
+  println("Pipeline ops: grayscale,invert,brightness:N,contrast:N,blur,sharpen,emboss,edges,sobel,sepia,threshold:N,pixelate:N,median,histogram-equalize,flip-horizontal,flip-vertical,posterize:N,gamma:N,vignette:N,scharr,canny:N,otsu,dither-mono")
   println("File mode writes converted bytes to --output; hex mode prints bytes as hexadecimal.")
 }
 
@@ -64,7 +66,8 @@ fn convert(args : Array[String], start : Int) -> Unit {
     abort("pixelforge: input format is \{actual}, but --from=\{from}")
   }
   let image = decode_image(from, bytes)
-  let output = encode_image(to, image)
+  let filtered = apply_pipeline_option(args, start, image)
+  let output = encode_image(to, filtered)
   if file_mode {
     let output_path = option(args, start, "--output")
     write_file(output_path, output)
@@ -79,6 +82,107 @@ fn convert(args : Array[String], start : Int) -> Unit {
     println("height=\{image.height}")
     println("bytes=\{output.length()}")
     println("hex=\{encode_hex(output)}")
+  }
+}
+
+/// Apply the optional comma-separated pipeline. Each operation may include a
+/// numeric argument after `:` (for example `brightness:20,gamma:1.2`).
+fn apply_pipeline_option(
+  args : Array[String],
+  start : Int,
+  image : @pixelforge.Image,
+) -> @pixelforge.Image {
+  if !has_option(args, start, "--pipeline") {
+    return image
+  }
+  let spec = option(args, start, "--pipeline")
+  if spec.trim() == "" {
+    abort("pixelforge: --pipeline must contain at least one operation")
+  }
+  let mut pipeline = @pixelforge.Pipeline::new()
+  for raw in spec.split(",") {
+    let token = raw.to_owned().trim().to_owned()
+    if token == "" {
+      abort("pixelforge: --pipeline contains an empty operation")
+    }
+    let parts = token.split(":").collect()
+    if parts.length() > 2 {
+      abort("pixelforge: invalid pipeline operation '\{token}'")
+    }
+    let name = parts[0].to_owned().trim().to_owned()
+    let value = if parts.length() == 2 {
+      Some(parts[1].to_owned().trim().to_owned())
+    } else {
+      None
+    }
+    let filter = pipeline_filter(name, value, token)
+    pipeline = pipeline.append(filter)
+  }
+  image.apply_pipeline(pipeline)
+}
+
+fn pipeline_filter(
+  name : String,
+  value : Option[String],
+  token : String,
+) -> @pixelforge.Filter {
+  match name {
+    "grayscale" => no_pipeline_value(name, value, token, @pixelforge.Filter::Grayscale)
+    "invert" => no_pipeline_value(name, value, token, @pixelforge.Filter::Invert)
+    "brightness" => @pixelforge.Filter::Brightness(parse_pipeline_int(value, name, token))
+    "contrast" => @pixelforge.Filter::Contrast(parse_pipeline_double(value, name, token))
+    "blur" => no_pipeline_value(name, value, token, @pixelforge.Filter::Blur)
+    "sharpen" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sharpen)
+    "emboss" => no_pipeline_value(name, value, token, @pixelforge.Filter::Emboss)
+    "edges" => no_pipeline_value(name, value, token, @pixelforge.Filter::Edges)
+    "sobel" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sobel)
+    "sepia" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sepia)
+    "threshold" => @pixelforge.Filter::Threshold(parse_pipeline_int(value, name, token))
+    "pixelate" => @pixelforge.Filter::Pixelate(parse_pipeline_int(value, name, token))
+    "median" => no_pipeline_value(name, value, token, @pixelforge.Filter::Median)
+    "histogram-equalize" => no_pipeline_value(name, value, token, @pixelforge.Filter::HistogramEqualize)
+    "flip-horizontal" => no_pipeline_value(name, value, token, @pixelforge.Filter::FlipHorizontal)
+    "flip-vertical" => no_pipeline_value(name, value, token, @pixelforge.Filter::FlipVertical)
+    "posterize" => @pixelforge.Filter::Posterize(parse_pipeline_int(value, name, token))
+    "gamma" => @pixelforge.Filter::Gamma(parse_pipeline_double(value, name, token))
+    "vignette" => @pixelforge.Filter::Vignette(parse_pipeline_double(value, name, token))
+    "scharr" => no_pipeline_value(name, value, token, @pixelforge.Filter::Scharr)
+    "canny" => @pixelforge.Filter::Canny(parse_pipeline_int(value, name, token))
+    "otsu" => no_pipeline_value(name, value, token, @pixelforge.Filter::Otsu)
+    "dither-mono" => no_pipeline_value(name, value, token, @pixelforge.Filter::DitherMono)
+    _ => abort("pixelforge: unknown pipeline operation '\{name}' in '\{token}'")
+  }
+}
+
+fn no_pipeline_value(
+  name : String,
+  value : Option[String],
+  token : String,
+  filter : @pixelforge.Filter,
+) -> @pixelforge.Filter {
+  match value {
+    Some(_) => abort("pixelforge: operation '\{name}' does not accept a value in '\{token}'")
+    None => filter
+  }
+}
+
+fn parse_pipeline_int(value : Option[String], _name : String, _token : String) -> Int {
+  let text = match value {
+    Some(v) if v != "" => v
+    _ => abort("pixelforge: operation '\{_name}' requires an integer value in '\{_token}'")
+  }
+  try @string.parse_int(text) catch {
+    _ => abort("pixelforge: invalid integer in pipeline operation '\{_token}'")
+  }
+}
+
+fn parse_pipeline_double(value : Option[String], _name : String, _token : String) -> Double {
+  let text = match value {
+    Some(v) if v != "" => v
+    _ => abort("pixelforge: operation '\{_name}' requires a number in '\{_token}'")
+  }
+  try @string.parse_double(text) catch {
+    _ => abort("pixelforge: invalid number in pipeline operation '\{_token}'")
   }
 }
 
@@ -233,7 +337,7 @@ fn encode_image(format : String, image : @pixelforge.Image) -> Array[Byte] {
     "png" => @pixelforge.png_encode(image)
     "qoi" => @pixelforge.qoi_encode(image)
     "bmp" => @pixelforge.bmp_encode(image, true)
-    "gif" => abort("pixelforge: GIF encoding is not supported yet")
+    "gif" => @pixelforge.gif_encode(image)
     _ => abort("pixelforge: unsupported output format {format}")
   }
 }
