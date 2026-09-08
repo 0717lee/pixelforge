@@ -14,6 +14,8 @@
 - Added deterministic format sniffing and lightweight dimension metadata for
   JPEG, WebP, AVIF and TIFF containers, plus an 8-neighbour LBP texture
   descriptor and histogram.
+- Added zero-copy tile/row traversal, Harris corner detection, and WASM
+  identity fast paths that avoid allocating for no-op or unknown dispatches.
 
 ## 0.14.0 (unreleased)
 

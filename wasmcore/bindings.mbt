@@ -40,9 +40,16 @@ pub fn process_in_place(
   filter_id : Int,
   amount : Double,
 ) -> FixedArray[Byte] {
-  let result = @pixelforge.Image::from_bytes(width, height, buf).apply_filter_id(
-      filter_id, amount,
-    ).data
+  // Validate dimensions and buffer ownership before taking the fast paths.
+  let image = @pixelforge.Image::from_bytes(width, height, buf)
+  // Unknown dispatch ids are specified as an identity operation. Returning
+  // the validated input directly avoids a full-image allocation and copy.
+  if filter_id < 0 || filter_id > 22 ||
+    (filter_id == 2 && amount == 0.0) ||
+    (filter_id == 3 && amount == 1.0) {
+    return image.data
+  }
+  let result = image.apply_filter_id(filter_id, amount).data
   if result.length() != buf.length() {
     abort("process_in_place: filter changed the image buffer length")
   }

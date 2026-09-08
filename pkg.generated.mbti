@@ -91,6 +91,12 @@ pub(all) struct ComponentStats {
   centroid_y : Double
 }
 
+pub(all) struct Corner {
+  x : Int
+  y : Int
+  response : Double
+}
+
 pub(all) enum Filter {
   Grayscale
   Invert
@@ -169,11 +175,14 @@ pub fn Image::fill_rect(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Uni
 pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
 pub fn Image::flood_fill(Self, Int, Int, Byte, Byte, Byte, Byte, Int) -> Self
+pub fn Image::for_each_row(Self, (ImageRow) -> Unit) -> Unit
+pub fn Image::for_each_tile(Self, Int, Int, (ImageTile) -> Unit) -> Unit
 pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
 pub fn Image::gamma(Self, Double) -> Self
 pub fn Image::gaussian(Self, Int) -> Self
 pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
+pub fn Image::harris_corners(Self, Double, Int) -> Array[Corner]
 pub fn Image::histogram_equalize(Self) -> Self
 pub fn Image::histogram_luma(Self) -> FixedArray[Int]
 pub fn Image::histogram_rgb(Self) -> (FixedArray[Int], FixedArray[Int], FixedArray[Int])
@@ -236,6 +245,29 @@ pub(all) struct ImageMetadata {
   height : Int
   animated : Bool
 }
+
+pub(all) struct ImageRow {
+  image : Image
+  row_y : Int
+}
+pub fn ImageRow::get_pixel(Self, Int) -> (Byte, Byte, Byte, Byte)
+pub fn ImageRow::width(Self) -> Int
+pub fn ImageRow::y(Self) -> Int
+
+pub(all) struct ImageTile {
+  image : Image
+  origin_x : Int
+  origin_y : Int
+  tile_width : Int
+  tile_height : Int
+}
+pub fn ImageTile::copy(Self) -> Image
+pub fn ImageTile::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
+pub fn ImageTile::height(Self) -> Int
+pub fn ImageTile::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn ImageTile::width(Self) -> Int
+pub fn ImageTile::x(Self) -> Int
+pub fn ImageTile::y(Self) -> Int
 
 pub(all) struct Integral {
   width : Int

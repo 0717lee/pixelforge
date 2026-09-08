@@ -81,6 +81,12 @@ const stressOps = Array.from({ length: 200 }, (_, i) => [i % 2, 0]);
 const stress = runPipelineInPlace(stressSrc, 4, 4, stressOps);
 check("wasm in-place stress length", [stress.length], [64]);
 check("wasm in-place stress preserves alpha", [stress[3], stress[7]], [3, 7]);
+const identitySrc = [7, 8, 9, 10, 11, 12, 13, 14];
+const identityPtr = alloc(identitySrc.length);
+new Uint8Array(memory.buffer, identityPtr, identitySrc.length).set(identitySrc);
+const identityReturned = process_in_place(identityPtr, 1, 2, 999, 0);
+check("wasm unknown filter keeps pointer", [identityReturned], [identityPtr]);
+check("wasm unknown filter keeps bytes", Array.from(new Uint8Array(memory.buffer).subarray(identityPtr, identityPtr + identitySrc.length)), identitySrc);
 
 if (failures > 0) {
   console.error(`WASM verification failed: ${failures} check(s)`);
