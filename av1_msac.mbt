@@ -188,3 +188,14 @@ fn Av1SymbolDecoder::ns(self : Av1SymbolDecoder, n : Int) -> Int {
     (v << 1) - m + self.bool()
   }
 }
+
+///|
+test "av1 msac keeps tile state across symbols" {
+  let decoder = av1_msac_new(
+    [b'\x00', b'\x00', b'\x00', b'\x00', b'\x00', b'\x00'],
+    false,
+  )
+  let cdf : Array[Int] = [16384, 32768, 0]
+  assert_eq(decoder.symbol(cdf), 0)
+  assert_eq(decoder.symbol(cdf), 0)
+}
