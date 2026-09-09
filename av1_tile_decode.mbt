@@ -85,8 +85,10 @@ pub fn av1_decode_dc_tile(
   disable_cdf_update? : Bool = false,
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
+  use_128x128_superblock? : Bool = false,
 ) -> Image? {
   if (width != 32 && width != 64) ||
+    (use_128x128_superblock && width != 64) ||
     width != height ||
     base_q_idx <= 0 ||
     base_q_idx > 255 ||
@@ -107,6 +109,8 @@ pub fn av1_decode_dc_tile(
     br: av1_dc_br_cdf(base_q_idx, 1),
     sign: av1_dc_sign_cdf(base_q_idx, 1),
   }
+  // A 64x64 frame with the 128x128 sequence tool reaches the
+  // child 64x64 partition node at the frame edge, so W64 CDF applies.
   let partition : Array[Int] = if width == 64 {
     [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
   } else {
@@ -171,7 +175,7 @@ pub fn av1_decode_dc_tile(
     if width != 64 {
       return None
     }
-    if tile_payload.length() <= 4 {
+    if tile_payload.length() <= 5 {
       let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, y_dc) {
         Some(value) => value
         None => return None
@@ -266,6 +270,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         disable_cdf_update=frame.disable_cdf_update,
         full_range=seq.full_range,
         matrix_coefficients=seq.matrix_coefficients,
+        use_128x128_superblock=seq.use_128x128_superblock,
       )
   }
 }
@@ -286,6 +291,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         disable_cdf_update=value.disable_cdf_update,
         full_range=value.full_range,
         matrix_coefficients=value.matrix_coefficients,
+        use_128x128_superblock=value.use_128x128_superblock,
       )
   }
 }

@@ -54,6 +54,7 @@ pub(all) struct Av1Stage1Input {
   disable_cdf_update : Bool
   full_range : Bool
   matrix_coefficients : Int
+  use_128x128_superblock : Bool
   tile_payload : Array[Byte]
 }
 
@@ -605,6 +606,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             disable_cdf_update: frame.disable_cdf_update,
             full_range: seq.full_range,
             matrix_coefficients: seq.matrix_coefficients,
+            use_128x128_superblock: seq.use_128x128_superblock,
             tile_payload: frame.tile_payload,
           })
       }
