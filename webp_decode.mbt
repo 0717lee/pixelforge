@@ -233,6 +233,21 @@ fn webp_decode_color_cache_index(color : Int, bits : Int) -> Int {
   ((color * 0x1E35A7BD) >> (32 - bits)) & ((1 << bits) - 1)
 }
 
+fn webp_lz_value(symbol : Int, bits : WebPDecodeBits) -> Int raise WebPDecodeError {
+  if symbol < 4 { return symbol + 1 }
+  let extra = (symbol - 2) >> 1
+  let offset = (2 + (symbol & 1)) << extra
+  offset + bits.read(extra) + 1
+}
+
+/// The long-distance mapping is direct; close-neighbour codes are rejected
+/// until their full VP8L distance map is added.
+fn webp_lz_distance(symbol : Int, width : Int, bits : WebPDecodeBits) -> Int raise WebPDecodeError {
+  ignore(width)
+  let code = webp_lz_value(symbol, bits)
+  if code > 120 { code - 120 } else { panic() }
+}
+
 ///|
 fn webp_decode_impl(data : Array[Byte]) -> Image raise WebPDecodeError {
   if data.length() < 20 ||
@@ -300,13 +315,41 @@ fn webp_decode_impl(data : Array[Byte]) -> Image raise WebPDecodeError {
   let red_code = webp_decode_prefix(bits, 256)
   let blue_code = webp_decode_prefix(bits, 256)
   let alpha_code = webp_decode_prefix(bits, 256)
-  ignore(webp_decode_prefix(bits, 40))
+  let distance_code = webp_decode_prefix(bits, 40)
   let image = Image::new(width, height)
+  let encoded_pixels = FixedArray::make(width * height * 4, b'\x00')
   let cache_size = if cache_bits > 0 { 1 << cache_bits } else { 0 }
   let cache = FixedArray::make(cache_size, 0)
   let valid = FixedArray::make(cache_size, 0)
-  for pixel in 0..<(width * height) {
+  let mut pixel = 0
+  while pixel < width * height {
     let green_or_cache = webp_decode_symbol(bits, green_code)
+    if green_or_cache >= 256 && green_or_cache < 280 {
+      let length = webp_lz_value(green_or_cache - 256, bits)
+      let distance_symbol = webp_decode_symbol(bits, distance_code)
+      let distance = webp_lz_distance(distance_symbol, width, bits)
+      if length <= 0 || distance <= 0 || distance > pixel || pixel + length > width * height { raise WebPDecodeError::Invalid }
+      for _ in 0..<length {
+        let source = (pixel - distance) * 4
+        let offset = pixel * 4
+        for channel in 0..<4 { encoded_pixels[offset + channel] = encoded_pixels[source + channel] }
+        let encoded_red = encoded_pixels[offset].to_int()
+        let green = encoded_pixels[offset + 1].to_int()
+        let encoded_blue = encoded_pixels[offset + 2].to_int()
+        let alpha = encoded_pixels[offset + 3].to_int()
+        let red = if subtract_green { (encoded_red + green) & 0xFF } else { encoded_red }
+        let blue = if subtract_green { (encoded_blue + green) & 0xFF } else { encoded_blue }
+        image.data[offset] = red.to_byte(); image.data[offset + 1] = green.to_byte()
+        image.data[offset + 2] = blue.to_byte(); image.data[offset + 3] = alpha.to_byte()
+        if cache_bits > 0 {
+          let color = (alpha << 24) | (encoded_red << 16) | (green << 8) | encoded_blue
+          let index = webp_decode_color_cache_index(color, cache_bits)
+          cache[index] = color; valid[index] = 1
+        }
+        pixel = pixel + 1
+      }
+      continue
+    }
     let mut red = 0
     let mut green = 0
     let mut blue = 0
@@ -336,6 +379,10 @@ fn webp_decode_impl(data : Array[Byte]) -> Image raise WebPDecodeError {
       raise WebPDecodeError::Invalid
     }
     let offset = pixel * 4
+    encoded_pixels[offset] = encoded_red.to_byte()
+    encoded_pixels[offset + 1] = green.to_byte()
+    encoded_pixels[offset + 2] = encoded_blue.to_byte()
+    encoded_pixels[offset + 3] = alpha.to_byte()
     image.data[offset] = red.to_byte()
     image.data[offset + 1] = green.to_byte()
     image.data[offset + 2] = blue.to_byte()
@@ -346,6 +393,7 @@ fn webp_decode_impl(data : Array[Byte]) -> Image raise WebPDecodeError {
       cache[index] = color
       valid[index] = 1
     }
+    pixel = pixel + 1
   }
   image
 }
