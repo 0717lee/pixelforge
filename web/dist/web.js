@@ -222,6 +222,25 @@ function _M0MP270717lee10pixelforge5Image14flip__vertical(self) {
   }
   return out;
 }
+function _M0FP270717lee10pixelforge7adler32(data, from, to) {
+  let a = 1;
+  let b = 0;
+  let _tmp = from;
+  while (true) {
+    const i = _tmp;
+    if (i < to) {
+      const _tmp$2 = a;
+      const _p = _M0MPC15array5Array2atGyE(data, i);
+      a = (((_tmp$2 >>> 0) + (_p >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
+      b = (((b >>> 0) + (a >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
+      _tmp = i + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return b << 16 | a;
+}
 function _M0MP270717lee10pixelforge5Image8map__rgb(self, transform) {
   const out = _M0MP270717lee10pixelforge5Image4copy(self);
   const n = _M0MP270717lee10pixelforge5Image12pixel__count(self);
@@ -304,25 +323,6 @@ function _M0FP270717lee10pixelforge5crc32(data, from, to) {
     }
   }
   return crc ^ -1;
-}
-function _M0FP270717lee10pixelforge7adler32(data, from, to) {
-  let a = 1;
-  let b = 0;
-  let _tmp = from;
-  while (true) {
-    const i = _tmp;
-    if (i < to) {
-      const _tmp$2 = a;
-      const _p = _M0MPC15array5Array2atGyE(data, i);
-      a = (((_tmp$2 >>> 0) + (_p >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
-      b = (((b >>> 0) + (a >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
-      _tmp = i + 1 | 0;
-      continue;
-    } else {
-      break;
-    }
-  }
-  return b << 16 | a;
 }
 function _M0FP270717lee10pixelforge14push__uint__be(buf, v) {
   const _p = v >>> 24 & 255;
