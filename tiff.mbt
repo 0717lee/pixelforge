@@ -1,9 +1,9 @@
 /// Restricted baseline TIFF decoder.
 ///
 /// Supports little/big-endian classic TIFF (magic 42), multiple strips, tiled
-/// images, PackBits compression, and a bounded BigTIFF subset. Samples are
+/// images, PackBits/LZW compression, and a bounded BigTIFF subset. Samples are
 /// chunky 8-bit grayscale/RGB/RGBA with photometric interpretation 0/1 or 2.
-/// LZW/Deflate compression, palettes, predictors and BigTIFF files requiring
+/// Deflate compression, palettes, predictors and BigTIFF files requiring
 /// offsets above the host Int range return `None`.
 
 fn tiff_u16(data : Array[Byte], p : Int, little : Bool) -> Int {
@@ -87,6 +87,53 @@ fn tiff_packbits(data : Array[Byte], start : Int, length : Int, limit : Int) -> 
   if out.length() != limit { None } else { Some(out) }
 }
 
+/// TIFF LZW uses MSB-first codes with a 9..12 bit code width.
+fn tiff_lzw(data : Array[Byte], start : Int, length : Int, limit : Int) -> Array[Byte]? {
+  if !tiff_range(data, start, length) || limit < 0 { return None }
+  let dictionary : Array[Array[Byte]] = Array::make(4096, [])
+  let mut bit_pos = 0
+  let mut code_bits = 9
+  let mut next_code = 258
+  let mut previous : Array[Byte]? = None
+  let out : Array[Byte] = []
+  let read_code = () => {
+    if bit_pos + code_bits > length * 8 { return None }
+    let mut value = 0
+    for _ in 0..<code_bits {
+      let byte = data[start + bit_pos / 8].to_int()
+      value = (value << 1) | ((byte >> (7 - bit_pos % 8)) & 1)
+      bit_pos = bit_pos + 1
+    }
+    Some(value)
+  }
+  let mut finished = false
+  while !finished {
+    let code = match read_code() { Some(v) => v; None => return None }
+    if code == 256 {
+      for i in 0..<4096 { dictionary[i] = [] }
+      code_bits = 9; next_code = 258; previous = None
+      continue
+    }
+    if code == 257 { finished = true; continue }
+    let sequence = if code < 256 {
+      [code.to_byte()]
+    } else if code < next_code {
+      dictionary[code]
+    } else if code == next_code && previous is Some(prev) {
+      let candidate = prev.copy(); candidate.push(prev[0]); candidate
+    } else { return None }
+    if sequence.length() > limit - out.length() { return None }
+    for byte in sequence { out.push(byte) }
+    if previous is Some(prev) && next_code < 4096 {
+      let entry = prev.copy(); entry.push(sequence[0]); dictionary[next_code] = entry
+      next_code = next_code + 1
+      if next_code == (1 << code_bits) - 1 && code_bits < 12 { code_bits = code_bits + 1 }
+    }
+    previous = Some(sequence)
+  }
+  if out.length() == limit && finished { Some(out) } else { None }
+}
+
 fn tiff_write_pixel(out : Image, dst : Int, raw : Array[Byte], src : Int, samples : Int, photometric : Int) -> Unit {
   if samples == 1 {
     let value = raw[src]
@@ -166,7 +213,7 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       _ => ()
     }
   }
-  if width <= 0 || height <= 0 || (compression != 1 && compression != 32773) || (photometric != 0 && photometric != 1 && photometric != 2) {
+  if width <= 0 || height <= 0 || (compression != 1 && compression != 5 && compression != 32773) || (photometric != 0 && photometric != 1 && photometric != 2) {
     return None
   }
   if width > MAX_IMAGE_PIXELS / height { return None }
@@ -192,6 +239,8 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
         Some(bytes)
       } else if compression == 32773 {
         tiff_packbits(data, tile_offsets[tile], tile_byte_counts[tile], tile_expected)
+      } else if compression == 5 {
+        tiff_lzw(data, tile_offsets[tile], tile_byte_counts[tile], tile_expected)
       } else { None }
       let raw = match raw { Some(v) => v; None => return None }
       let tx = tile % tiles_x; let ty = tile / tiles_x
@@ -226,6 +275,8 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       Some(bytes)
     } else if compression == 32773 {
       tiff_packbits(data, strip_offsets[strip], strip_byte_counts[strip], expected)
+    } else if compression == 5 {
+      tiff_lzw(data, strip_offsets[strip], strip_byte_counts[strip], expected)
     } else {
       None
     }
@@ -278,8 +329,8 @@ fn tiff_big_values(
   Some(values)
 }
 
-/// Minimal BigTIFF subset: classic RGBA sample semantics, one uncompressed or
-/// PackBits strip, and 64-bit offsets whose high word fits the host Int.
+/// Minimal BigTIFF subset: classic RGBA sample semantics, one uncompressed,
+/// PackBits or LZW strip, and 64-bit offsets whose high word fits the host Int.
 fn tiff_decode_bigtiff(data : Array[Byte]) -> Image? {
   if data.length() < 16 { return None }
   let little = data[0] == b'I' && data[1] == b'I'
@@ -320,7 +371,7 @@ fn tiff_decode_bigtiff(data : Array[Byte]) -> Image? {
     }
   }
   if width <= 0 || height <= 0 || !bits_ok || rows_per_strip < height ||
-    !tiff_range(data, strip_offset, strip_bytes) || (compression != 1 && compression != 32773) ||
+    !tiff_range(data, strip_offset, strip_bytes) || (compression != 1 && compression != 5 && compression != 32773) ||
     (photometric != 0 && photometric != 1 && photometric != 2) { return None }
   if samples == 0 { samples = if photometric == 2 { 3 } else { 1 } }
   if width > MAX_IMAGE_PIXELS / height { return None }
@@ -332,7 +383,8 @@ fn tiff_decode_bigtiff(data : Array[Byte]) -> Image? {
     let bytes : Array[Byte] = []
     for i in 0..<expected { bytes.push(data[strip_offset + i]) }
     Some(bytes)
-  } else { tiff_packbits(data, strip_offset, strip_bytes, expected) }
+  } else if compression == 32773 { tiff_packbits(data, strip_offset, strip_bytes, expected) }
+  else { tiff_lzw(data, strip_offset, strip_bytes, expected) }
   let raw = match raw { Some(v) => v; None => return None }
   let out = Image::new(width, height)
   for p in 0..<(width * height) {
