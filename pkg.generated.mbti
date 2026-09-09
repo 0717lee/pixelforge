@@ -10,6 +10,8 @@ pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
 
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
+pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Image?
+
 pub fn avif_container_parse(Array[Byte]) -> AvifContainer?
 
 pub fn avif_encode(Image) -> Array[Byte]
