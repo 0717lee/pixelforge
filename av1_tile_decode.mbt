@@ -6,6 +6,7 @@
 /// symbols are decoded from the tile with the stateful MSAC reader. Other
 /// streams return None and remain eligible for later tile/transform milestones.
 
+///|
 /// Mutable CDF state for one transform context. UV blocks share one context
 /// for the tile, as required by the AV1 symbol update process.
 priv struct Av1DcContext {
@@ -15,18 +16,32 @@ priv struct Av1DcContext {
   sign : Array[Int]
 }
 
+///|
 /// Decode an EOB=1 DC coefficient and run the exact integer inverse DCT.
-fn av1_decode_single_dc(decoder : Av1SymbolDecoder, base_q_idx : Int, tx_ctx : Int, context : Av1DcContext) -> Int? {
-  if tx_ctx != 3 && tx_ctx != 4 { return None }
-  if decoder.symbol(context.eob) != 0 { return None }
+fn av1_decode_single_dc(
+  decoder : Av1SymbolDecoder,
+  base_q_idx : Int,
+  tx_ctx : Int,
+  context : Av1DcContext,
+) -> Int? {
+  if tx_ctx != 3 && tx_ctx != 4 {
+    return None
+  }
+  if decoder.symbol(context.eob) != 0 {
+    return None
+  }
   let mut level = decoder.symbol(context.base) + 1
   if level > 2 {
     let mut complete = false
     for _ in 0..<4 {
-      if complete { continue }
+      if complete {
+        continue
+      }
       let extra = decoder.symbol(context.br)
       level = level + extra
-      if extra < 3 { complete = true }
+      if extra < 3 {
+        complete = true
+      }
     }
   }
   let sign = decoder.symbol(context.sign)
@@ -37,12 +52,18 @@ fn av1_decode_single_dc(decoder : Av1SymbolDecoder, base_q_idx : Int, tx_ctx : I
       length = length + 1
       terminated = decoder.bool() == 1
     }
-    if !terminated { return None }
+    if !terminated {
+      return None
+    }
     let mut code = 1
-    for _ in 0..<(length - 1) { code = (code << 1) | decoder.bool() }
+    for _ in 0..<(length - 1) {
+      code = (code << 1) | decoder.bool()
+    }
     level = code + 14
   }
-  if level > 65535 { return None }
+  if level > 65535 {
+    return None
+  }
   let denom = if tx_ctx == 4 { 4 } else { 2 }
   let dq = ((level * av1_dc_quant_8(base_q_idx)) & 0xFFFFFF) / denom
   let signed = if sign == 1 { -dq } else { dq }
@@ -70,7 +91,7 @@ pub fn av1_decode_dc_tile(
     base_q_idx <= 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||
-    tile_payload.length() > 4 {
+    tile_payload.length() > 64 {
     return None
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
@@ -101,14 +122,42 @@ pub fn av1_decode_dc_tile(
     31961, 32768, 0,
   ]
   let luma_zero : Array[Int] = if width == 64 {
-    if base_q_idx <= 20 { [6308, 32768, 0] } else if base_q_idx <= 60 { [26584, 32768, 0] } else if base_q_idx <= 120 { [28573, 32768, 0] } else { [31539, 32768, 0] }
+    if base_q_idx <= 20 {
+      [6308, 32768, 0]
+    } else if base_q_idx <= 60 {
+      [26584, 32768, 0]
+    } else if base_q_idx <= 120 {
+      [28573, 32768, 0]
+    } else {
+      [31539, 32768, 0]
+    }
+  } else if base_q_idx <= 20 {
+    [17920, 32768, 0]
+  } else if base_q_idx <= 60 {
+    [26726, 32768, 0]
+  } else if base_q_idx <= 120 {
+    [30669, 32768, 0]
   } else {
-    if base_q_idx <= 20 { [17920, 32768, 0] } else if base_q_idx <= 60 { [26726, 32768, 0] } else if base_q_idx <= 120 { [30669, 32768, 0] } else { [31671, 32768, 0] }
+    [31671, 32768, 0]
   }
   let chroma_zero : Array[Int] = if width == 64 {
-    if base_q_idx <= 20 { [1366, 32768, 0] } else if base_q_idx <= 60 { [5583, 32768, 0] } else if base_q_idx <= 120 { [5124, 32768, 0] } else { [4656, 32768, 0] }
+    if base_q_idx <= 20 {
+      [1366, 32768, 0]
+    } else if base_q_idx <= 60 {
+      [5583, 32768, 0]
+    } else if base_q_idx <= 120 {
+      [5124, 32768, 0]
+    } else {
+      [4656, 32768, 0]
+    }
+  } else if base_q_idx <= 20 {
+    [3778, 32768, 0]
+  } else if base_q_idx <= 60 {
+    [4215, 32768, 0]
+  } else if base_q_idx <= 120 {
+    [3648, 32768, 0]
   } else {
-    if base_q_idx <= 20 { [3778, 32768, 0] } else if base_q_idx <= 60 { [4215, 32768, 0] } else if base_q_idx <= 120 { [3648, 32768, 0] } else { [3440, 32768, 0] }
+    [3440, 32768, 0]
   }
   if decoder.symbol(partition) != 0 ||
     decoder.symbol(skip) != 0 ||
@@ -119,12 +168,26 @@ pub fn av1_decode_dc_tile(
   let luma_all_zero = decoder.symbol(luma_zero)
   let mut luma_value = 128
   if luma_all_zero == 0 {
-    if width != 64 { return None }
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, y_dc) {
-      Some(value) => value
-      None => return None
+    if width != 64 {
+      return None
     }
-    luma_value = 128 + residual
+    if tile_payload.length() <= 4 {
+      let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, y_dc) {
+        Some(value) => value
+        None => return None
+      }
+      luma_value = 128 + residual
+    } else {
+      let coefficients = match av1_decode_coeffs_64x64_with_decoder(decoder, base_q_idx, 0) {
+        Some(value) => value
+        None => return None
+      }
+      let residual = match av1_inverse_dct_2d(coefficients, 64, 64, 8) {
+        Some(value) => value
+        None => return None
+      }
+      luma_value = 128 + residual[0]
+    }
   } else if luma_all_zero != 1 {
     return None
   }
@@ -161,7 +224,15 @@ pub fn av1_decode_dc_tile(
     u.push(clamp_byte(u_value))
     v.push(clamp_byte(v_value))
   }
-  av1_yuv420_to_rgba_color(width, height, y, u, v, full_range=full_range, matrix_coefficients=matrix_coefficients)
+  av1_yuv420_to_rgba_color(
+    width,
+    height,
+    y,
+    u,
+    v,
+    full_range~,
+    matrix_coefficients~,
+  )
 }
 
 ///|
@@ -174,8 +245,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
     Some(value) => value
   }
   let frames = av1_obu_payloads(data, 6)
-  if
-    seq.matrix_coefficients != 1 &&
+  if seq.matrix_coefficients != 1 &&
     seq.matrix_coefficients != 2 &&
     seq.matrix_coefficients != 5 &&
     seq.matrix_coefficients != 6 {
