@@ -54,6 +54,9 @@ pub fn av1_parse_stage1_frame(
   let allow_tools = match r.take(1) { Some(v) => v == 1; None => return None }
   if allow_tools && r.take(1) is None { return None } // force_integer_mv
   if r.take(1) is None { return None } // render_and_frame_size_different
+  // With screen-content tools selected, an intra frame signals allow_intrabc
+  // after the render-size syntax when the upscaled and frame widths match.
+  if allow_tools && r.take(1) is None { return None }
   // 64x64 and smaller stage-one images have one superblock row/column.
   let mi_cols = 2 * ((sequence.width + 7) / 8)
   let mi_rows = 2 * ((sequence.height + 7) / 8)

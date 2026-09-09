@@ -125,6 +125,7 @@ pub(all) struct Av1Stage1Input {
   width : Int
   height : Int
   bit_depth : Int
+  header_bytes : Int
   tile_payload : Array[Byte]
 }
 
