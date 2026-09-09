@@ -161,15 +161,6 @@ fn Av1SymbolDecoder::bool(self : Av1SymbolDecoder) -> Int {
   out
 }
 
-/// Decode an unsigned literal, MSB first.
-fn Av1SymbolDecoder::literal(self : Av1SymbolDecoder, count : Int) -> Int {
-  let mut out = 0
-  for _ in 0..<count {
-    out = (out << 1) | self.bool()
-  }
-  out
-}
-
 ///|
 test "av1 msac keeps tile state across symbols" {
   let decoder = av1_msac_new(
