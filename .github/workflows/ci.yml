@@ -14,18 +14,21 @@ concurrency:
   group: pixelforge-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The installer version is the Moon compiler version shown by `moonc`, not
+  # the Moon CLI date version. This release remains available in the registry
+  # and reproduces the committed JS/WASM artifacts.
+  MOONBIT_VERSION: 0.10.11+6ff76a5f9
+
 jobs:
   check-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MoonBit toolchain
+      - name: Install pinned MoonBit toolchain
         run: |
-          # Keep CI on the published toolchain channel. Removed point releases
-          # return HTTP 403 from the registry, so an expired hard-coded version
-          # would fail before any project check runs.
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOONBIT_VERSION"
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
       - name: Show toolchain versions
