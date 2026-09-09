@@ -13,7 +13,8 @@ on:
       - .github/workflows/copilot-setup-steps.yml
 
 env:
-  MOONBIT_VERSION: 0.1.20260827
+  # The installer expects the moonc release version, not the Moon CLI date.
+  MOONBIT_VERSION: 0.10.11+6ff76a5f9
 
 jobs:
   # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
