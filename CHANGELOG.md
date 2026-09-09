@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.17.5 (2026-09-09)
+## 0.17.6 (2026-09-09)
 
 - Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
 - Added deterministic hexadecimal input/output so the utility works on native,
@@ -30,8 +30,10 @@
   checks.
 - Added TIFF zlib/Deflate decompression and Predictor=2 horizontal differencing
   for classic strips and tiles, with cross-target regression fixtures.
+- Added pure MoonBit VP8L WebP Lossless decoding for the encoder's subtract-
+  green and color-cache streams, with native CLI input support.
 
-## 0.17.4
+## 0.17.5
 
 ### 修复与工程化
 - Playground 的 Worker 渲染加入代际校验，避免切换图片或线程模式时旧结果覆盖新结果。

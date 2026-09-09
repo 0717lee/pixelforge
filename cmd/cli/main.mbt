@@ -346,7 +346,10 @@ fn decode_image(format : String, bytes : Array[Byte]) -> @pixelforge.Image {
       @pixelforge.tiff_decode(bytes).unwrap_or_else(() => {
         abort("pixelforge: TIFF decode failed or uses unsupported features")
       })
-    "webp" => abort("pixelforge: WebP decode is not available on the native CLI")
+    "webp" =>
+      @pixelforge.webp_decode(bytes).unwrap_or_else(() => {
+        abort("pixelforge: WebP lossless decode failed or uses unsupported transforms")
+      })
     "avif" => abort("pixelforge: AVIF decode is not available on the native CLI")
     _ => abort("pixelforge: unsupported input format \{format}")
   }

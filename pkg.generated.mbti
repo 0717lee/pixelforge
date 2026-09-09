@@ -46,6 +46,8 @@ pub fn rgb_to_ycbcr(Int, Int, Int) -> (Int, Int, Int)
 
 pub fn tiff_decode(Array[Byte]) -> Image?
 
+pub fn webp_decode(Array[Byte]) -> Image?
+
 pub fn webp_encode(Image) -> Array[Byte]
 
 pub fn ycbcr_to_rgb(Int, Int, Int) -> (Int, Int, Int)

@@ -1,10 +1,10 @@
 # PixelForge CLI
 
 `cmd/cli` is a native codec utility. It supports `info` and `convert` for PNG,
-QOI, BMP, GIF, JPEG, WebP, AVIF, and baseline TIFF signatures. JPEG/WebP
-outputs and baseline TIFF input are available on native; WebP/AVIF decoding
-and TIFF encoding remain unsupported by the native CLI. `convert` can apply an
-ordered filter pipeline before encoding.
+QOI, BMP, GIF, JPEG, WebP, AVIF, and TIFF signatures. JPEG/WebP outputs and
+lossless WebP/TIFF input are available on native; AVIF decoding and TIFF
+encoding remain unsupported by the native CLI. `convert` can apply an ordered
+filter pipeline before encoding.
 
 The native executable reads and writes files directly:
 
