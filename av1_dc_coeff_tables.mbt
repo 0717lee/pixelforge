@@ -26,69 +26,13 @@ fn av1_dc_q_context(qidx : Int) -> Int {
 /// DefaultEobPt1024Cdf[coeffQIdx(base_q_idx)][ptype].
 /// A 32x32 or 64x64 DCT uses this 11-symbol EOB position CDF.
 fn av1_dc_eob1024_cdf(qidx : Int, ptype : Int) -> Array[Int] {
-  match (av1_dc_q_context(qidx), ptype) {
-    (0, 0) =>
-      [393, 421, 751, 1623, 3160, 6352, 13345, 18047, 22571, 25830, 32768, 0]
-    (0, 1) =>
-      [
-        1865, 1988, 2930, 4242, 10533, 16538, 21354, 27255, 28546, 31784, 32768,
-        0,
-      ]
-    (1, 0) =>
-      [696, 948, 3145, 5702, 9706, 13217, 17851, 21856, 25692, 28034, 32768, 0]
-    (1, 1) =>
-      [
-        2672, 3591, 9330, 17084, 22725, 24284, 26527, 28027, 28377, 30876, 32768,
-        0,
-      ]
-    (2, 0) =>
-      [
-        2784, 3831, 7041, 10521, 14847, 18844, 23155, 26682, 29229, 31045, 32768,
-        0,
-      ]
-    (2, 1) =>
-      [
-        9577, 12466, 17739, 20750, 22061, 23215, 24601, 25483, 25843, 32056, 32768,
-        0,
-      ]
-    (3, 0) =>
-      [
-        6698, 8334, 11961, 15762, 20186, 23862, 27434, 29326, 31082, 32050, 32768,
-        0,
-      ]
-    (3, 1) =>
-      [
-        20569, 22426, 25569, 26859, 28053, 28913, 29486, 29724, 29807, 32570, 32768,
-        0,
-      ]
-    _ => abort("AV1 coefficient plane type must be 0 or 1")
-  }
+  av1_coeff_eob1024_default(av1_dc_q_context(qidx), ptype)
 }
 
-///|
-/// DefaultCoeffBaseEobCdf[coeffQIdx(base_q_idx)][tx_ctx][ptype][0].
-/// For EOB=1 the final nonzero coefficient is DC and its EOB context is 0.
-/// tx_ctx is 3 for TX_32X32 or 4 for TX_64X64; ptype is 0 for Y, 1 for UV.
+/// Compact DC-only view of the complete coeff_base_eob table.
 fn av1_dc_base_eob_cdf(qidx : Int, tx_ctx : Int, ptype : Int) -> Array[Int] {
-  match (av1_dc_q_context(qidx), tx_ctx, ptype) {
-    (0, 3, 0) => [1787, 2532, 32768, 0]
-    (0, 3, 1) => [13751, 22235, 32768, 0]
-    (0, 4, 0) => [1725, 3449, 32768, 0]
-    (0, 4, 1) => [10923, 21845, 32768, 0]
-    (1, 3, 0) => [1044, 2257, 32768, 0]
-    (1, 3, 1) => [21317, 26207, 32768, 0]
-    (1, 4, 0) => [478, 1834, 32768, 0]
-    (1, 4, 1) => [10923, 21845, 32768, 0]
-    (2, 3, 0) => [2809, 19301, 32768, 0]
-    (2, 3, 1) => [22737, 29105, 32768, 0]
-    (2, 4, 0) => [935, 3382, 32768, 0]
-    (2, 4, 1) => [10923, 21845, 32768, 0]
-    (3, 3, 0) => [24647, 30463, 32768, 0]
-    (3, 3, 1) => [28482, 31505, 32768, 0]
-    (3, 4, 0) => [12358, 24977, 32768, 0]
-    (3, 4, 1) => [10923, 21845, 32768, 0]
-    _ => abort("AV1 DC EOB CDF requires tx_ctx 3 or 4 and ptype 0 or 1")
-  }
+  if tx_ctx != 3 && tx_ctx != 4 { abort("AV1 DC EOB requires tx context 3 or 4") }
+  av1_coeff_base_eob_default(av1_dc_q_context(qidx), tx_ctx, ptype, 0)
 }
 
 ///|
@@ -109,17 +53,7 @@ fn av1_dc_base_eob_dc_cdf(qidx : Int, tx_ctx : Int, ptype : Int) -> Array[Int] {
 /// The range context caps tx_ctx at TX_32X32 (3). With only DC nonzero,
 /// all neighboring coefficient magnitudes are zero, hence br_ctx is 0.
 fn av1_dc_br_cdf(qidx : Int, ptype : Int) -> Array[Int] {
-  match (av1_dc_q_context(qidx), ptype) {
-    (0, 0) => [2331, 3662, 5244, 32768, 0]
-    (0, 1) => [5842, 9229, 10838, 32768, 0]
-    (1, 0) => [5705, 10930, 15725, 32768, 0]
-    (1, 1) => [8278, 13242, 15922, 32768, 0]
-    (2, 0) => [9040, 14786, 18360, 32768, 0]
-    (2, 1) => [12339, 17329, 20140, 32768, 0]
-    (3, 0) => [12162, 18785, 22648, 32768, 0]
-    (3, 1) => [13981, 20067, 23226, 32768, 0]
-    _ => abort("AV1 coefficient plane type must be 0 or 1")
-  }
+  av1_coeff_br_default(av1_dc_q_context(qidx), 3, ptype, 0)
 }
 
 ///|
@@ -127,13 +61,7 @@ fn av1_dc_br_cdf(qidx : Int, ptype : Int) -> Array[Int] {
 /// Context 0 requires a zero sum of neighboring DC signs, including absent
 /// top/left neighbors. It is not the sign context for arbitrary later blocks.
 fn av1_dc_sign_cdf(qidx : Int, ptype : Int) -> Array[Int] {
-  let _ = av1_dc_q_context(qidx)
-  // All four quantizer contexts have the same initial DC sign CDF.
-  match ptype {
-    0 => [16000, 32768, 0]
-    1 => [15232, 32768, 0]
-    _ => abort("AV1 coefficient plane type must be 0 or 1")
-  }
+  av1_coeff_dc_sign_default(av1_dc_q_context(qidx), ptype, 0)
 }
 
 ///|
