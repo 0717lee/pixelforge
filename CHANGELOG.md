@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.16.0 (2026-09-09)
+## 0.17.0 (2026-09-09)
 
 - Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
 - Added deterministic hexadecimal input/output so the utility works on native,
@@ -18,8 +18,11 @@
   identity fast paths that avoid allocating for no-op or unknown dispatches.
 - Added HOG descriptors, deterministic thresholded contours, and bounded
   Zhang--Suen skeletonization for advanced computer-vision workflows.
+- Added JPEG decode/encode and lossless WebP encode adapters through
+  `mizchi/image`, browser-target AVIF encoding, and a restricted baseline TIFF
+  decoder for uncompressed chunky 8-bit grayscale/RGB/RGBA strips.
 
-## 0.15.0
+## 0.16.0
 
 ### 修复与工程化
 - Playground 的 Worker 渲染加入代际校验，避免切换图片或线程模式时旧结果覆盖新结果。

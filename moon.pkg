@@ -1,5 +1,6 @@
 // Root package configuration for the PixelForge core library.
 import {
+  "mizchi/image",
   "moonbitlang/core/double",
   "moonbitlang/core/math",
 }

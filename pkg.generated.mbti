@@ -2,6 +2,8 @@
 package "0717lee/pixelforge"
 
 // Values
+pub fn avif_encode(Image) -> Array[Byte]
+
 pub fn bmp_decode(Array[Byte]) -> Image?
 
 pub fn bmp_encode(Image, Bool) -> Array[Byte]
@@ -24,6 +26,10 @@ pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
 
 pub fn image_metadata(Array[Byte]) -> ImageMetadata?
 
+pub fn jpeg_decode(Array[Byte]) -> Image?
+
+pub fn jpeg_encode(Image, Int) -> Array[Byte]
+
 pub fn png_decode(Array[Byte]) -> Image?
 
 pub fn png_encode(Image) -> Array[Byte]
@@ -37,6 +43,10 @@ pub fn rgb_to_hsl(Int, Int, Int) -> (Double, Double, Double)
 pub fn rgb_to_hsv(Int, Int, Int) -> (Double, Double, Double)
 
 pub fn rgb_to_ycbcr(Int, Int, Int) -> (Int, Int, Int)
+
+pub fn tiff_decode(Array[Byte]) -> Image?
+
+pub fn webp_encode(Image) -> Array[Byte]
 
 pub fn ycbcr_to_rgb(Int, Int, Int) -> (Int, Int, Int)
 
