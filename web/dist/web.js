@@ -1062,11 +1062,11 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   }
   return out;
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS1039(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS1039(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS1039(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS1039(factor, b) }));
 }
 function _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, err) {
   if ((x + 1 | 0) < w) {

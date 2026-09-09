@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.0 (2026-09-09)
+
+- Added a bounded AVIF ISO BMFF primary-item parser with `ftyp`/`meta`,
+  `pitm`, `iinf`/`infe`, `iloc`, `iprp`/`ipco`/`ipma`, `ispe`, `av1C`, `nclx`,
+  and `mdat`/`idat` validation.
+- Added pure MoonBit AV1 OBU framing, reduced-still sequence-header parsing,
+  frame-envelope checks, and a bounded MSAC boolean foundation.
+- This milestone intentionally stops before AV1 tile entropy decoding and does
+  not advertise a pixel-level `avif_decode` API yet.
+
 ## 0.17.7 (2026-09-09)
 
 - Added complete pure MoonBit VP8L transform decoding for Predictor,

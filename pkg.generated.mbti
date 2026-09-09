@@ -2,6 +2,16 @@
 package "0717lee/pixelforge"
 
 // Values
+pub fn av1_decode(Array[Byte]) -> Image?
+
+pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
+
+pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
+
+pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
+
+pub fn avif_container_parse(Array[Byte]) -> AvifContainer?
+
 pub fn avif_encode(Image) -> Array[Byte]
 
 pub fn bmp_decode(Array[Byte]) -> Image?
@@ -71,6 +81,37 @@ pub fn Affine::scaling(Double, Double) -> Self
 pub fn Affine::shear(Double, Double) -> Self
 pub fn Affine::then(Self, Self) -> Self
 pub fn Affine::translation(Double, Double) -> Self
+
+pub(all) struct Av1FrameInfo {
+  key_frame : Bool
+  show_frame : Bool
+  payload_size : Int
+}
+
+pub(all) struct Av1SequenceInfo {
+  profile : Int
+  width : Int
+  height : Int
+  bit_depth : Int
+  monochrome : Bool
+  subsampling_x : Bool
+  subsampling_y : Bool
+  reduced_still_picture_header : Bool
+}
+
+pub struct AvifContainer {
+  width : Int
+  height : Int
+  bit_depth : Int
+  monochrome : Bool
+  yuv420 : Bool
+  has_alpha : Bool
+  av1c : Array[Byte]
+  payload : Array[Byte]
+  nclx_primaries : Int?
+  nclx_transfer : Int?
+  nclx_matrix : Int?
+}
 
 pub(all) enum BlendMode {
   Normal
