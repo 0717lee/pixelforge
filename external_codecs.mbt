@@ -50,16 +50,3 @@ pub fn webp_encode(image : Image) -> Array[Byte] {
   }
   Bytes::to_array(encoded)
 }
-
-/// Encodes an RGBA8 image as AVIF on JS targets.
-///
-/// Native and wasm-gc targets raise because browser AVIF encoding is not
-/// available there; callers should use JPEG/WebP or an external native tool.
-pub fn avif_encode(image : Image) -> Array[Byte] {
-  let encoded = try {
-    @image.encode_avif({ width: image.width, height: image.height, data: image_to_bytes(image) })
-  } catch {
-    _ => abort("avif_encode: AVIF encoding requires the JS target")
-  }
-  Bytes::to_array(encoded)
-}

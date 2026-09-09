@@ -4,3 +4,10 @@ import {
   "moonbitlang/core/double",
   "moonbitlang/core/math",
 }
+
+options(
+  targets: {
+    "external_codecs_avif_js.mbt": [ "js" ],
+    "external_codecs_avif_non_js.mbt": [ "native", "wasm-gc" ],
+  },
+)
