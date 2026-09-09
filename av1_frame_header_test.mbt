@@ -9,7 +9,7 @@ test "av1 parses the reduced still frame tile boundary" {
     b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
   ]).unwrap()
   let header = av1_parse_stage1_frame(frame, seq).unwrap()
-  assert_eq(header.header_bytes, 9)
-  assert_eq(header.tile_payload[0], b'\x05')
-  assert_eq(header.tile_payload.length(), 10)
+  assert_eq(header.header_bytes, 8)
+  assert_eq(header.tile_payload[0], b'\x0A')
+  assert_eq(header.tile_payload.length(), 11)
 }

@@ -11,4 +11,18 @@ test "avif stage one extracts a real 8-bit 4:2:0 tile" {
   let input = avif_stage1_input(data).unwrap()
   assert_eq((input.width, input.height, input.bit_depth), (64, 64, 8))
   assert_true(input.tile_payload.length() > 0)
+  assert_eq(input.base_q_idx, 0)
+
+  // Replace only the 19-byte mdat payload with the canonical flat AV1 frame
+  // (same item length) to exercise the AVIF container -> tile -> RGBA path.
+  let canonical = data.copy()
+  let start = canonical.length() - 19
+  let flat : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+    b'\x32', b'\x09', b'\x12', b'\xB0', b'\x00', b'\x00', b'\x40', b'\x00',
+    b'\x00', b'\x00', b'\x2E',
+  ]
+  for i in 0..<flat.length() { canonical[start + i] = flat[i] }
+  let decoded = avif_decode(canonical).unwrap()
+  assert_eq(decoded.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }

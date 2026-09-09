@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added a pure MoonBit single-tile AV1 path for 64x64 reduced-still, 8-bit
+  4:2:0 frames with DC intra prediction and all-zero residuals. The path is
+  validated against an external libaom flat-frame bitstream and emits RGBA.
+- Added `avif_stage1_input()` for validated AVIF-to-tile handoff; other AV1
+  prediction modes, transforms, alpha, and high bit depth remain staged work.
+
 ## 0.18.0 (2026-09-09)
 
 - Added a bounded AVIF ISO BMFF primary-item parser with `ftyp`/`meta`,
@@ -7,8 +15,8 @@
   and `mdat`/`idat` validation.
 - Added pure MoonBit AV1 OBU framing, reduced-still sequence-header parsing,
   frame-envelope checks, and a bounded MSAC boolean foundation.
-- This milestone intentionally stops before AV1 tile entropy decoding and does
-  not advertise a pixel-level `avif_decode` API yet.
+- The 0.18.0 release stopped before AV1 tile entropy decoding; the unreleased
+  follow-up now covers only the bounded single-tile DC path.
 
 ## 0.17.7 (2026-09-09)
 

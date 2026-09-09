@@ -42,6 +42,7 @@ pub(all) struct Av1Stage1Input {
   height : Int
   bit_depth : Int
   header_bytes : Int
+  base_q_idx : Int
   tile_payload : Array[Byte]
 }
 
@@ -487,17 +488,10 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
           height: c.height,
           bit_depth: c.bit_depth,
           header_bytes: frame.header_bytes,
+          base_q_idx: frame.base_q_idx,
           tile_payload: frame.tile_payload,
         })
       }
     }
   }
-}
-
-///|
-/// Stage-one AV1 pixel decode entry point. Sequence parsing is implemented;
-/// frame tile entropy decoding is intentionally reported as unavailable by
-/// returning `None` until the next milestone lands.
-pub fn av1_decode(_data : Array[Byte]) -> Image? {
-  None
 }
