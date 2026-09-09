@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.7 (2026-09-09)
+
+- Added complete pure MoonBit VP8L transform decoding for Predictor,
+  cross-color, Subtract Green, and Color Indexing streams, including transform
+  subimages, spatially varying Huffman groups, and the full close-distance map.
+- Added native and JS regression fixtures for predictor/cross-color and color
+  indexing WebP files.
+
 ## 0.17.6 (2026-09-09)
 
 - Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
