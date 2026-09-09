@@ -2,10 +2,59 @@
 ///
 /// This module intentionally accepts one very small, fully specified subset:
 /// a 32x32 or 64x64 reduced-still key frame, one tile, DC intra prediction,
-/// and all-zero chroma residuals. The 64x64 path also accepts a single DC
-/// luma residual. Entropy
+/// and single-DC residuals. Entropy
 /// symbols are decoded from the tile with the stateful MSAC reader. Other
 /// streams return None and remain eligible for later tile/transform milestones.
+
+/// Decode one EOB=1 DC coefficient from the stateful tile reader. `tx_ctx`
+/// selects the transform size context (3 for 32x32, 4 for 64x64), while
+/// `ptype` selects luma (0) or chroma (1). The result is a signed sample
+/// offset from the intra DC level 128.
+fn av1_decode_single_dc(
+  decoder : Av1SymbolDecoder,
+  base_q_idx : Int,
+  tx_ctx : Int,
+  ptype : Int,
+) -> Int? {
+  if (tx_ctx != 3 && tx_ctx != 4) || (ptype != 0 && ptype != 1) {
+    return None
+  }
+  if decoder.symbol(av1_dc_eob1024_cdf(base_q_idx, ptype)) != 0 {
+    return None
+  }
+  let mut level = decoder.symbol(av1_dc_base_eob_dc_cdf(base_q_idx, tx_ctx, ptype)) + 1
+  let br = av1_dc_br_cdf(base_q_idx, ptype)
+  let mut complete = false
+  for _ in 0..<4 {
+    if complete { continue }
+    let extra = decoder.symbol(br)
+    level = level + extra
+    if extra < 3 { complete = true }
+  }
+  if level > 14 {
+    let mut length = 0
+    let mut terminated = false
+    while length < 32 && !terminated {
+      length = length + 1
+      terminated = decoder.bool() == 1
+    }
+    if !terminated { return None }
+    let mut code = 1
+    for _ in 0..<(length - 1) {
+      code = (code << 1) | decoder.bool()
+    }
+    level = code + 14
+  }
+  if level > 65535 { return None }
+  let sign = decoder.symbol(av1_dc_sign_cdf(base_q_idx, ptype))
+  let dequant = level * av1_dc_quant_8(base_q_idx) / 4
+  let magnitude = if tx_ctx == 4 {
+    (dequant * 12 + 32) / 64
+  } else {
+    (dequant * 8 + 16) / 32
+  }
+  Some(if sign == 1 { -magnitude } else { magnitude })
+}
 
 ///|
 pub fn av1_decode_dc_tile(
@@ -60,60 +109,32 @@ pub fn av1_decode_dc_tile(
   let mut luma_value = 128
   if luma_all_zero == 0 {
     if width != 64 { return None }
-    // The first residual milestone accepts a single DC coefficient (EOB=1)
-    // and rejects AC coefficients or larger EOB positions.
-    let ep = decoder.symbol(av1_dc_eob1024_cdf(base_q_idx, 0))
-    if ep != 0 {
-      return None
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, 0) {
+      Some(value) => value
+      None => return None
     }
-    let base_level = decoder.symbol(av1_dc_base_eob_dc_cdf(base_q_idx, 4, 0)) +
-      1
-    let mut level = base_level
-    let br = av1_dc_br_cdf(base_q_idx, 0)
-    let mut complete = false
-    for _ in 0..<4 {
-      if complete {
-        continue
-      }
-      let extra = decoder.symbol(br)
-      level = level + extra
-      if extra < 3 {
-        complete = true
-      }
-    }
-    if level > 14 {
-      // coeff_base_range is exhausted: consume the unary Exp-Golomb tail.
-      let mut length = 0
-      let mut terminated = false
-      while length < 32 && !terminated {
-        length = length + 1
-        terminated = decoder.bool() == 1
-      }
-      if !terminated {
-        return None
-      }
-      let mut code = 1
-      for _ in 0..<(length - 1) {
-        code = (code << 1) | decoder.bool()
-      }
-      level = code + 14
-    }
-    if level > 65535 {
-      return None
-    }
-    let sign = decoder.symbol(av1_dc_sign_cdf(base_q_idx, 0))
-    let dequant = level * av1_dc_quant_8(base_q_idx) / 4
-    // Integer DCT64's DC basis reduces to this normalization after the AV1
-    // row and column shifts.
-    let magnitude = (dequant * 12 + 32) / 64
-    luma_value = if sign == 1 { 128 - magnitude } else { 128 + magnitude }
+    luma_value = 128 + residual
   } else if luma_all_zero != 1 {
     return None
   }
   let cu = decoder.symbol(chroma_zero)
   let cv = decoder.symbol(chroma_zero)
-  if cu != 1 || cv != 1 {
-    return None
+  if (cu != 0 && cu != 1) || (cv != 0 && cv != 1) { return None }
+  let mut u_value = 128
+  if cu == 0 {
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, 1) {
+      Some(value) => value
+      None => return None
+    }
+    u_value = u_value + residual
+  }
+  let mut v_value = 128
+  if cv == 0 {
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, 1) {
+      Some(value) => value
+      None => return None
+    }
+    v_value = v_value + residual
   }
   let y : Array[Byte] = []
   let u : Array[Byte] = []
@@ -123,8 +144,8 @@ pub fn av1_decode_dc_tile(
     y.push(luma)
   }
   for _ in 0..<(width / 2 * (height / 2)) {
-    u.push(b'\x80')
-    v.push(b'\x80')
+    u.push(clamp_byte(u_value))
+    v.push(clamp_byte(v_value))
   }
   av1_yuv420_to_rgba_color(width, height, y, u, v, full_range=full_range, matrix_coefficients=matrix_coefficients)
 }
@@ -183,4 +204,11 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         matrix_coefficients=value.matrix_coefficients,
       )
   }
+}
+
+///|
+test "single DC helper decodes a chroma coefficient" {
+  let decoder = av1_msac_new([b'\x00', b'\x00'], false)
+  let residual = av1_decode_single_dc(decoder, 33, 3, 1).unwrap()
+  assert_eq(residual, 2)
 }
