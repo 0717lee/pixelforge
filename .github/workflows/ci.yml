@@ -31,6 +31,9 @@ jobs:
       - name: Show toolchain versions
         run: moon version --all
 
+      - name: Resolve registry dependencies
+        run: moon update
+
       - name: Type check
         run: moon check
 
