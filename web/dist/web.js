@@ -91,9 +91,6 @@ function _M0MPC15array5Array4makeGiE(len, elem) {
 function _M0FPC14math3pow(_tmp, _tmp$2) {
   return Math.pow(_tmp, _tmp$2);
 }
-function _M0MP270717lee10pixelforge5Image4copy(self) {
-  return new _M0TP270717lee10pixelforge5Image(self.width, self.height, _M0MPC15array10FixedArray4copyGyE(self.data));
-}
 function _M0FP270717lee10pixelforge20checked__buffer__len(width, height) {
   if (width < 0 || height < 0) {
     $panic();
@@ -110,6 +107,9 @@ function _M0FP270717lee10pixelforge20checked__buffer__len(width, height) {
 function _M0MP270717lee10pixelforge5Image3new(width, height) {
   const len = _M0FP270717lee10pixelforge20checked__buffer__len(width, height);
   return new _M0TP270717lee10pixelforge5Image(width, height, $makebytes(len, 0));
+}
+function _M0MP270717lee10pixelforge5Image4copy(self) {
+  return new _M0TP270717lee10pixelforge5Image(self.width, self.height, _M0MPC15array10FixedArray4copyGyE(self.data));
 }
 function _M0MP270717lee10pixelforge5Image12pixel__count(self) {
   return _M0FP270717lee10pixelforge20checked__buffer__len(self.width, self.height) / 4 | 0;
