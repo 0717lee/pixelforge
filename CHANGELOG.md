@@ -13,6 +13,8 @@
 - Added 32x32 single-tile neutral DC reconstruction with the W32 and chroma
   transform contexts.
 - Enabled native CLI AVIF input through the bounded pure MoonBit decoder.
+- Added a normative integer AV1 inverse-transform module for DCT and lossless
+  4x4 WHT paths, plus reproducible libaom/dav1d AV1 and AVIF reference fixtures.
 - Added single-DC chroma residual decoding for the bounded AV1 tile path.
 
 ## 0.18.0 (2026-09-09)
