@@ -18,6 +18,12 @@ pub(all) struct Av1SequenceInfo {
   subsampling_x : Bool
   subsampling_y : Bool
   reduced_still_picture_header : Bool
+  use_128x128_superblock : Bool
+  enable_filter_intra : Bool
+  enable_intra_edge_filter : Bool
+  enable_superres : Bool
+  enable_cdef : Bool
+  enable_restoration : Bool
 }
 
 /// Header facts available before tile entropy decoding. Reduced still-picture
@@ -26,6 +32,16 @@ pub(all) struct Av1FrameInfo {
   key_frame : Bool
   show_frame : Bool
   payload_size : Int
+}
+
+/// The bounded input handed to the next AV1 tile-decoding stage. This is a
+/// data boundary rather than an image: tile bytes are still entropy-coded and
+/// must be reconstructed before an `Image` exists.
+pub(all) struct Av1Stage1Input {
+  width : Int
+  height : Int
+  bit_depth : Int
+  tile_payload : Array[Byte]
 }
 
 /// Small AV1 MSAC boolean decoder. It is kept independent from frame syntax so
@@ -331,11 +347,14 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   if width <= 0 || height <= 0 || width > 65536 || height > 65536 {
     return None
   }
-  // Sequence tools preceding color_config().  Stage one accepts the values
-  // but keeps them bounded; the frame parser will reject enabled filters or
-  // super-resolution until their syntax is implemented.
-  if !av1_skip(reader, 3) { return None } // use128x128, filter_intra, edge_filter
-  if !av1_skip(reader, 3) { return None } // superres, CDEF, restoration
+  // Sequence tools preceding color_config(). Keep each flag explicit so the
+  // frame stage can make a capability decision without guessing bit offsets.
+  let use128 = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
+  let filter_intra = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
+  let edge_filter = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
+  let superres = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
+  let cdef = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
+  let restoration = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
   let color = av1_parse_color_config(reader, profile)
   let (bit_depth, subsampling_x, subsampling_y, monochrome) = match color {
     Some(v) => v
@@ -351,6 +370,12 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     subsampling_x,
     subsampling_y,
     reduced_still_picture_header: true,
+    use_128x128_superblock: use128,
+    enable_filter_intra: filter_intra,
+    enable_intra_edge_filter: edge_filter,
+    enable_superres: superres,
+    enable_cdef: cdef,
+    enable_restoration: restoration,
   })
 }
 
@@ -424,6 +449,43 @@ pub fn av1_frame_info(data : Array[Byte]) -> Av1FrameInfo? {
           key_frame: true,
           show_frame: true,
           payload_size: frames[0].length(),
+        })
+      }
+    }
+  }
+}
+
+/// Extracts the first supported AV1 tile payload from an AVIF container.
+///
+/// The function validates the container, reduced-still sequence header, and
+/// bounded frame envelope. It does not decode entropy symbols or fabricate
+/// pixels; callers in the next milestone consume `tile_payload` with the
+/// intra tile reconstruction pipeline.
+pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
+  let container = avif_container_parse(data)
+  match container {
+    None => None
+    Some(c) => {
+      let sequence = av1_sequence_info(c.payload)
+      let seq = match sequence {
+        None => return None
+        Some(value) => value
+      }
+      if c.bit_depth != 8 || c.monochrome || !c.yuv420 || c.has_alpha {
+        return None
+      }
+      let frames = av1_obu_payloads(c.payload, 6)
+      if frames.length() == 0 {
+        return None
+      }
+      let header = av1_parse_stage1_frame(frames[0], seq)
+      match header {
+        None => None
+        Some(frame) => Some({
+          width: c.width,
+          height: c.height,
+          bit_depth: c.bit_depth,
+          tile_payload: frame.tile_payload,
         })
       }
     }

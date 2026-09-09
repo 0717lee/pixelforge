@@ -6,7 +6,11 @@ pub fn av1_decode(Array[Byte]) -> Image?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
+pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
+
 pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
+
+pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo) -> Av1FrameHeaderInfo?
 
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
@@ -15,6 +19,8 @@ pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Im
 pub fn avif_container_parse(Array[Byte]) -> AvifContainer?
 
 pub fn avif_encode(Image) -> Array[Byte]
+
+pub fn avif_stage1_input(Array[Byte]) -> Av1Stage1Input?
 
 pub fn bmp_decode(Array[Byte]) -> Image?
 
@@ -84,6 +90,14 @@ pub fn Affine::shear(Double, Double) -> Self
 pub fn Affine::then(Self, Self) -> Self
 pub fn Affine::translation(Double, Double) -> Self
 
+pub(all) struct Av1FrameHeaderInfo {
+  header_bytes : Int
+  tile_payload : Array[Byte]
+  base_q_idx : Int
+  tile_cols : Int
+  tile_rows : Int
+}
+
 pub(all) struct Av1FrameInfo {
   key_frame : Bool
   show_frame : Bool
@@ -99,6 +113,19 @@ pub(all) struct Av1SequenceInfo {
   subsampling_x : Bool
   subsampling_y : Bool
   reduced_still_picture_header : Bool
+  use_128x128_superblock : Bool
+  enable_filter_intra : Bool
+  enable_intra_edge_filter : Bool
+  enable_superres : Bool
+  enable_cdef : Bool
+  enable_restoration : Bool
+}
+
+pub(all) struct Av1Stage1Input {
+  width : Int
+  height : Int
+  bit_depth : Int
+  tile_payload : Array[Byte]
 }
 
 pub struct AvifContainer {

@@ -234,7 +234,9 @@ fn parse_av1c(_d : Array[Byte], p : Prop) -> (Int, Bool, Bool) raise AvifError {
   } else {
     10
   }
-  (depth, (f & 0x20) != 0, ((f >> 4) & 1) != 0 && ((f >> 3) & 1) != 0)
+  // AV1C byte 2 stores monochrome at bit 4 and the two 4:2:0
+  // subsampling flags at bits 3 and 2 (ISO/IEC 14496-15 §E.3.3).
+  (depth, (f & 0x10) != 0, ((f >> 3) & 1) != 0 && ((f >> 2) & 1) != 0)
 }
 
 ///|
