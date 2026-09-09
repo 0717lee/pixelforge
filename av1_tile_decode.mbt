@@ -13,6 +13,7 @@ pub fn av1_decode_dc_tile(
   tile_payload : Array[Byte],
   base_q_idx : Int,
   disable_cdf_update? : Bool = false,
+  full_range? : Bool = false,
 ) -> Image? {
   if width != 64 ||
     height != 64 ||
@@ -128,7 +129,7 @@ pub fn av1_decode_dc_tile(
     u.push(b'\x80')
     v.push(b'\x80')
   }
-  av1_yuv420_to_rgba(width, height, y, u, v)
+  av1_yuv420_to_rgba_range(width, height, y, u, v, full_range=full_range)
 }
 
 ///|
@@ -162,6 +163,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         frame.tile_payload,
         frame.base_q_idx,
         disable_cdf_update=frame.disable_cdf_update,
+        full_range=seq.full_range,
       )
   }
 }
@@ -180,6 +182,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         value.tile_payload,
         value.base_q_idx,
         disable_cdf_update=value.disable_cdf_update,
+        full_range=value.full_range,
       )
   }
 }
