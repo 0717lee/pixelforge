@@ -170,25 +170,6 @@ fn Av1SymbolDecoder::literal(self : Av1SymbolDecoder, count : Int) -> Int {
   out
 }
 
-/// Decode the non-symmetric `ns(n)` syntax element.
-fn Av1SymbolDecoder::ns(self : Av1SymbolDecoder, n : Int) -> Int {
-  if n <= 1 {
-    return 0
-  }
-  let mut w = 0
-  while (1 << (w + 1)) <= n {
-    w = w + 1
-  }
-  w = w + 1
-  let m = (1 << w) - n
-  let v = self.literal(w - 1)
-  if v < m {
-    v
-  } else {
-    (v << 1) - m + self.bool()
-  }
-}
-
 ///|
 test "av1 msac keeps tile state across symbols" {
   let decoder = av1_msac_new(

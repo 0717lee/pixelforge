@@ -139,13 +139,11 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
     Some(value) => value
   }
   let frames = av1_obu_payloads(data, 6)
-  if seq.full_range ||
-    (
-      seq.matrix_coefficients != 1 &&
-      seq.matrix_coefficients != 2 &&
-      seq.matrix_coefficients != 5 &&
-      seq.matrix_coefficients != 6
-    ) {
+  if
+    seq.matrix_coefficients != 1 &&
+    seq.matrix_coefficients != 2 &&
+    seq.matrix_coefficients != 5 &&
+    seq.matrix_coefficients != 6 {
     return None
   }
   if frames.length() == 0 {
