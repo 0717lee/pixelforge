@@ -4,7 +4,7 @@ package "0717lee/pixelforge"
 // Values
 pub fn av1_decode(Array[Byte]) -> Image?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool) -> Image?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
@@ -102,6 +102,7 @@ pub(all) struct Av1FrameHeaderInfo {
   tile_rows : Int
   tx_mode_select : Bool
   coded_lossless : Bool
+  disable_cdf_update : Bool
 }
 
 pub(all) struct Av1FrameInfo {
@@ -125,6 +126,12 @@ pub(all) struct Av1SequenceInfo {
   enable_superres : Bool
   enable_cdef : Bool
   enable_restoration : Bool
+  full_range : Bool
+  separate_uv_delta_q : Bool
+  film_grain_params_present : Bool
+  color_primaries : Int
+  transfer_characteristics : Int
+  matrix_coefficients : Int
 }
 
 pub(all) struct Av1Stage1Input {
@@ -133,6 +140,7 @@ pub(all) struct Av1Stage1Input {
   bit_depth : Int
   header_bytes : Int
   base_q_idx : Int
+  disable_cdf_update : Bool
   tile_payload : Array[Byte]
 }
 

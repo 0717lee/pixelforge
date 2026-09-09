@@ -24,8 +24,15 @@ pub(all) struct Av1SequenceInfo {
   enable_superres : Bool
   enable_cdef : Bool
   enable_restoration : Bool
+  full_range : Bool
+  separate_uv_delta_q : Bool
+  film_grain_params_present : Bool
+  color_primaries : Int
+  transfer_characteristics : Int
+  matrix_coefficients : Int
 }
 
+///|
 /// Header facts available before tile entropy decoding. Reduced still-picture
 /// headers imply a key frame and one displayed frame by construction.
 pub(all) struct Av1FrameInfo {
@@ -34,6 +41,7 @@ pub(all) struct Av1FrameInfo {
   payload_size : Int
 }
 
+///|
 /// The bounded input handed to the next AV1 tile-decoding stage. This is a
 /// data boundary rather than an image: tile bytes are still entropy-coded and
 /// must be reconstructed before an `Image` exists.
@@ -43,9 +51,11 @@ pub(all) struct Av1Stage1Input {
   bit_depth : Int
   header_bytes : Int
   base_q_idx : Int
+  disable_cdf_update : Bool
   tile_payload : Array[Byte]
 }
 
+///|
 /// Small AV1 MSAC boolean decoder. It is kept independent from frame syntax so
 /// the tile decoder can adopt it without changing the public image API.
 priv struct Av1Msac {
@@ -57,25 +67,25 @@ priv struct Av1Msac {
   mut input_bits : Int
 }
 
+///|
 fn Av1Msac::new(data : Array[Byte]) -> Av1Msac {
   let mut value = 0
   let mut pos = 0
   for _ in 0..<4 {
-    let incoming = if pos < data.length() {
-      data[pos].to_int()
-    } else {
-      0
-    }
+    let incoming = if pos < data.length() { data[pos].to_int() } else { 0 }
     value = (value << 8) | incoming
     pos = pos + 1
   }
-  { data, pos, range: 255, value, input_byte: 0, input_bits: 0 }
+  { data, pos, range: 255, value, input_byte: 0, input_bits: 0, }
 }
 
+///|
 /// Decodes one AV1 boolean with an 8-bit probability (0..255), normalising the
 /// interval as required by the MSAC range coder. Returns None at end of input.
 fn Av1Msac::read_bool(self : Av1Msac, probability : Int) -> Int? {
-  if probability < 0 || probability > 255 { return None }
+  if probability < 0 || probability > 255 {
+    return None
+  }
   let split = 1 + (((self.range - 1) * probability) >> 8)
   let bit = if self.value < split {
     self.range = split
@@ -102,6 +112,7 @@ fn Av1Msac::read_bool(self : Av1Msac, probability : Int) -> Int? {
   Some(bit)
 }
 
+///|
 /// Reads one boolean from an isolated MSAC payload. This small public probe is
 /// also useful for conformance tests while the full tile decoder is developed.
 pub fn av1_msac_read_first(data : Array[Byte], probability : Int) -> Int? {
@@ -221,84 +232,137 @@ fn av1_obu_payloads(
 }
 
 ///|
+priv struct Av1ColorConfig {
+  bit_depth : Int
+  monochrome : Bool
+  subsampling_x : Bool
+  subsampling_y : Bool
+  full_range : Bool
+  separate_uv_delta_q : Bool
+  primaries : Int
+  transfer : Int
+  matrix : Int
+}
+
+///|
 fn av1_parse_color_config(
   reader : Av1BitReader,
   profile : Int,
-) -> (Int, Bool, Bool, Bool)? {
-  let high_bitdepth = match av1_u(reader, 1) {
+) -> Av1ColorConfig? {
+  let high = match reader.read(1) {
     Some(v) => v == 1
     None => return None
   }
-  let mut twelve_bit = false
-  if profile == 2 && high_bitdepth {
-    twelve_bit = match av1_u(reader, 1) {
+  let twelve = if profile == 2 && high {
+    match reader.read(1) {
       Some(v) => v == 1
       None => return None
     }
-  }
-  let bit_depth = if high_bitdepth {
-    if twelve_bit {
-      12
-    } else {
-      10
-    }
   } else {
-    8
+    false
   }
+  let bit_depth = if twelve { 12 } else if high { 10 } else { 8 }
   let monochrome = if profile == 1 {
     false
   } else {
-    match av1_u(reader, 1) {
+    match reader.read(1) {
       Some(v) => v == 1
       None => return None
     }
   }
-  let color_description_present = match av1_u(reader, 1) {
+  let desc = match reader.read(1) {
     Some(v) => v == 1
     None => return None
   }
-  if color_description_present {
-    if !av1_skip(reader, 24) {
-      return None
+  let primaries = if desc {
+    match reader.read(8) {
+      Some(v) => v
+      None => return None
     }
+  } else {
+    2
+  }
+  let transfer = if desc {
+    match reader.read(8) {
+      Some(v) => v
+      None => return None
+    }
+  } else {
+    2
+  }
+  let matrix = if desc {
+    match reader.read(8) {
+      Some(v) => v
+      None => return None
+    }
+  } else {
+    2
   }
   if monochrome {
-    if !av1_skip(reader, 1) {
-      return None
-    }
-    return Some((bit_depth, true, true, true))
-  }
-  let (subsampling_x, subsampling_y) : (Bool, Bool) = if profile == 1 {
-    (false, false)
-  } else if profile == 2 && bit_depth == 12 {
-    let sx = match av1_u(reader, 1) {
+    let full_range = match reader.read(1) {
       Some(v) => v == 1
       None => return None
     }
-    let sy = if sx {
-      match av1_u(reader, 1) {
+    return Some({
+      bit_depth,
+      monochrome,
+      subsampling_x: true,
+      subsampling_y: true,
+      full_range,
+      separate_uv_delta_q: false,
+      primaries,
+      transfer,
+      matrix,
+    })
+  }
+  let identity = primaries == 1 && transfer == 13 && matrix == 0
+  let full_range = if identity {
+    true
+  } else {
+    match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+  }
+  let (sx, sy) = if identity || profile == 1 {
+    (false, false)
+  } else if profile == 0 {
+    (true, true)
+  } else if bit_depth == 12 {
+    let x = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    let y = if x {
+      match reader.read(1) {
         Some(v) => v == 1
         None => return None
       }
     } else {
       false
     }
-    if sx && sy {
-      if !av1_skip(reader, 2) {
-        return None
-      }
-    }
-    (sx, sy)
+    (x, y)
   } else {
-    if !av1_skip(reader, 2) {
-      return None
-    }
-    (true, true)
+    (true, false)
   }
-  if !av1_skip(reader, 1) {
+  if sx && sy && reader.read(2) is None {
     return None
   }
-  Some((bit_depth, subsampling_x, subsampling_y, false))
+  let separate = match reader.read(1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  Some({
+    bit_depth,
+    monochrome,
+    subsampling_x: sx,
+    subsampling_y: sy,
+    full_range,
+    separate_uv_delta_q: separate,
+    primaries,
+    transfer,
+    matrix,
+  })
 }
 
 ///|
@@ -351,26 +415,55 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   }
   // Sequence tools preceding color_config(). Keep each flag explicit so the
   // frame stage can make a capability decision without guessing bit offsets.
-  let use128 = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let filter_intra = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let edge_filter = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let superres = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let cdef = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let restoration = match av1_u(reader, 1) { Some(v) => v == 1; None => return None }
-  let color = av1_parse_color_config(reader, profile)
-  let (bit_depth, subsampling_x, subsampling_y, monochrome) = match color {
+  let use128 = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let filter_intra = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let edge_filter = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let superres = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let cdef = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let restoration = match av1_u(reader, 1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let color = match av1_parse_color_config(reader, profile) {
     Some(v) => v
     None => return None
   }
-  if !av1_skip(reader, 1) { return None } // film_grain_params_present
+  let film_grain = match reader.read(1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  // sequence_header_obu ends with trailing_one_bit and zero padding.
+  if reader.read(1) != Some(1) {
+    return None
+  }
+  while reader.bit_pos % 8 != 0 {
+    if reader.read(1) != Some(0) {
+      return None
+    }
+  }
   Some({
     profile,
     width,
     height,
-    bit_depth,
-    monochrome,
-    subsampling_x,
-    subsampling_y,
+    bit_depth: color.bit_depth,
+    monochrome: color.monochrome,
+    subsampling_x: color.subsampling_x,
+    subsampling_y: color.subsampling_y,
     reduced_still_picture_header: true,
     use_128x128_superblock: use128,
     enable_filter_intra: filter_intra,
@@ -378,6 +471,12 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     enable_superres: superres,
     enable_cdef: cdef,
     enable_restoration: restoration,
+    full_range: color.full_range,
+    separate_uv_delta_q: color.separate_uv_delta_q,
+    film_grain_params_present: film_grain,
+    color_primaries: color.primaries,
+    transfer_characteristics: color.transfer,
+    matrix_coefficients: color.matrix,
   })
 }
 
@@ -457,6 +556,7 @@ pub fn av1_frame_info(data : Array[Byte]) -> Av1FrameInfo? {
   }
 }
 
+///|
 /// Extracts the first supported AV1 tile payload from an AVIF container.
 ///
 /// The function validates the container, reduced-still sequence header, and
@@ -476,6 +576,16 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       if c.bit_depth != 8 || c.monochrome || !c.yuv420 || c.has_alpha {
         return None
       }
+      if c.width != seq.width ||
+        c.height != seq.height ||
+        seq.full_range ||
+        (
+          seq.matrix_coefficients != 2 &&
+          seq.matrix_coefficients != 5 &&
+          seq.matrix_coefficients != 6
+        ) {
+        return None
+      }
       let frames = av1_obu_payloads(c.payload, 6)
       if frames.length() == 0 {
         return None
@@ -483,14 +593,16 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       let header = av1_parse_stage1_frame(frames[0], seq)
       match header {
         None => None
-        Some(frame) => Some({
-          width: c.width,
-          height: c.height,
-          bit_depth: c.bit_depth,
-          header_bytes: frame.header_bytes,
-          base_q_idx: frame.base_q_idx,
-          tile_payload: frame.tile_payload,
-        })
+        Some(frame) =>
+          Some({
+            width: c.width,
+            height: c.height,
+            bit_depth: c.bit_depth,
+            header_bytes: frame.header_bytes,
+            base_q_idx: frame.base_q_idx,
+            disable_cdf_update: frame.disable_cdf_update,
+            tile_payload: frame.tile_payload,
+          })
       }
     }
   }

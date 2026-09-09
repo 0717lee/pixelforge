@@ -210,7 +210,9 @@ fn walk(
     } else if typ == t_iinf {
       let version = u8(d, payload, end)
       let child_start = if version == 0 { payload + 6 } else { payload + 8 }
-      if child_start > end { raise AvifError::Invalid }
+      if child_start > end {
+        raise AvifError::Invalid
+      }
       walk(d, child_start, end, bi, out)
     }
     p = end
@@ -227,15 +229,15 @@ fn parse_av1c(_d : Array[Byte], p : Prop) -> (Int, Bool, Bool) raise AvifError {
     raise AvifError::Unsupported
   }
   let f = p.data[2].to_int()
-  let depth = if (f & 0x80) == 0 {
+  let depth = if (f & 0x40) == 0 {
     8
-  } else if (f & 0x40) != 0 {
+  } else if (f & 0x20) != 0 {
     12
   } else {
     10
   }
   // AV1C byte 2 stores monochrome at bit 4 and the two 4:2:0
-  // subsampling flags at bits 3 and 2 (ISO/IEC 14496-15 §E.3.3).
+  // subsampling flags at bits 3 and 2 (AV1 ISOBMFF binding §2.3.3).
   (depth, (f & 0x10) != 0, ((f >> 3) & 1) != 0 && ((f >> 2) & 1) != 0)
 }
 
