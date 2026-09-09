@@ -10,6 +10,8 @@
   prediction modes, transforms, alpha, and high bit depth remain staged work.
 - Added an explicit 8-bit full-range YUV420→RGBA conversion path and threaded
   the sequence `color_range` flag through the bounded decoder.
+- Added 32x32 single-tile neutral DC reconstruction with the W32 and chroma
+  transform contexts.
 
 ## 0.18.0 (2026-09-09)
 

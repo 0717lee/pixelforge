@@ -1,8 +1,9 @@
 /// First executable AV1 tile milestone.
 ///
 /// This module intentionally accepts one very small, fully specified subset:
-/// a 64x64 reduced-still key frame, one tile, DC intra prediction, and either
-/// skipped or single-DC luma residuals with all-zero chroma residuals. Entropy
+/// a 32x32 or 64x64 reduced-still key frame, one tile, DC intra prediction,
+/// and all-zero chroma residuals. The 64x64 path also accepts a single DC
+/// luma residual. Entropy
 /// symbols are decoded from the tile with the stateful MSAC reader. Other
 /// streams return None and remain eligible for later tile/transform milestones.
 
@@ -16,8 +17,8 @@ pub fn av1_decode_dc_tile(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
-  if width != 64 ||
-    height != 64 ||
+  if (width != 32 && width != 64) ||
+    width != height ||
     base_q_idx <= 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||
@@ -25,9 +26,11 @@ pub fn av1_decode_dc_tile(
     return None
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
-  let partition : Array[Int] = [
-    20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0,
-  ]
+  let partition : Array[Int] = if width == 64 {
+    [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
+  } else {
+    [18462, 20920, 23124, 27647, 28227, 29049, 29519, 30178, 31544, 32768, 0]
+  }
   let skip : Array[Int] = [31671, 32768, 0]
   let y_mode : Array[Int] = [
     15588, 17027, 19338, 20218, 20682, 21110, 21825, 23244, 24189, 28165, 29093,
@@ -37,23 +40,15 @@ pub fn av1_decode_dc_tile(
     22631, 24152, 25378, 25661, 25986, 26520, 27055, 27923, 28244, 30059, 30941,
     31961, 32768, 0,
   ]
-  let luma_zero : Array[Int] = if base_q_idx <= 20 {
-    [6308, 32768, 0]
-  } else if base_q_idx <= 60 {
-    [26584, 32768, 0]
-  } else if base_q_idx <= 120 {
-    [28573, 32768, 0]
+  let luma_zero : Array[Int] = if width == 64 {
+    if base_q_idx <= 20 { [6308, 32768, 0] } else if base_q_idx <= 60 { [26584, 32768, 0] } else if base_q_idx <= 120 { [28573, 32768, 0] } else { [31539, 32768, 0] }
   } else {
-    [31539, 32768, 0]
+    if base_q_idx <= 20 { [17920, 32768, 0] } else if base_q_idx <= 60 { [26726, 32768, 0] } else if base_q_idx <= 120 { [30669, 32768, 0] } else { [31671, 32768, 0] }
   }
-  let chroma_zero : Array[Int] = if base_q_idx <= 20 {
-    [1366, 32768, 0]
-  } else if base_q_idx <= 60 {
-    [5583, 32768, 0]
-  } else if base_q_idx <= 120 {
-    [5124, 32768, 0]
+  let chroma_zero : Array[Int] = if width == 64 {
+    if base_q_idx <= 20 { [1366, 32768, 0] } else if base_q_idx <= 60 { [5583, 32768, 0] } else if base_q_idx <= 120 { [5124, 32768, 0] } else { [4656, 32768, 0] }
   } else {
-    [4656, 32768, 0]
+    if base_q_idx <= 20 { [3778, 32768, 0] } else if base_q_idx <= 60 { [4215, 32768, 0] } else if base_q_idx <= 120 { [3648, 32768, 0] } else { [3440, 32768, 0] }
   }
   if decoder.symbol(partition) != 0 ||
     decoder.symbol(skip) != 0 ||
@@ -64,6 +59,7 @@ pub fn av1_decode_dc_tile(
   let luma_all_zero = decoder.symbol(luma_zero)
   let mut luma_value = 128
   if luma_all_zero == 0 {
+    if width != 64 { return None }
     // The first residual milestone accepts a single DC coefficient (EOB=1)
     // and rejects AC coefficients or larger EOB positions.
     let ep = decoder.symbol(av1_dc_eob1024_cdf(base_q_idx, 0))

@@ -55,3 +55,10 @@ test "reference single-DC residual envelope is parsed" {
   assert_eq((header.header_bytes, header.base_q_idx), (8, 33))
   assert_eq(header.tile_payload[0], b'\x00')
 }
+
+///|
+test "av1 decodes a 32x32 neutral tile" {
+  let image = av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 80, disable_cdf_update=true).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(31, 31), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}
