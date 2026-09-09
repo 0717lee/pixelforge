@@ -62,3 +62,28 @@ test "av1 decodes a 32x32 neutral tile" {
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
   assert_eq(image.get_pixel(31, 31), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
+
+///|
+test "av1 dc tile applies full-range conversion to a single DC residual" {
+  // The reference residual stream reconstructs Y=100 with neutral chroma.
+  // Full-range conversion therefore keeps the luma value at RGB=100,
+  // whereas the limited-range path maps it to the nearby studio-range value.
+  let image = av1_decode_dc_tile(
+    64,
+    64,
+    [b'\x00', b'\xEB', b'\xCC', b'\xD7'],
+    33,
+    full_range=true,
+  ).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x64', b'\x64', b'\x64', b'\xFF'))
+}
+
+///|
+test "av1 dc tile rejects unsupported dimensions and payload bounds" {
+  assert_true(av1_decode_dc_tile(16, 16, [b'\x2E'], 43) is None)
+  assert_true(av1_decode_dc_tile(32, 64, [b'\x2E'], 43) is None)
+  assert_true(av1_decode_dc_tile(32, 32, [], 43) is None)
+  assert_true(av1_decode_dc_tile(32, 32, [b'\x2E', b'\x2E', b'\x2E', b'\x2E', b'\x2E'], 43) is None)
+  assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 0) is None)
+  assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 256) is None)
+}
