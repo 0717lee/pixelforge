@@ -6,31 +6,30 @@
 /// symbols are decoded from the tile with the stateful MSAC reader. Other
 /// streams return None and remain eligible for later tile/transform milestones.
 
-/// Decode one EOB=1 DC coefficient from the stateful tile reader. `tx_ctx`
-/// selects the transform size context (3 for 32x32, 4 for 64x64), while
-/// `ptype` selects luma (0) or chroma (1). The result is a signed sample
-/// offset from the intra DC level 128.
-fn av1_decode_single_dc(
-  decoder : Av1SymbolDecoder,
-  base_q_idx : Int,
-  tx_ctx : Int,
-  ptype : Int,
-) -> Int? {
-  if (tx_ctx != 3 && tx_ctx != 4) || (ptype != 0 && ptype != 1) {
-    return None
+/// Mutable CDF state for one transform context. UV blocks share one context
+/// for the tile, as required by the AV1 symbol update process.
+priv struct Av1DcContext {
+  eob : Array[Int]
+  base : Array[Int]
+  br : Array[Int]
+  sign : Array[Int]
+}
+
+/// Decode an EOB=1 DC coefficient and run the exact integer inverse DCT.
+fn av1_decode_single_dc(decoder : Av1SymbolDecoder, base_q_idx : Int, tx_ctx : Int, context : Av1DcContext) -> Int? {
+  if tx_ctx != 3 && tx_ctx != 4 { return None }
+  if decoder.symbol(context.eob) != 0 { return None }
+  let mut level = decoder.symbol(context.base) + 1
+  if level > 2 {
+    let mut complete = false
+    for _ in 0..<4 {
+      if complete { continue }
+      let extra = decoder.symbol(context.br)
+      level = level + extra
+      if extra < 3 { complete = true }
+    }
   }
-  if decoder.symbol(av1_dc_eob1024_cdf(base_q_idx, ptype)) != 0 {
-    return None
-  }
-  let mut level = decoder.symbol(av1_dc_base_eob_dc_cdf(base_q_idx, tx_ctx, ptype)) + 1
-  let br = av1_dc_br_cdf(base_q_idx, ptype)
-  let mut complete = false
-  for _ in 0..<4 {
-    if complete { continue }
-    let extra = decoder.symbol(br)
-    level = level + extra
-    if extra < 3 { complete = true }
-  }
+  let sign = decoder.symbol(context.sign)
   if level > 14 {
     let mut length = 0
     let mut terminated = false
@@ -40,20 +39,20 @@ fn av1_decode_single_dc(
     }
     if !terminated { return None }
     let mut code = 1
-    for _ in 0..<(length - 1) {
-      code = (code << 1) | decoder.bool()
-    }
+    for _ in 0..<(length - 1) { code = (code << 1) | decoder.bool() }
     level = code + 14
   }
   if level > 65535 { return None }
-  let sign = decoder.symbol(av1_dc_sign_cdf(base_q_idx, ptype))
-  let dequant = level * av1_dc_quant_8(base_q_idx) / 4
-  let magnitude = if tx_ctx == 4 {
-    (dequant * 12 + 32) / 64
-  } else {
-    (dequant * 8 + 16) / 32
+  let denom = if tx_ctx == 4 { 4 } else { 2 }
+  let dq = ((level * av1_dc_quant_8(base_q_idx)) & 0xFFFFFF) / denom
+  let signed = if sign == 1 { -dq } else { dq }
+  let side = if tx_ctx == 4 { 64 } else { 32 }
+  let coeffs : Array[Int] = Array::make(side * side, 0)
+  coeffs[0] = signed
+  match av1_inverse_dct_2d(coeffs, side, side, 8) {
+    Some(residual) => Some(residual[0])
+    None => None
   }
-  Some(if sign == 1 { -magnitude } else { magnitude })
 }
 
 ///|
@@ -75,6 +74,18 @@ pub fn av1_decode_dc_tile(
     return None
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
+  let y_dc = Av1DcContext::{
+    eob: av1_dc_eob1024_cdf(base_q_idx, 0),
+    base: av1_dc_base_eob_dc_cdf(base_q_idx, 4, 0),
+    br: av1_dc_br_cdf(base_q_idx, 0),
+    sign: av1_dc_sign_cdf(base_q_idx, 0),
+  }
+  let uv_dc = Av1DcContext::{
+    eob: av1_dc_eob1024_cdf(base_q_idx, 1),
+    base: av1_dc_base_eob_dc_cdf(base_q_idx, 3, 1),
+    br: av1_dc_br_cdf(base_q_idx, 1),
+    sign: av1_dc_sign_cdf(base_q_idx, 1),
+  }
   let partition : Array[Int] = if width == 64 {
     [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
   } else {
@@ -109,7 +120,7 @@ pub fn av1_decode_dc_tile(
   let mut luma_value = 128
   if luma_all_zero == 0 {
     if width != 64 { return None }
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, 0) {
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, y_dc) {
       Some(value) => value
       None => return None
     }
@@ -118,23 +129,26 @@ pub fn av1_decode_dc_tile(
     return None
   }
   let cu = decoder.symbol(chroma_zero)
-  let cv = decoder.symbol(chroma_zero)
-  if (cu != 0 && cu != 1) || (cv != 0 && cv != 1) { return None }
   let mut u_value = 128
   if cu == 0 {
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, 1) {
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
       Some(value) => value
       None => return None
     }
     u_value = u_value + residual
+  } else if cu != 1 {
+    return None
   }
+  let cv = decoder.symbol(chroma_zero)
   let mut v_value = 128
   if cv == 0 {
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, 1) {
+    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
       Some(value) => value
       None => return None
     }
     v_value = v_value + residual
+  } else if cv != 1 {
+    return None
   }
   let y : Array[Byte] = []
   let u : Array[Byte] = []
@@ -209,6 +223,12 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
 ///|
 test "single DC helper decodes a chroma coefficient" {
   let decoder = av1_msac_new([b'\x00', b'\x00'], false)
-  let residual = av1_decode_single_dc(decoder, 33, 3, 1).unwrap()
-  assert_eq(residual, 2)
+  let context = Av1DcContext::{
+    eob: av1_dc_eob1024_cdf(33, 1),
+    base: av1_dc_base_eob_dc_cdf(33, 3, 1),
+    br: av1_dc_br_cdf(33, 1),
+    sign: av1_dc_sign_cdf(33, 1),
+  }
+  let residual = av1_decode_single_dc(decoder, 33, 3, context).unwrap()
+  assert_eq(residual, 0)
 }
