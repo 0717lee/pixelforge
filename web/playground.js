@@ -5,6 +5,7 @@
 //   * "wasm" — MoonBit compiled to a linear-memory WebAssembly module; pixels
 //              are bulk-copied into the exported memory via a Uint8Array view.
 import { apply_filter, encode_png, luma_histogram } from "./dist/web.js";
+import { browserCodecKind, decodeBrowserImage } from "./codecs.js";
 
 // Load the genuine-WASM module (no imports required). Fall back to JS if it
 // cannot be loaded for any reason.
@@ -374,7 +375,8 @@ function useImageSource(source) {
 function loadFile(file) {
   const token = ++sourceLoadToken;
   if (!file) return;
-  if (!file.type.startsWith("image/")) {
+  const browserCodec = browserCodecKind(file);
+  if (!file.type.startsWith("image/") && !browserCodec) {
     setStatus("请选择常见图片文件。", "error");
     return;
   }
@@ -383,6 +385,25 @@ function loadFile(file) {
     return;
   }
   revokeAnimationUrl();
+  if (browserCodec) {
+    setStatus(`${browserCodec.toUpperCase()} 正在由浏览器原生解码…`, "info");
+    decodeBrowserImage(file, browserCodec).then((decoded) => {
+      if (token !== sourceLoadToken) {
+        decoded.close();
+        return;
+      }
+      try {
+        useImageSource(decoded.source);
+      } finally {
+        // ImageBitmap.close() and the fallback object URL are both released
+        // only after drawImage has copied the first frame into the canvas.
+        decoded.close();
+      }
+    }).catch((error) => {
+      if (token === sourceLoadToken) setStatus(`${browserCodec.toUpperCase()} 无法解码：${error.message || error}`, "error");
+    });
+    return;
+  }
   const url = URL.createObjectURL(file);
   const isGif = file.type === "image/gif" || /\.gif$/i.test(file.name || "");
   if (isGif) {

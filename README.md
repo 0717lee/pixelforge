@@ -195,7 +195,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 
 ### 错误与边界
 
-- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode` 对格式错误或不支持的输入返回 `None`；JPEG/WebP/AVIF 适配器的能力取决于目标后端，当前没有纯 MoonBit 的 WebP/AVIF 解码器。
+- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode` 对格式错误或不支持的输入返回 `None`；核心包没有纯 MoonBit 的 WebP/AVIF 解码器，浏览器 Playground 通过 `web/codecs.js` 调用原生 WebP/AVIF 解码。
 - `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
 - 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
 - Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。

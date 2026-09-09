@@ -38,7 +38,7 @@ fn print_help() -> Unit {
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
   println("")
-  println("Formats: png, qoi, bmp, gif")
+  println("Formats: png, qoi, bmp, gif, jpeg, webp, avif, tiff")
   println("Pipeline ops: grayscale,invert,brightness:N,contrast:N,blur,sharpen,emboss,edges,sobel,sepia,threshold:N,pixelate:N,median,histogram-equalize,flip-horizontal,flip-vertical,posterize:N,gamma:N,vignette:N,scharr,canny:N,otsu,dither-mono")
   println("File mode writes converted bytes to --output; hex mode prints bytes as hexadecimal.")
 }
@@ -303,6 +303,17 @@ fn detect_format(bytes : Array[Byte]) -> String {
     bytes[1] == b'I' &&
     bytes[2] == b'F' {
     "gif"
+  } else if bytes.length() >= 2 && bytes[0] == b'\xFF' && bytes[1] == b'\xD8' {
+    "jpeg"
+  } else if bytes.length() >= 12 && bytes[0] == b'R' && bytes[1] == b'I' && bytes[2] == b'F' && bytes[3] == b'F' &&
+    bytes[8] == b'W' && bytes[9] == b'E' && bytes[10] == b'B' && bytes[11] == b'P' {
+    "webp"
+  } else if bytes.length() >= 8 && bytes[4] == b'f' && bytes[5] == b't' && bytes[6] == b'y' && bytes[7] == b'p' {
+    "avif"
+  } else if bytes.length() >= 4 &&
+    ((bytes[0] == b'I' && bytes[1] == b'I' && bytes[2] == b'*' && bytes[3] == b'\x00') ||
+      (bytes[0] == b'M' && bytes[1] == b'M' && bytes[2] == b'\x00' && bytes[3] == b'*')) {
+    "tiff"
   } else {
     abort("pixelforge: unknown image signature")
   }
@@ -327,6 +338,16 @@ fn decode_image(format : String, bytes : Array[Byte]) -> @pixelforge.Image {
       @pixelforge.gif_decode(bytes).unwrap_or_else(() => {
         abort("pixelforge: GIF decode failed")
       })
+    "jpeg" =>
+      @pixelforge.jpeg_decode(bytes).unwrap_or_else(() => {
+        abort("pixelforge: JPEG decode failed")
+      })
+    "tiff" =>
+      @pixelforge.tiff_decode(bytes).unwrap_or_else(() => {
+        abort("pixelforge: TIFF decode failed or uses unsupported features")
+      })
+    "webp" => abort("pixelforge: WebP decode is not available on the native CLI")
+    "avif" => abort("pixelforge: AVIF decode is not available on the native CLI")
     _ => abort("pixelforge: unsupported input format \{format}")
   }
 }
@@ -338,6 +359,10 @@ fn encode_image(format : String, image : @pixelforge.Image) -> Array[Byte] {
     "qoi" => @pixelforge.qoi_encode(image)
     "bmp" => @pixelforge.bmp_encode(image, true)
     "gif" => @pixelforge.gif_encode(image)
+    "jpeg" => @pixelforge.jpeg_encode(image, 90)
+    "webp" => @pixelforge.webp_encode(image)
+    "avif" => @pixelforge.avif_encode(image)
+    "tiff" => abort("pixelforge: TIFF encoding is not supported")
     _ => abort("pixelforge: unsupported output format {format}")
   }
 }

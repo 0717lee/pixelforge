@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.17.1 (2026-09-09)
+## 0.17.2 (2026-09-09)
 
 - Added the portable `cmd/cli` codec utility with `info` and `convert` commands.
 - Added deterministic hexadecimal input/output so the utility works on native,
@@ -23,8 +23,10 @@
   decoder for uncompressed chunky 8-bit grayscale/RGB/RGBA strips.
 - Fixed target-specific AVIF adapter selection so wasm-gc and native web builds
   compile without importing the browser-only encoder.
+- Added browser-native WebP/AVIF decode adapters with `createImageBitmap` and
+  HTML image fallback, wired into the Playground upload path.
 
-## 0.17.0
+## 0.17.1
 
 ### 修复与工程化
 - Playground 的 Worker 渲染加入代际校验，避免切换图片或线程模式时旧结果覆盖新结果。
