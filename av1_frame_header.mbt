@@ -62,7 +62,6 @@ pub fn av1_parse_stage1_frame(
     sequence.monochrome ||
     !sequence.subsampling_x ||
     !sequence.subsampling_y ||
-    sequence.use_128x128_superblock ||
     !sequence.reduced_still_picture_header ||
     sequence.separate_uv_delta_q ||
     sequence.film_grain_params_present {

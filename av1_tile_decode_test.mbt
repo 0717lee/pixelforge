@@ -99,3 +99,15 @@ test "av1 dc tile reconstructs a non-neutral chroma DC residual" {
   ).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x8A', b'\x7C', b'\x8C', b'\xFF'))
 }
+
+///|
+test "external use128 neutral fixture" {
+  let stream : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE',
+    b'\x00', b'\x08', b'\x32', b'\x06', b'\x17', b'\x80', b'\x00', b'\x00',
+    b'\x40', b'\x2E',
+  ]
+  assert_true(av1_parse_stage1_frame([b'\x17', b'\x80', b'\x00', b'\x00', b'\x40', b'\x2E'], av1_sequence_info(stream).unwrap()) is Some(_))
+  let image = av1_decode(stream).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}
