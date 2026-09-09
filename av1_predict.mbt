@@ -10,7 +10,7 @@ pub fn av1_yuv420_to_rgba(
   u : Array[Byte],
   v : Array[Byte],
 ) -> Image? {
-  av1_yuv420_to_rgba_range(width, height, y, u, v, full_range=false)
+  av1_yuv420_to_rgba_color(width, height, y, u, v, full_range=false, matrix_coefficients=6)
 }
 
 /// Converts 8-bit planar YUV420 using the AV1 color range flag.
@@ -21,6 +21,20 @@ pub fn av1_yuv420_to_rgba_range(
   u : Array[Byte],
   v : Array[Byte],
   full_range? : Bool = false,
+) -> Image? {
+  av1_yuv420_to_rgba_color(width, height, y, u, v, full_range=full_range, matrix_coefficients=6)
+}
+
+/// Converts 8-bit planar YUV420 using color range and AV1 matrix coefficients.
+/// Matrix 1 uses BT.709; matrices 5, 6, and 2 use the BT.601-family constants.
+pub fn av1_yuv420_to_rgba_color(
+  width : Int,
+  height : Int,
+  y : Array[Byte],
+  u : Array[Byte],
+  v : Array[Byte],
+  full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
 ) -> Image? {
   if width <= 0 || height <= 0 || width % 2 != 0 || height % 2 != 0 {
     return None
@@ -37,11 +51,25 @@ pub fn av1_yuv420_to_rgba_range(
       let y0 = y[yi].to_int()
       let u0 = u[ci].to_int() - 128
       let v0 = v[ci].to_int() - 128
-      let (r, g, b) = if full_range {
+      let bt709 = matrix_coefficients == 1
+      let (r, g, b) = if full_range && bt709 {
+        (
+          (256 * y0 + 402 * v0 + 128) / 256,
+          (256 * y0 - 48 * u0 - 120 * v0 + 128) / 256,
+          (256 * y0 + 475 * u0 + 128) / 256,
+        )
+      } else if full_range {
         (
           (256 * y0 + 359 * v0 + 128) / 256,
           (256 * y0 - 88 * u0 - 183 * v0 + 128) / 256,
           (256 * y0 + 454 * u0 + 128) / 256,
+        )
+      } else if bt709 {
+        let c = y0 - 16
+        (
+          (298 * c + 459 * v0 + 128) / 256,
+          (298 * c - 55 * u0 - 136 * v0 + 128) / 256,
+          (298 * c + 541 * u0 + 128) / 256,
         )
       } else {
         let c = y0 - 16

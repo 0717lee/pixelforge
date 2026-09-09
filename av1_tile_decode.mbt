@@ -14,6 +14,7 @@ pub fn av1_decode_dc_tile(
   base_q_idx : Int,
   disable_cdf_update? : Bool = false,
   full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
 ) -> Image? {
   if width != 64 ||
     height != 64 ||
@@ -129,7 +130,7 @@ pub fn av1_decode_dc_tile(
     u.push(b'\x80')
     v.push(b'\x80')
   }
-  av1_yuv420_to_rgba_range(width, height, y, u, v, full_range=full_range)
+  av1_yuv420_to_rgba_color(width, height, y, u, v, full_range=full_range, matrix_coefficients=matrix_coefficients)
 }
 
 ///|
@@ -144,6 +145,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   let frames = av1_obu_payloads(data, 6)
   if seq.full_range ||
     (
+      seq.matrix_coefficients != 1 &&
       seq.matrix_coefficients != 2 &&
       seq.matrix_coefficients != 5 &&
       seq.matrix_coefficients != 6
@@ -164,6 +166,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         frame.base_q_idx,
         disable_cdf_update=frame.disable_cdf_update,
         full_range=seq.full_range,
+        matrix_coefficients=seq.matrix_coefficients,
       )
   }
 }
@@ -183,6 +186,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         value.base_q_idx,
         disable_cdf_update=value.disable_cdf_update,
         full_range=value.full_range,
+        matrix_coefficients=value.matrix_coefficients,
       )
   }
 }

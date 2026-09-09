@@ -53,6 +53,7 @@ pub(all) struct Av1Stage1Input {
   base_q_idx : Int
   disable_cdf_update : Bool
   full_range : Bool
+  matrix_coefficients : Int
   tile_payload : Array[Byte]
 }
 
@@ -580,6 +581,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       if c.width != seq.width ||
         c.height != seq.height ||
         (
+          seq.matrix_coefficients != 1 &&
           seq.matrix_coefficients != 2 &&
           seq.matrix_coefficients != 5 &&
           seq.matrix_coefficients != 6
@@ -602,6 +604,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             base_q_idx: frame.base_q_idx,
             disable_cdf_update: frame.disable_cdf_update,
             full_range: seq.full_range,
+            matrix_coefficients: seq.matrix_coefficients,
             tile_payload: frame.tile_payload,
           })
       }

@@ -4,7 +4,7 @@ package "0717lee/pixelforge"
 // Values
 pub fn av1_decode(Array[Byte]) -> Image?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
@@ -17,6 +17,8 @@ pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo) -> Av1FrameHeaderInf
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
 pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Image?
+
+pub fn av1_yuv420_to_rgba_color(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
 pub fn av1_yuv420_to_rgba_range(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool) -> Image?
 
@@ -144,6 +146,7 @@ pub(all) struct Av1Stage1Input {
   base_q_idx : Int
   disable_cdf_update : Bool
   full_range : Bool
+  matrix_coefficients : Int
   tile_payload : Array[Byte]
 }
 
