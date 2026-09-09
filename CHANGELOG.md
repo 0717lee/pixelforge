@@ -6,6 +6,8 @@
   4:2:0 frames with DC intra prediction, single-DC luma residuals, and
   all-zero chroma residuals. The path is
   validated against an external libaom flat-frame bitstream and emits RGBA.
+- Wired the normative integer inverse-DCT path into the bounded single-DC
+  reconstruction and accepted 128x128-superblock 64x64 frames.
 - Added `avif_stage1_input()` for validated AVIF-to-tile handoff; other AV1
   prediction modes, transforms, alpha, and high bit depth remain staged work.
 - Added an explicit 8-bit full-range YUV420→RGBA conversion path and threaded
