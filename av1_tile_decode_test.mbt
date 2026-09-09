@@ -87,3 +87,15 @@ test "av1 dc tile rejects unsupported dimensions and payload bounds" {
   assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 0) is None)
   assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 256) is None)
 }
+
+///|
+test "av1 dc tile reconstructs a non-neutral chroma DC residual" {
+  let image = av1_decode_dc_tile(
+    32,
+    32,
+    [b'\x2B', b'\x23', b'\x00', b'\x00'],
+    80,
+    disable_cdf_update=true,
+  ).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x8A', b'\x7C', b'\x8C', b'\xFF'))
+}
