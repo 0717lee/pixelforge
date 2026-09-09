@@ -34,6 +34,25 @@ fn tiff_lzw_fixture_bytes() -> Array[Byte] {
 }
 
 ///|
+fn make_gray_tiff(width : Int, height : Int, compression : Int, predictor : Int, payload : Array[Byte]) -> Array[Byte] {
+  let data : Array[Byte] = Array::make(134 + payload.length(), b'\x00')
+  data[0] = b'I'; data[1] = b'I'; put_tiff16(data, 2, 42); put_tiff32(data, 4, 8); put_tiff16(data, 8, 10)
+  let entry = fn(index : Int) -> Int { 10 + index * 12 }
+  put_tiff16(data, entry(0), 256); put_tiff16(data, entry(0) + 2, 4); put_tiff32(data, entry(0) + 4, 1); put_tiff32(data, entry(0) + 8, width)
+  put_tiff16(data, entry(1), 257); put_tiff16(data, entry(1) + 2, 4); put_tiff32(data, entry(1) + 4, 1); put_tiff32(data, entry(1) + 8, height)
+  put_tiff16(data, entry(2), 258); put_tiff16(data, entry(2) + 2, 3); put_tiff32(data, entry(2) + 4, 1); put_tiff16(data, entry(2) + 8, 8)
+  put_tiff16(data, entry(3), 259); put_tiff16(data, entry(3) + 2, 3); put_tiff32(data, entry(3) + 4, 1); put_tiff16(data, entry(3) + 8, compression)
+  put_tiff16(data, entry(4), 262); put_tiff16(data, entry(4) + 2, 3); put_tiff32(data, entry(4) + 4, 1); put_tiff16(data, entry(4) + 8, 1)
+  put_tiff16(data, entry(5), 273); put_tiff16(data, entry(5) + 2, 4); put_tiff32(data, entry(5) + 4, 1); put_tiff32(data, entry(5) + 8, 134)
+  put_tiff16(data, entry(6), 278); put_tiff16(data, entry(6) + 2, 4); put_tiff32(data, entry(6) + 4, 1); put_tiff32(data, entry(6) + 8, height)
+  put_tiff16(data, entry(7), 279); put_tiff16(data, entry(7) + 2, 4); put_tiff32(data, entry(7) + 4, 1); put_tiff32(data, entry(7) + 8, payload.length())
+  put_tiff16(data, entry(8), 284); put_tiff16(data, entry(8) + 2, 3); put_tiff32(data, entry(8) + 4, 1); put_tiff16(data, entry(8) + 8, 1)
+  put_tiff16(data, entry(9), 317); put_tiff16(data, entry(9) + 2, 3); put_tiff32(data, entry(9) + 4, 1); put_tiff16(data, entry(9) + 8, predictor)
+  for i in 0..<payload.length() { data[134 + i] = payload[i] }
+  data
+}
+
+///|
 test "tiff_decode reads a baseline little-endian rgb strip" {
   let data : Array[Byte] = Array::make(131, b'\x00')
   data[0] = b'I'; data[1] = b'I'; put_tiff16(data, 2, 42); put_tiff32(data, 4, 8)
@@ -159,4 +178,18 @@ test "tiff_decode reads a tiled grayscale image" {
   let image = tiff_decode(data).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 12)
   assert_eq(image.get_pixel(1, 0).0.to_int(), 34)
+}
+
+///|
+test "tiff_decode applies horizontal predictor" {
+  let image = tiff_decode(make_gray_tiff(2, 1, 1, 2, [b'\x0A', b'\x05'])).unwrap()
+  assert_eq(image.get_pixel(0, 0).0.to_int(), 10)
+  assert_eq(image.get_pixel(1, 0).0.to_int(), 15)
+}
+
+///|
+test "tiff_decode inflates a zlib Deflate strip" {
+  let zlib : Array[Byte] = [b'\x78', b'\x01', b'\x01', b'\x01', b'\x00', b'\xFE', b'\xFF', b'\x2A', b'\x00', b'\x2B', b'\x00', b'\x2B']
+  let image = tiff_decode(make_gray_tiff(1, 1, 8, 1, zlib)).unwrap()
+  assert_eq(image.get_pixel(0, 0).0.to_int(), 42)
 }

@@ -3,7 +3,7 @@
 /// Supports little/big-endian classic TIFF (magic 42), multiple strips, tiled
 /// images, PackBits/LZW compression, and a bounded BigTIFF subset. Samples are
 /// chunky 8-bit grayscale/RGB/RGBA with photometric interpretation 0/1 or 2.
-/// Deflate compression, palettes, predictors and BigTIFF files requiring
+/// palettes and BigTIFF files requiring
 /// offsets above the host Int range return `None`.
 
 fn tiff_u16(data : Array[Byte], p : Int, little : Bool) -> Int {
@@ -145,6 +145,17 @@ fn tiff_write_pixel(out : Image, dst : Int, raw : Array[Byte], src : Int, sample
   }
 }
 
+fn tiff_apply_horizontal_predictor(raw : Array[Byte], row_bytes : Int, rows : Int, samples : Int) -> Bool {
+  if row_bytes <= 0 || rows < 0 || samples <= 0 || row_bytes < samples { return false }
+  for y in 0..<rows {
+    let base = y * row_bytes
+    for x in samples..<row_bytes {
+      raw[base + x] = ((raw[base + x].to_int() + raw[base + x - samples].to_int()) & 255).to_byte()
+    }
+  }
+  true
+}
+
 fn tiff_bits_ok(
   data : Array[Byte],
   entry : Int,
@@ -178,6 +189,7 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
   let mut width = 0
   let mut height = 0
   let mut compression = 1
+  let mut predictor = 1
   let mut photometric = 2
   let mut samples = 0
   let mut strip_offsets : Array[Int] = []
@@ -205,6 +217,7 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       277 => match tiff_entry_value(data, entry, kind, n, little) { Some(v) => samples = v; None => () }
       278 => match tiff_entry_value(data, entry, kind, n, little) { Some(v) => rows_per_strip = v; None => () }
       279 => match tiff_values(data, entry, kind, n, little) { Some(v) => strip_byte_counts = v; None => () }
+      317 => match tiff_entry_value(data, entry, kind, n, little) { Some(v) => predictor = v; None => () }
       322 => match tiff_entry_value(data, entry, kind, n, little) { Some(v) => tile_width = v; None => () }
       323 => match tiff_entry_value(data, entry, kind, n, little) { Some(v) => tile_height = v; None => () }
       324 => match tiff_values(data, entry, kind, n, little) { Some(v) => tile_offsets = v; None => () }
@@ -213,7 +226,8 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       _ => ()
     }
   }
-  if width <= 0 || height <= 0 || (compression != 1 && compression != 5 && compression != 32773) || (photometric != 0 && photometric != 1 && photometric != 2) {
+  if width <= 0 || height <= 0 || (compression != 1 && compression != 5 && compression != 8 && compression != 32773) ||
+    (predictor != 1 && predictor != 2) || (photometric != 0 && photometric != 1 && photometric != 2) {
     return None
   }
   if width > MAX_IMAGE_PIXELS / height { return None }
@@ -241,8 +255,12 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
         tiff_packbits(data, tile_offsets[tile], tile_byte_counts[tile], tile_expected)
       } else if compression == 5 {
         tiff_lzw(data, tile_offsets[tile], tile_byte_counts[tile], tile_expected)
+      } else if compression == 8 {
+        let inflated = zlib_inflate(data, tile_offsets[tile], tile_offsets[tile] + tile_byte_counts[tile])
+        match inflated { Some(v) if v.length() == tile_expected => Some(v); _ => None }
       } else { None }
       let raw = match raw { Some(v) => v; None => return None }
+      if predictor == 2 && !tiff_apply_horizontal_predictor(raw, tile_width * samples, tile_height, samples) { return None }
       let tx = tile % tiles_x; let ty = tile / tiles_x
       let actual_width = if tx * tile_width + tile_width > width { width - tx * tile_width } else { tile_width }
       let actual_height = if ty * tile_height + tile_height > height { height - ty * tile_height } else { tile_height }
@@ -277,10 +295,14 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       tiff_packbits(data, strip_offsets[strip], strip_byte_counts[strip], expected)
     } else if compression == 5 {
       tiff_lzw(data, strip_offsets[strip], strip_byte_counts[strip], expected)
+    } else if compression == 8 {
+      let inflated = zlib_inflate(data, strip_offsets[strip], strip_offsets[strip] + strip_byte_counts[strip])
+      match inflated { Some(v) if v.length() == expected => Some(v); _ => None }
     } else {
       None
     }
     let raw = match raw { Some(bytes) => bytes; None => return None }
+    if predictor == 2 && !tiff_apply_horizontal_predictor(raw, row_bytes, strip_rows, samples) { return None }
     for p in 0..<expected {
       let src = p
       let dst = ((row * width * samples + p) / samples) * 4
