@@ -305,6 +305,11 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   if !reduced {
     return None
   }
+  // reduced_still_picture_header carries operating_point_idc=0 and a
+  // five-bit seq_level_idx before the frame dimension fields.
+  if !av1_skip(reader, 5) {
+    return None
+  }
   let width_bits = match av1_u(reader, 4) {
     Some(v) => v + 1
     None => return None
@@ -326,11 +331,17 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   if width <= 0 || height <= 0 || width > 65536 || height > 65536 {
     return None
   }
+  // Sequence tools preceding color_config().  Stage one accepts the values
+  // but keeps them bounded; the frame parser will reject enabled filters or
+  // super-resolution until their syntax is implemented.
+  if !av1_skip(reader, 3) { return None } // use128x128, filter_intra, edge_filter
+  if !av1_skip(reader, 3) { return None } // superres, CDEF, restoration
   let color = av1_parse_color_config(reader, profile)
   let (bit_depth, subsampling_x, subsampling_y, monochrome) = match color {
     Some(v) => v
     None => return None
   }
+  if !av1_skip(reader, 1) { return None } // film_grain_params_present
   Some({
     profile,
     width,
