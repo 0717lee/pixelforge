@@ -29,6 +29,18 @@ test "av1 decodes the reference flat reduced-still stream end to end" {
 }
 
 ///|
+test "av1 decodes a single DC residual from the reference solid-Y stream" {
+  let stream : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0',
+    b'\x08', b'\x32', b'\x0C', b'\x12', b'\x10', b'\x00', b'\x00', b'\x40', b'\x00',
+    b'\x00', b'\x00', b'\x00', b'\xEB', b'\xCC', b'\xD7',
+  ]
+  let image = av1_decode(stream).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x62', b'\x62', b'\x62', b'\xFF'))
+  assert_eq(image.get_pixel(63, 63), (b'\x62', b'\x62', b'\x62', b'\xFF'))
+}
+
+///|
 test "reference single-DC residual envelope is parsed" {
   let sequence = av1_sequence_info([
     b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',

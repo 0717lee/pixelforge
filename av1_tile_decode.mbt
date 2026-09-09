@@ -1,11 +1,10 @@
 /// First executable AV1 tile milestone.
 ///
 /// This module intentionally accepts one very small, fully specified subset:
-/// a 64x64 reduced-still key frame, one tile, DC intra prediction, and skipped
-/// (all-zero) luma/chroma residuals. The entropy symbols are decoded from the
-/// tile with the stateful MSAC reader; the uniform 128 sample is the AV1 DC
-/// predictor for a frame with no available neighbours. Other streams return
-/// None and remain eligible for later tile/transform milestones.
+/// a 64x64 reduced-still key frame, one tile, DC intra prediction, and either
+/// skipped or single-DC luma residuals with all-zero chroma residuals. Entropy
+/// symbols are decoded from the tile with the stateful MSAC reader. Other
+/// streams return None and remain eligible for later tile/transform milestones.
 
 ///|
 pub fn av1_decode_dc_tile(
@@ -19,7 +18,8 @@ pub fn av1_decode_dc_tile(
     height != 64 ||
     base_q_idx <= 0 ||
     base_q_idx > 255 ||
-    tile_payload.length() == 0 {
+    tile_payload.length() == 0 ||
+    tile_payload.length() > 4 {
     return None
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
@@ -56,17 +56,73 @@ pub fn av1_decode_dc_tile(
   if decoder.symbol(partition) != 0 ||
     decoder.symbol(skip) != 0 ||
     decoder.symbol(y_mode) != 0 ||
-    decoder.symbol(uv_mode) != 0 ||
-    decoder.symbol(luma_zero) != 1 ||
-    decoder.symbol(chroma_zero) != 1 ||
-    decoder.symbol(chroma_zero) != 1 {
+    decoder.symbol(uv_mode) != 0 {
+    return None
+  }
+  let luma_all_zero = decoder.symbol(luma_zero)
+  let mut luma_value = 128
+  if luma_all_zero == 0 {
+    // The first residual milestone accepts a single DC coefficient (EOB=1)
+    // and rejects AC coefficients or larger EOB positions.
+    let ep = decoder.symbol(av1_dc_eob1024_cdf(base_q_idx, 0))
+    if ep != 0 {
+      return None
+    }
+    let base_level = decoder.symbol(av1_dc_base_eob_dc_cdf(base_q_idx, 4, 0)) +
+      1
+    let mut level = base_level
+    let br = av1_dc_br_cdf(base_q_idx, 0)
+    let mut complete = false
+    for _ in 0..<4 {
+      if complete {
+        continue
+      }
+      let extra = decoder.symbol(br)
+      level = level + extra
+      if extra < 3 {
+        complete = true
+      }
+    }
+    if level > 14 {
+      // coeff_base_range is exhausted: consume the unary Exp-Golomb tail.
+      let mut length = 0
+      let mut terminated = false
+      while length < 32 && !terminated {
+        length = length + 1
+        terminated = decoder.bool() == 1
+      }
+      if !terminated {
+        return None
+      }
+      let mut code = 1
+      for _ in 0..<(length - 1) {
+        code = (code << 1) | decoder.bool()
+      }
+      level = code + 14
+    }
+    if level > 65535 {
+      return None
+    }
+    let sign = decoder.symbol(av1_dc_sign_cdf(base_q_idx, 0))
+    let dequant = level * av1_dc_quant_8(base_q_idx) / 4
+    // Integer DCT64's DC basis reduces to this normalization after the AV1
+    // row and column shifts.
+    let magnitude = (dequant * 12 + 32) / 64
+    luma_value = if sign == 1 { 128 - magnitude } else { 128 + magnitude }
+  } else if luma_all_zero != 1 {
+    return None
+  }
+  let cu = decoder.symbol(chroma_zero)
+  let cv = decoder.symbol(chroma_zero)
+  if cu != 1 || cv != 1 {
     return None
   }
   let y : Array[Byte] = []
   let u : Array[Byte] = []
   let v : Array[Byte] = []
+  let luma = clamp_byte(luma_value)
   for _ in 0..<(width * height) {
-    y.push(b'\x80')
+    y.push(luma)
   }
   for _ in 0..<(width / 2 * (height / 2)) {
     u.push(b'\x80')

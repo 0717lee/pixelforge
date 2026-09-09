@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Added a pure MoonBit single-tile AV1 path for 64x64 reduced-still, 8-bit
-  4:2:0 frames with DC intra prediction and all-zero residuals. The path is
+  4:2:0 frames with DC intra prediction, single-DC luma residuals, and
+  all-zero chroma residuals. The path is
   validated against an external libaom flat-frame bitstream and emits RGBA.
 - Added `avif_stage1_input()` for validated AVIF-to-tile handoff; other AV1
   prediction modes, transforms, alpha, and high bit depth remain staged work.
