@@ -49,7 +49,7 @@
 - **图像质量指标**：`mse()` / `psnr()` 比较 RGBA 四通道；`luma_mse()` / `ssim()` 使用 Rec.601 亮度并忽略 alpha。
 - **局部阈值与区域统计**：`sauvola()` / `adaptive_mean()` 使用积分图处理局部窗口；`regionprops()` 返回连通域面积、边界框和质心。
 - **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现；测试覆盖正常、边界和畸形输入（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
-- **核心库零第三方依赖**：图像处理包只使用 `moonbitlang/core`；native CLI 的文件模式单独使用官方 `moonbitlang/x/fs`。
+- **纯 MoonBit 核心处理**：图像处理算子使用 `moonbitlang/core`；部分格式适配使用 `mizchi/image`，native CLI 的文件模式使用官方 `moonbitlang/x/fs`。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，GIF 保持动画预览，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
 
@@ -197,7 +197,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 
 ### 错误与边界
 
-- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode` 对格式错误或不支持的输入返回 `None`；核心包仍没有纯 MoonBit 的 AVIF 解码器，浏览器 Playground 通过 `web/codecs.js` 调用原生 WebP/AVIF 解码。
+- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode`、`avif_decode` 对格式错误或不支持的输入返回 `None`；`avif_decode` 当前覆盖受限的单 tile DC 路径，native CLI 已调用该纯 MoonBit 实现。浏览器 Playground 继续通过 `web/codecs.js` 提供浏览器支持的 WebP/AVIF 解码。
 - `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
 - 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
 - Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。

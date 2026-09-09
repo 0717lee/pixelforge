@@ -12,6 +12,7 @@
   the sequence `color_range` flag through the bounded decoder.
 - Added 32x32 single-tile neutral DC reconstruction with the W32 and chroma
   transform contexts.
+- Enabled native CLI AVIF input through the bounded pure MoonBit decoder.
 
 ## 0.18.0 (2026-09-09)
 
