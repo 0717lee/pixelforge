@@ -36,18 +36,21 @@ pub fn av1_yuv420_to_rgba_color(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
-  if width <= 0 || height <= 0 || width % 2 != 0 || height % 2 != 0 {
+  if width <= 0 || height <= 0 {
     return None
   }
-  if y.length() != width * height || u.length() != (width / 2) * (height / 2) ||
-    v.length() != (width / 2) * (height / 2) {
+  let chroma_width = (width + 1) / 2
+  let chroma_height = (height + 1) / 2
+  if y.length() != width * height ||
+    u.length() != chroma_width * chroma_height ||
+    v.length() != chroma_width * chroma_height {
     return None
   }
   let out = Image::new(width, height)
   for yy in 0..<height {
     for xx in 0..<width {
       let yi = yy * width + xx
-      let ci = (yy / 2) * (width / 2) + xx / 2
+      let ci = (yy / 2) * chroma_width + xx / 2
       let y0 = y[yi].to_int()
       let u0 = u[ci].to_int() - 128
       let v0 = v[ci].to_int() - 128

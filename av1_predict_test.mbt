@@ -54,3 +54,17 @@ test "av1 yuv420 matrix coefficients change chroma reconstruction" {
   assert_eq(bt601.get_pixel(0, 0), (b'\xFF', b'\x53', b'\x00', b'\xFF'))
   assert_eq(bt709.get_pixel(0, 0), (b'\xFF', b'\x5F', b'\x00', b'\xFF'))
 }
+
+///|
+test "av1 yuv420 accepts odd dimensions with ceil chroma planes" {
+  let image = av1_yuv420_to_rgba_color(
+    3,
+    3,
+    [b'\x80', b'\x80', b'\x80', b'\x80', b'\x80', b'\x80', b'\x80', b'\x80', b'\x80'],
+    [b'\x80', b'\x80', b'\x80', b'\x80'],
+    [b'\x80', b'\x80', b'\x80', b'\x80'],
+  ).unwrap()
+  assert_eq(image.width, 3)
+  assert_eq(image.height, 3)
+  assert_eq(image.get_pixel(2, 2), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}
