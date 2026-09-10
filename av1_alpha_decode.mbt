@@ -88,3 +88,16 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
   }
   av1_decode_alpha(payload)
 }
+
+/// Compose a decoded alpha plane onto an RGBA image without changing RGB.
+pub fn av1_apply_alpha(image : Image, alpha : Array[Byte]) -> Image? {
+  if alpha.length() != image.width * image.height { return None }
+  let out = Image::new(image.width, image.height)
+  for y in 0..<image.height {
+    for x in 0..<image.width {
+      let p = image.get_pixel(x, y)
+      out.set_pixel(x, y, p.0, p.1, p.2, alpha[y * image.width + x])
+    }
+  }
+  Some(out)
+}

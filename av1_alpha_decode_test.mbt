@@ -10,5 +10,10 @@ test "monochrome alpha OBU reaches pure pixel decoder" {
   assert_eq(alpha[0], b'\x80')
   assert_eq(alpha[4095], b'\x80')
   assert_true(avif_decode_alpha([b'\x00']) is None)
+  let rgb = Image::new(2, 2)
+  rgb.set_pixel(0, 0, b'\x10', b'\x20', b'\x30', b'\xFF')
+  let composed = av1_apply_alpha(rgb, [b'\x00', b'\x7F', b'\xFF', b'\x40']).unwrap()
+  assert_eq(composed.get_pixel(0, 0), (b'\x10', b'\x20', b'\x30', b'\x00'))
+  assert_eq(composed.get_pixel(1, 0).3, b'\x7F')
 }
 

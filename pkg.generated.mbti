@@ -16,6 +16,8 @@ pub const AV1_INTRA_SMOOTH_V : Int = 10
 
 pub const AV1_INTRA_V : Int = 1
 
+pub fn av1_apply_alpha(Image, Array[Byte]) -> Image?
+
 pub fn av1_coeff_base_default(Int, Int, Int, Int) -> Array[Int]
 
 pub fn av1_coeff_base_eob_default(Int, Int, Int, Int) -> Array[Int]
