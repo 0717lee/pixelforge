@@ -159,11 +159,28 @@ pub fn av1_decode_dc_tile(
   } else {
     [3440, 32768, 0]
   }
-  if decoder.symbol(partition) != 0 ||
-    decoder.symbol(skip) != 0 ||
-    decoder.symbol(y_mode) != 0 ||
-    decoder.symbol(uv_mode) != 0 {
+  if decoder.symbol(partition) != 0 || decoder.symbol(skip) != 0 {
     return None
+  }
+  let y_mode_symbol = decoder.symbol(y_mode)
+  let uv_mode_symbol = decoder.symbol(uv_mode)
+  if uv_mode_symbol != 0 {
+    return None
+  }
+  let y_prediction = match
+    av1_intra_predict(
+      y_mode_symbol,
+      width,
+      height,
+      [],
+      [],
+      0,
+      8,
+      have_above=false,
+      have_left=false,
+    ) {
+    Some(value) => value
+    None => return None
   }
   let luma_all_zero = decoder.symbol(luma_zero)
   let mut y_residual : Array[Int] = Array::make(width * height, 0)
@@ -233,8 +250,8 @@ pub fn av1_decode_dc_tile(
   let y : Array[Byte] = []
   let u : Array[Byte] = []
   let v : Array[Byte] = []
-  for residual in y_residual {
-    y.push(clamp_byte(128 + residual))
+  for i in 0..<y_residual.length() {
+    y.push(clamp_byte(y_prediction[i] + y_residual[i]))
   }
   for i in 0..<(chroma_size * chroma_size) {
     u.push(clamp_byte(128 + u_residual[i]))
