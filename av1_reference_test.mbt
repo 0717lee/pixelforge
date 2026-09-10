@@ -116,5 +116,7 @@ test "external libaom AC cosine luma" {
   assert_true(actual.get_pixel(0, 0).0 > actual.get_pixel(63, 0).0)
   assert_true(actual.get_pixel(0, 0).0 != actual.get_pixel(32, 0).0)
   assert_eq(actual.get_pixel(0, 0).0, b'\x8E')
+  assert_eq(actual.get_pixel(32, 0).0, b'\x82')
+  assert_eq(actual.get_pixel(63, 0).0, b'\x77')
   assert_eq(actual.get_pixel(0, 0), actual.get_pixel(0, 63))
 }
