@@ -22,6 +22,8 @@
   `auxC`) and their `iloc` extents; alpha pixel reconstruction remains staged.
 - Added pure MoonBit monochrome 8-bit alpha tile decoding and four-block plane
   reconstruction helpers for the next AV1 partition stage.
+- Added validated 10-bit reduced-still frame-envelope parsing; high-bit-depth
+  coefficient entropy and pixel reconstruction remain the next stage.
 
 ## 0.18.0 (2026-09-09)
 
