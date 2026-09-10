@@ -40,7 +40,7 @@ pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock?
 
 pub fn av1_decode_coeffs_64x64(Array[Byte], Int, Int) -> Array[Int]?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int) -> Image?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
@@ -56,7 +56,7 @@ pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
 pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
 
-pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool) -> Av1FrameHeaderInfo?
+pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool) -> Av1FrameHeaderInfo?
 
 pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbPartitionNode]
 
