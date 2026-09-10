@@ -89,3 +89,20 @@ test "av1 parses the real 8-bit 4:2:0 stage-one sample" {
   let decoded = av1_decode(stream)
   assert_true(decoded is Some(_))
 }
+
+///|
+test "av1 accepts a validated 10-bit reduced-still frame envelope" {
+  let stream : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x08', b'\x08',
+    b'\x32', b'\x13', b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03', b'\xCE', b'\x04',
+    b'\xB9', b'\x25', b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6', b'\x78', b'\x78', b'\x21', b'\x38',
+  ]
+  let sequence = av1_sequence_info(stream).unwrap()
+  assert_eq((sequence.width, sequence.height, sequence.bit_depth), (64, 64, 10))
+  let frame_payload : Array[Byte] = [
+    b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03', b'\xCE', b'\x04', b'\xB9', b'\x25',
+    b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6', b'\x78', b'\x78', b'\x21', b'\x38',
+  ]
+  assert_true(av1_parse_stage1_frame(frame_payload, sequence, allow_highbd=true) is Some(_))
+  assert_true(av1_parse_stage1_frame(frame_payload, sequence) is None)
+}
