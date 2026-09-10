@@ -32,6 +32,10 @@ pub fn av1_coeff_eob_small_default(Int, Int, Int, Int) -> Array[Int]
 
 pub fn av1_decode(Array[Byte]) -> Image?
 
+pub fn av1_decode_alpha(Array[Byte]) -> Array[Byte]?
+
+pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool) -> Array[Byte]?
+
 pub fn av1_decode_coeffs_64x64(Array[Byte], Int, Int) -> Array[Int]?
 
 pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool) -> Image?
@@ -50,13 +54,17 @@ pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
 pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
 
-pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo) -> Av1FrameHeaderInfo?
+pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool) -> Av1FrameHeaderInfo?
 
 pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbPartitionNode]
 
 pub fn av1_partition_context(Int, Int?, Int?) -> Int
 
 pub fn av1_partition_node(Int, Int, Int, Int, Int) -> Av1SbPartitionNode
+
+pub fn av1_reconstruct_split_64x64(Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Int], Array[Int], Array[Int], full_range? : Bool, matrix_coefficients? : Int) -> Image?
+
+pub fn av1_reconstruct_split_yuv420(Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Int], Array[Int], Array[Int]) -> (Array[Byte], Array[Byte], Array[Byte])?
 
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
@@ -75,6 +83,8 @@ pub fn avif_alpha_item_payload(Array[Byte]) -> Array[Byte]?
 pub fn avif_container_parse(Array[Byte]) -> AvifContainer?
 
 pub fn avif_decode(Array[Byte]) -> Image?
+
+pub fn avif_decode_alpha(Array[Byte]) -> Array[Byte]?
 
 pub fn avif_encode(Image) -> Array[Byte]
 
