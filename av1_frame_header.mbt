@@ -57,9 +57,10 @@ pub fn av1_parse_stage1_frame(
   frame_payload : Array[Byte],
   sequence : Av1SequenceInfo,
   allow_monochrome? : Bool = false,
+  allow_highbd? : Bool = false,
 ) -> Av1FrameHeaderInfo? {
   if sequence.profile != 0 ||
-    sequence.bit_depth != 8 ||
+    (sequence.bit_depth != 8 && !allow_highbd) ||
     (sequence.monochrome && !allow_monochrome) ||
     ((!sequence.subsampling_x || !sequence.subsampling_y) && !sequence.monochrome) ||
     !sequence.reduced_still_picture_header ||

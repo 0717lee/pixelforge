@@ -576,7 +576,8 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         None => return None
         Some(value) => value
       }
-      if c.bit_depth != 8 || c.monochrome || !c.yuv420 || c.has_alpha {
+      if (c.bit_depth != 8 && c.bit_depth != 10 && c.bit_depth != 12) ||
+        c.monochrome || !c.yuv420 || c.has_alpha {
         return None
       }
       if c.width != seq.width ||
@@ -593,7 +594,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       if frames.length() == 0 {
         return None
       }
-      let header = av1_parse_stage1_frame(frames[0], seq)
+      let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
       match header {
         None => None
         Some(frame) =>
