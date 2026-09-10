@@ -18,6 +18,8 @@
 - Added a normative integer AV1 inverse-transform module for DCT and lossless
   4x4 WHT paths, plus reproducible libaom/dav1d AV1 and AVIF reference fixtures.
 - Added single-DC chroma residual decoding for the bounded AV1 tile path.
+- Added bounded pure MoonBit validation for AVIF auxiliary alpha items (`auxl`/
+  `auxC`) and their `iloc` extents; alpha pixel reconstruction remains staged.
 
 ## 0.18.0 (2026-09-09)
 
