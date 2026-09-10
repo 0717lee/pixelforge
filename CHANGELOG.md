@@ -20,6 +20,8 @@
 - Added single-DC chroma residual decoding for the bounded AV1 tile path.
 - Added bounded pure MoonBit validation for AVIF auxiliary alpha items (`auxl`/
   `auxC`) and their `iloc` extents; alpha pixel reconstruction remains staged.
+- Added pure MoonBit monochrome 8-bit alpha tile decoding and four-block plane
+  reconstruction helpers for the next AV1 partition stage.
 
 ## 0.18.0 (2026-09-09)
 
