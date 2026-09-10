@@ -106,3 +106,14 @@ test "external libaom dc_yuv_mixed_q50" {
   }
 }
 
+
+///|
+test "external libaom AC cosine luma" {
+  let stream : Array[Byte] = [b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x00', b'\x08', b'\x32', b'\x0A', b'\x45', b'\xE0', b'\x00', b'\x00', b'\x10', b'\x05', b'\x39', b'\xA3', b'\x7B', b'\x80']
+  let actual = av1_decode(stream).unwrap()
+  // Validate the independently decoded AC shape without coupling this
+  // regression to a particular YUV-to-RGB rounding choice.
+  assert_true(actual.get_pixel(0, 0).0 > actual.get_pixel(63, 0).0)
+  assert_true(actual.get_pixel(0, 0).0 != actual.get_pixel(32, 0).0)
+  assert_eq(actual.get_pixel(0, 0), actual.get_pixel(0, 63))
+}
