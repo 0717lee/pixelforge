@@ -89,6 +89,27 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
   av1_decode_alpha(payload)
 }
 
+/// Decode a primary AVIF image and compose its validated auxiliary alpha item.
+/// A valid image without an alpha item keeps the existing opaque result; an
+/// alpha item that cannot be decoded is reported as `None` rather than dropped.
+pub fn avif_decode_rgba(data : Array[Byte]) -> Image? {
+  let image = match avif_decode(data) {
+    Some(value) => value
+    None => return None
+  }
+  let alpha_descriptor = avif_alpha_item_descriptor(data)
+  match alpha_descriptor {
+    None => Some(image)
+    Some(_) => {
+      let alpha = match avif_decode_alpha(data) {
+        Some(value) => value
+        None => return None
+      }
+      av1_apply_alpha(image, alpha)
+    }
+  }
+}
+
 /// Compose a decoded alpha plane onto an RGBA image without changing RGB.
 pub fn av1_apply_alpha(image : Image, alpha : Array[Byte]) -> Image? {
   if alpha.length() != image.width * image.height { return None }

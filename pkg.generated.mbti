@@ -88,6 +88,8 @@ pub fn avif_decode(Array[Byte]) -> Image?
 
 pub fn avif_decode_alpha(Array[Byte]) -> Array[Byte]?
 
+pub fn avif_decode_rgba(Array[Byte]) -> Image?
+
 pub fn avif_encode(Image) -> Array[Byte]
 
 pub fn avif_stage1_input(Array[Byte]) -> Av1Stage1Input?
