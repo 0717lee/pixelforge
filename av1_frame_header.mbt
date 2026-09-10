@@ -76,9 +76,8 @@ pub fn av1_parse_stage1_frame(
     Some(v) => v == 1
     None => return None
   }
-  if allow_tools {
-    return None
-  } // palette and intrabc tile syntax
+  // Screen-content tools are accepted when force-integer-MV and intrabc
+  // remain disabled; the tile path still requires intra prediction only.
   if allow_tools && r.take(1) is None {
     return None
   } // force_integer_mv

@@ -86,5 +86,6 @@ test "av1 parses the real 8-bit 4:2:0 stage-one sample" {
   assert_true(frame.key_frame)
   assert_true(frame.show_frame)
   assert_eq(frame.payload_size, 19)
-  assert_true(av1_decode(stream) is None)
+  let decoded = av1_decode(stream)
+  assert_true(decoded is Some(_))
 }

@@ -2,11 +2,49 @@
 package "0717lee/pixelforge"
 
 // Values
+pub const AV1_INTRA_DC : Int = 0
+
+pub const AV1_INTRA_H : Int = 2
+
+pub const AV1_INTRA_PAETH : Int = 12
+
+pub const AV1_INTRA_SMOOTH : Int = 9
+
+pub const AV1_INTRA_SMOOTH_H : Int = 11
+
+pub const AV1_INTRA_SMOOTH_V : Int = 10
+
+pub const AV1_INTRA_V : Int = 1
+
+pub fn av1_coeff_base_default(Int, Int, Int, Int) -> Array[Int]
+
+pub fn av1_coeff_base_eob_default(Int, Int, Int, Int) -> Array[Int]
+
+pub fn av1_coeff_br_default(Int, Int, Int, Int) -> Array[Int]
+
+pub fn av1_coeff_dc_sign_default(Int, Int, Int) -> Array[Int]
+
+pub fn av1_coeff_eob1024_default(Int, Int) -> Array[Int]
+
+pub fn av1_coeff_eob_extra_default(Int, Int, Int, Int) -> Array[Int]
+
+pub fn av1_coeff_eob_small_default(Int, Int, Int, Int) -> Array[Int]
+
 pub fn av1_decode(Array[Byte]) -> Image?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int) -> Image?
+pub fn av1_decode_coeffs_64x64(Array[Byte], Int, Int) -> Array[Int]?
+
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool) -> Image?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
+
+pub fn av1_intra_predict(Int, Int, Int, Array[Int], Array[Int], Int, Int, have_above? : Bool, have_left? : Bool) -> Array[Int]?
+
+pub fn av1_inverse_dct(Array[Int], Int, Int) -> Array[Int]?
+
+pub fn av1_inverse_dct_2d(Array[Int], Int, Int, Int, lossless? : Bool) -> Array[Int]?
+
+pub fn av1_inverse_dct_dc(Int, Int, Int) -> Array[Int]?
 
 pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
@@ -147,6 +185,7 @@ pub(all) struct Av1Stage1Input {
   disable_cdf_update : Bool
   full_range : Bool
   matrix_coefficients : Int
+  use_128x128_superblock : Bool
   tile_payload : Array[Byte]
 }
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -35,6 +36,7 @@ CASES = (
     ("dc_u_low_q10", (128, 64, 128), 10),
     ("dc_v_high_q30", (128, 128, 192), 30),
     ("dc_yuv_mixed_q50", (96, 160, 64), 50),
+    ("ac_y_cosine_q30", None, 30),
 )
 
 
@@ -79,7 +81,11 @@ def main() -> int:
             dec = tmp / f"{name}.decoded.yuv"
             dec_avif = tmp / f"{name}.avif.decoded.yuv"
             rgba = tmp / f"{name}.decoded.rgba"
-            src.write_bytes(plane_bytes(vals))
+            if vals is None:
+                source_row = bytes(round(128 + 10 * math.cos(math.pi * (x + 0.5) / W)) for x in range(W))
+                src.write_bytes(source_row * H + bytes([128]) * 2048)
+            else:
+                src.write_bytes(plane_bytes(vals))
             # aomenc exposes tx-size-search; ffmpeg's wrapper does not.  This
             # forces frame tx_mode=ONLY_LARGEST (1), yielding a single 64x64
             # luma transform and 32x32 chroma transforms.
@@ -93,8 +99,12 @@ def main() -> int:
                 "--enable-smooth-intra=0", "--enable-paeth-intra=0", "--enable-palette=0",
                 "--enable-flip-idtx=0", "--enable-tx64=1", "--enable-tx-size-search=0",
                 "--use-intra-default-tx-only=1", "--min-partition-size=64", "--max-partition-size=64",
-                "-o", str(obu), str(src),
             ]
+            if vals is None:
+                aom_args.extend([
+                    "--enable-directional-intra=0", "--enable-cfl-intra=0", "--loopfilter-control=0",
+                ])
+            aom_args.extend(["-o", str(obu), str(src)])
             run(aom_args, capture=True)
             run([args.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "obu", "-i", str(obu),
                  "-c", "copy", "-frames:v", "1", "-f", "avif", str(avif)])
@@ -106,6 +116,8 @@ def main() -> int:
             decoded = dec.read_bytes()
             if len(decoded) != YUV_BYTES:
                 raise RuntimeError(f"{name}: decoded {len(decoded)} bytes, expected {YUV_BYTES}")
+            if vals is None and any(decoded[y * W : (y + 1) * W] != decoded[:W] for y in range(H)):
+                raise RuntimeError(f"{name}: decoded luma rows are not identical")
             run([
                 args.ffmpeg, "-hide_banner", "-loglevel", "error", "-c:v", "libdav1d",
                 "-i", str(avif), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "yuv420p", str(dec_avif),
@@ -134,8 +146,13 @@ def main() -> int:
             expected_flags = {"enable_cdef", "enable_restoration", "enable_filter_intra", "enable_intra_edge_filter"}
             if traced.returncode or q is None or tx_mode is None or int(tx_mode.group(1)) != 1 or set(filter_flags) != expected_flags or any(v != 0 for v in filter_flags.values()):
                 raise RuntimeError(f"{name}: trace_headers validation failed\n{trace}")
+            loop_filter_levels = [int(value) for value in re.findall(r"loop_filter_level\[\d+\]\s+[^=]+=\s*(\d+)", trace)]
+            if vals is None and (not loop_filter_levels or any(loop_filter_levels)):
+                raise RuntimeError(f"{name}: loop filtering is not disabled\n{trace}")
             records.append({
-                "name": name, "input_yuv": list(vals), "crf": crf,
+                "name": name, "input_yuv": list(vals) if vals else None, "crf": crf,
+                "input_pattern": "round(128 + 10 * cos(pi * (x + 0.5) / 64)); U=V=128" if vals is None else None,
+                "encoder_extra_options": ["enable-directional-intra=0", "enable-cfl-intra=0", "loopfilter-control=0"] if vals is None else [],
                 "qidx": int(q.group(1)) if q else None,
                 "tx_mode": int(tx_mode.group(1)) if tx_mode else None,
                 "obu_bytes": len(obu.read_bytes()),
@@ -147,10 +164,12 @@ def main() -> int:
                     "y": digest_plane(decoded, 0, 4096),
                     "u": digest_plane(decoded, 4096, 1024),
                     "v": digest_plane(decoded, 5120, 1024),
+                    "y_row": list(decoded[:W]),
                     "rgba_sha256": hashlib.sha256(rgba_bytes).hexdigest(),
                     "rgba_first64_hex": rgba_bytes[:64].hex(),
                 },
                 "trace_flags": filter_flags,
+                "loop_filter_levels": loop_filter_levels,
             })
     manifest = {
         "format": "AV1 low-overhead OBU and AVIF",

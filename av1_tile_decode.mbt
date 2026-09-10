@@ -2,7 +2,7 @@
 ///
 /// This module intentionally accepts one very small, fully specified subset:
 /// a 32x32 or 64x64 reduced-still key frame, one tile, DC intra prediction,
-/// and single-DC residuals. Entropy
+/// with square DCT_DCT residuals. Entropy
 /// symbols are decoded from the tile with the stateful MSAC reader. Other
 /// streams return None and remain eligible for later tile/transform milestones.
 
@@ -97,12 +97,8 @@ pub fn av1_decode_dc_tile(
     return None
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
-  let y_dc = Av1DcContext::{
-    eob: av1_dc_eob1024_cdf(base_q_idx, 0),
-    base: av1_dc_base_eob_dc_cdf(base_q_idx, 4, 0),
-    br: av1_dc_br_cdf(base_q_idx, 0),
-    sign: av1_dc_sign_cdf(base_q_idx, 0),
-  }
+  let y_coeff = av1_coeff_context(base_q_idx, 4, 0)
+  let uv_coeff = av1_coeff_context(base_q_idx, 3, 1)
   let uv_dc = Av1DcContext::{
     eob: av1_dc_eob1024_cdf(base_q_idx, 1),
     base: av1_dc_base_eob_dc_cdf(base_q_idx, 3, 1),
@@ -170,63 +166,79 @@ pub fn av1_decode_dc_tile(
     return None
   }
   let luma_all_zero = decoder.symbol(luma_zero)
-  let mut luma_value = 128
+  let mut y_residual : Array[Int] = Array::make(width * height, 0)
   if luma_all_zero == 0 {
     if width != 64 {
       return None
     }
-    if tile_payload.length() <= 5 {
-      let residual = match av1_decode_single_dc(decoder, base_q_idx, 4, y_dc) {
-        Some(value) => value
-        None => return None
-      }
-      luma_value = 128 + residual
-    } else {
-      let coefficients = match av1_decode_coeffs_64x64_with_decoder(decoder, base_q_idx, 0) {
-        Some(value) => value
-        None => return None
-      }
-      let residual = match av1_inverse_dct_2d(coefficients, 64, 64, 8) {
-        Some(value) => value
-        None => return None
-      }
-      luma_value = 128 + residual[0]
+    let coefficients = match
+      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, y_coeff) {
+      Some(value) => value
+      None => return None
+    }
+    y_residual = match av1_inverse_dct_2d(coefficients, 64, 64, 8) {
+      Some(value) => value
+      None => return None
     }
   } else if luma_all_zero != 1 {
     return None
   }
   let cu = decoder.symbol(chroma_zero)
-  let mut u_value = 128
+  let chroma_size = width / 2
+  let mut u_residual : Array[Int] = Array::make(chroma_size * chroma_size, 0)
   if cu == 0 {
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
-      Some(value) => value
-      None => return None
+    if width == 64 {
+      let coefficients = match
+        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff) {
+        Some(value) => value
+        None => return None
+      }
+      u_residual = match av1_inverse_dct_2d(coefficients, 32, 32, 8) {
+        Some(value) => value
+        None => return None
+      }
+    } else {
+      let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
+        Some(value) => value
+        None => return None
+      }
+      u_residual = Array::make(chroma_size * chroma_size, residual)
     }
-    u_value = u_value + residual
   } else if cu != 1 {
     return None
   }
   let cv = decoder.symbol(chroma_zero)
-  let mut v_value = 128
+  let mut v_residual : Array[Int] = Array::make(chroma_size * chroma_size, 0)
   if cv == 0 {
-    let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
-      Some(value) => value
-      None => return None
+    if width == 64 {
+      let coefficients = match
+        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff) {
+        Some(value) => value
+        None => return None
+      }
+      v_residual = match av1_inverse_dct_2d(coefficients, 32, 32, 8) {
+        Some(value) => value
+        None => return None
+      }
+    } else {
+      let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
+        Some(value) => value
+        None => return None
+      }
+      v_residual = Array::make(chroma_size * chroma_size, residual)
     }
-    v_value = v_value + residual
   } else if cv != 1 {
     return None
   }
   let y : Array[Byte] = []
   let u : Array[Byte] = []
   let v : Array[Byte] = []
-  let luma = clamp_byte(luma_value)
-  for _ in 0..<(width * height) {
-    y.push(luma)
+  for residual in y_residual {
+    y.push(clamp_byte(128 + residual))
   }
-  for _ in 0..<(width / 2 * (height / 2)) {
-    u.push(clamp_byte(u_value))
-    v.push(clamp_byte(v_value))
+  for i in 0..<(chroma_size * chroma_size) {
+    u.push(clamp_byte(128 + u_residual[i]))
+    v.push(clamp_byte(128 + v_residual[i]))
   }
   av1_yuv420_to_rgba_color(
     width,
