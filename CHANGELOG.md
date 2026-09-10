@@ -3,13 +3,13 @@
 ## Unreleased
 
 - Added a pure MoonBit single-tile AV1 path for 64x64 reduced-still, 8-bit
-  4:2:0 frames with DC intra prediction, single-DC luma residuals, and
-  all-zero chroma residuals. The path is
-  validated against an external libaom flat-frame bitstream and emits RGBA.
+  4:2:0 frames with DC intra prediction, square DCT_DCT coefficient decoding,
+  and luma/chroma residual reconstruction. The path is validated against
+  external libaom/dav1d flat and non-constant fixtures and emits RGBA.
 - Wired the normative integer inverse-DCT path into the bounded single-DC
   reconstruction and accepted 128x128-superblock 64x64 frames.
-- Added `avif_stage1_input()` for validated AVIF-to-tile handoff; other AV1
-  prediction modes, transforms, alpha, and high bit depth remain staged work.
+- Added `avif_stage1_input()` for validated AVIF-to-tile handoff; general block
+  partitioning, directional prediction, alpha, and high bit depth remain staged work.
 - Added an explicit 8-bit full-range YUV420→RGBA conversion path and threaded
   the sequence `color_range` flag through the bounded decoder.
 - Added 32x32 single-tile neutral DC reconstruction with the W32 and chroma
