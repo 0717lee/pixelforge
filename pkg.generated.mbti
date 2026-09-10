@@ -52,7 +52,15 @@ pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
 
 pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo) -> Av1FrameHeaderInfo?
 
+pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbPartitionNode]
+
+pub fn av1_partition_context(Int, Int?, Int?) -> Int
+
+pub fn av1_partition_node(Int, Int, Int, Int, Int) -> Av1SbPartitionNode
+
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
+
+pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
 pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Image?
 
@@ -152,6 +160,30 @@ pub(all) struct Av1FrameInfo {
   show_frame : Bool
   payload_size : Int
 }
+
+pub(all) enum Av1SbPartition {
+  Av1SbPartitionNone
+  Av1SbPartitionHorz
+  Av1SbPartitionVert
+  Av1SbPartitionSplit
+  Av1SbPartitionHorzA
+  Av1SbPartitionHorzB
+  Av1SbPartitionVertA
+  Av1SbPartitionVertB
+  Av1SbPartitionHorz4
+  Av1SbPartitionVert4
+}
+
+pub(all) struct Av1SbPartitionNode {
+  row : Int
+  col : Int
+  size : Int
+  frame_width : Int
+  frame_height : Int
+}
+pub fn Av1SbPartitionNode::edge_forces_split(Self) -> Bool
+pub fn Av1SbPartitionNode::has_cols(Self) -> Bool
+pub fn Av1SbPartitionNode::has_rows(Self) -> Bool
 
 pub(all) struct Av1SequenceInfo {
   profile : Int
