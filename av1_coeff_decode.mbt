@@ -269,10 +269,7 @@ fn av1_decode_coeffs_square_with_decoder(
   let out : Array[Int] = Array::make(side * side, 0)
   for i in 0..<1024 {
     let q = if i == 0 { dc_q } else { ac_q }
-    // AV1 transform stages use Q1 for TX_64X64 while quantizers remain Q3;
-    // restore the three-bit coefficient scale for AC terms before inverse DCT.
-    let tx_scale = if context.tx_ctx == 4 && i != 0 { 8L } else { 1L }
-    let v = quant[i].to_int64() * q.to_int64() * tx_scale
+    let v = quant[i].to_int64() * q.to_int64()
     let magnitude = ((if v < 0 { -v } else { v }) & 0xFFFFFFL) / denom
     let signed = (if v < 0 { -magnitude } else { magnitude }).to_int()
     out[(i >> 5) * side + (i & 31)] = av1_clip(-32768, 32767, signed)
