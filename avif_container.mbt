@@ -302,6 +302,12 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       raise AvifError::Invalid
     }
     let it = items[pi]
+    // Auxiliary alpha is a separate `auxl` item in `iinf`; it is not
+    // necessarily attached as an `auxC` property to the primary item.
+    let mut alpha_item = false
+    for candidate in items {
+      if candidate.typ == 0x6175786C { alpha_item = true }
+    }
     let mut w = 0
     let mut h = 0
     let mut depth = 8
@@ -311,7 +317,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     let mut np : Int? = None
     let mut nt : Int? = None
     let mut nm : Int? = None
-    let mut alpha = false
+    let mut alpha = alpha_item
     for ai in it.props {
       if ai <= 0 || ai > props.length() {
         raise AvifError::Invalid
