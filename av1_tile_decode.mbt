@@ -86,8 +86,11 @@ pub fn av1_decode_dc_tile(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
   use_128x128_superblock? : Bool = false,
+  bit_depth? : Int = 8,
 ) -> Image? {
-  if (width != 32 && width != 64) ||
+  if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
+    (bit_depth != 8 && width != 64) ||
+    (width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
     width != height ||
     base_q_idx <= 0 ||
@@ -175,7 +178,7 @@ pub fn av1_decode_dc_tile(
       [],
       [],
       0,
-      8,
+      bit_depth,
       have_above=false,
       have_left=false,
     ) {
@@ -189,11 +192,11 @@ pub fn av1_decode_dc_tile(
       return None
     }
     let coefficients = match
-      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, y_coeff) {
+      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, y_coeff, bit_depth=bit_depth) {
       Some(value) => value
       None => return None
     }
-    y_residual = match av1_inverse_dct_2d(coefficients, 64, 64, 8) {
+    y_residual = match av1_inverse_dct_2d(coefficients, 64, 64, bit_depth) {
       Some(value) => value
       None => return None
     }
@@ -206,11 +209,11 @@ pub fn av1_decode_dc_tile(
   if cu == 0 {
     if width == 64 {
       let coefficients = match
-        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff) {
+        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff, bit_depth=bit_depth) {
         Some(value) => value
         None => return None
       }
-      u_residual = match av1_inverse_dct_2d(coefficients, 32, 32, 8) {
+      u_residual = match av1_inverse_dct_2d(coefficients, 32, 32, bit_depth) {
         Some(value) => value
         None => return None
       }
@@ -229,11 +232,11 @@ pub fn av1_decode_dc_tile(
   if cv == 0 {
     if width == 64 {
       let coefficients = match
-        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff) {
+        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff, bit_depth=bit_depth) {
         Some(value) => value
         None => return None
       }
-      v_residual = match av1_inverse_dct_2d(coefficients, 32, 32, 8) {
+      v_residual = match av1_inverse_dct_2d(coefficients, 32, 32, bit_depth) {
         Some(value) => value
         None => return None
       }
@@ -247,22 +250,24 @@ pub fn av1_decode_dc_tile(
   } else if cv != 1 {
     return None
   }
-  let y : Array[Byte] = []
-  let u : Array[Byte] = []
-  let v : Array[Byte] = []
+  let y : Array[Int] = []
+  let u : Array[Int] = []
+  let v : Array[Int] = []
+  let neutral = 1 << (bit_depth - 1)
   for i in 0..<y_residual.length() {
-    y.push(clamp_byte(y_prediction[i] + y_residual[i]))
+    y.push(y_prediction[i] + y_residual[i])
   }
   for i in 0..<(chroma_size * chroma_size) {
-    u.push(clamp_byte(128 + u_residual[i]))
-    v.push(clamp_byte(128 + v_residual[i]))
+    u.push(neutral + u_residual[i])
+    v.push(neutral + v_residual[i])
   }
-  av1_yuv420_to_rgba_color(
+  av1_yuv420_highbd_to_rgba(
     width,
     height,
     y,
     u,
     v,
+    bit_depth,
     full_range~,
     matrix_coefficients~,
   )
@@ -311,7 +316,9 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
     None => None
-    Some(value) =>
+    Some(value) => if value.bit_depth != 8 {
+      None
+    } else {
       av1_decode_dc_tile(
         value.width,
         value.height,
@@ -322,6 +329,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         matrix_coefficients=value.matrix_coefficients,
         use_128x128_superblock=value.use_128x128_superblock,
       )
+    }
   }
 }
 

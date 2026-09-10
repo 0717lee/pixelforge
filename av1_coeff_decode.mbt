@@ -171,9 +171,11 @@ fn av1_decode_coeffs_square_with_decoder(
   decoder : Av1SymbolDecoder,
   base_q_idx : Int,
   context : Av1CoeffContext,
+  bit_depth? : Int = 8,
 ) -> Array[Int]? {
   if base_q_idx < 0 ||
     base_q_idx > 255 ||
+    (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (context.tx_ctx != 3 && context.tx_ctx != 4) {
     return None
   }
@@ -262,8 +264,8 @@ fn av1_decode_coeffs_square_with_decoder(
       return None
     }
   }
-  let dc_q = av1_dc_quant_8(base_q_idx)
-  let ac_q = av1_ac_quant_8(base_q_idx)
+  let dc_q = av1_dc_quant(bit_depth, base_q_idx)
+  let ac_q = av1_ac_quant(bit_depth, base_q_idx)
   let side = if context.tx_ctx == 4 { 64 } else { 32 }
   let denom = if context.tx_ctx == 4 { 4L } else { 2L }
   let out : Array[Int] = Array::make(side * side, 0)
@@ -275,7 +277,8 @@ fn av1_decode_coeffs_square_with_decoder(
     let v = quant[i].to_int64() * q.to_int64() * tx_scale
     let magnitude = ((if v < 0 { -v } else { v }) & 0xFFFFFFL) / denom
     let signed = (if v < 0 { -magnitude } else { magnitude }).to_int()
-    out[(i >> 5) * side + (i & 31)] = av1_clip(-32768, 32767, signed)
+    let limit = 1 << (7 + bit_depth)
+    out[(i >> 5) * side + (i & 31)] = av1_clip(-limit, limit - 1, signed)
   }
   Some(out)
 }
@@ -353,25 +356,3 @@ test "64x64 coefficient helper decodes a minimal EOB stream" {
 }
 
 ///|
-/// Ac_Qlookup[0][qindex], AV1 8-bit AC quantizer (§7.12.3).
-fn av1_ac_quant_8(qindex : Int) -> Int {
-  let table : Array[Int] = [
-    4, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
-    47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
-    67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86,
-    87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 104, 106,
-    108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138,
-    140, 142, 144, 146, 148, 150, 152, 155, 158, 161, 164, 167, 170, 173, 176, 179,
-    182, 185, 188, 191, 194, 197, 200, 203, 207, 211, 215, 219, 223, 227, 231, 235,
-    239, 243, 247, 251, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 305, 311,
-    317, 323, 329, 335, 341, 347, 353, 359, 366, 373, 380, 387, 394, 401, 408, 416,
-    424, 432, 440, 448, 456, 465, 474, 483, 492, 501, 510, 520, 530, 540, 550, 560,
-    571, 582, 593, 604, 615, 627, 639, 651, 663, 676, 689, 702, 715, 729, 743, 757,
-    771, 786, 801, 816, 832, 848, 864, 881, 898, 915, 933, 951, 969, 988, 1007, 1026,
-    1046, 1066, 1087, 1108, 1129, 1151, 1173, 1196, 1219, 1243, 1267, 1292, 1317,
-    1343, 1369, 1396, 1423, 1451, 1479, 1508, 1537, 1567, 1597, 1628, 1660, 1692,
-    1725, 1759, 1793, 1828,
-  ]
-  table[qindex]
-}
