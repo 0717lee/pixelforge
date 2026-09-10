@@ -99,3 +99,16 @@ test "external use128 neutral fixture" {
   let image = av1_decode(stream).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
+
+///|
+test "highbd tile path normalizes a neutral 10-bit frame" {
+  let image = av1_decode_dc_tile(
+    64,
+    64,
+    [b'\x2E'],
+    120,
+    bit_depth=10,
+    full_range=true,
+  ).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x80', b'\x80', b'\x80', b'\xFF'))
+}
