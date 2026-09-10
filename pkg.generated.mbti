@@ -68,6 +68,10 @@ pub fn av1_yuv420_to_rgba_color(Int, Int, Array[Byte], Array[Byte], Array[Byte],
 
 pub fn av1_yuv420_to_rgba_range(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool) -> Image?
 
+pub fn avif_alpha_item_descriptor(Array[Byte]) -> AvifAlphaItemDescriptor?
+
+pub fn avif_alpha_item_payload(Array[Byte]) -> Array[Byte]?
+
 pub fn avif_container_parse(Array[Byte]) -> AvifContainer?
 
 pub fn avif_decode(Array[Byte]) -> Image?
@@ -219,6 +223,21 @@ pub(all) struct Av1Stage1Input {
   matrix_coefficients : Int
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
+}
+
+pub struct AvifAlphaExtent {
+  offset : Int
+  length : Int
+  construction_method : Int
+}
+
+pub struct AvifAlphaItemDescriptor {
+  item_id : Int
+  width : Int
+  height : Int
+  bit_depth : Int
+  auxiliary_property : Bool
+  extents : Array[AvifAlphaExtent]
 }
 
 pub struct AvifContainer {

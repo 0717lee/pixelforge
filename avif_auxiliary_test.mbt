@@ -37,6 +37,7 @@ test "alpha descriptor validates auxiliary item extents" {
   assert_eq((parsed.width, parsed.height, parsed.bit_depth), (2, 2, 8))
   assert_eq(parsed.extents.length(), 1)
   assert_eq((parsed.extents[0].offset, parsed.extents[0].length), (meta.length() - 1, 1))
+  assert_eq(avif_alpha_item_payload(meta).unwrap(), [b'\xAA'])
 }
 
 test "alpha descriptor rejects malformed extent references" {

@@ -295,6 +295,26 @@ pub fn avif_alpha_item_descriptor(data : Array[Byte]) -> AvifAlphaItemDescriptor
   }
 }
 
+/// Return the validated raw auxiliary alpha item bytes in extent order.
+/// The bytes are still AV1 payload data and are not interpreted as pixels.
+pub fn avif_alpha_item_payload(data : Array[Byte]) -> Array[Byte]? {
+  let descriptor = match avif_alpha_item_descriptor(data) {
+    Some(value) => value
+    None => return None
+  }
+  let out : Array[Byte] = []
+  for extent in descriptor.extents {
+    if extent.offset < 0 || extent.length < 0 ||
+      extent.offset > data.length() - extent.length {
+      return None
+    }
+    for i in extent.offset..<(extent.offset + extent.length) {
+      out.push(data[i])
+    }
+  }
+  Some(out)
+}
+
 
 
 
