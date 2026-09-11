@@ -154,3 +154,19 @@ test "transform tree coefficient walk rejects truncated entropy" {
   )
   assert_true(result is None)
 }
+
+///|
+test "transform tree decodes a small zero-EOB coefficient leaf" {
+  let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
+  let result = av1_tx_decode_coeff_leaves(
+    decoder,
+    0,
+    av1_coeff_context(0, 0, 0),
+    { row: 0, col: 0, width: 4, height: 4 },
+    [Av1TxNone],
+    8,
+  ).unwrap()
+  assert_eq(result.length(), 1)
+  assert_eq(result[0].length(), 16)
+  assert_eq(result[0][0], 2)
+}
