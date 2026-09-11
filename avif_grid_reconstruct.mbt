@@ -50,6 +50,30 @@ pub fn avif_reconstruct_grid(
   Some(out)
 }
 
+/// Decode ordered AV1 grid tile samples and compose them into one image.
+/// The samples must be in row-major grid order; unsupported tile syntax
+/// rejects the whole image instead of returning a partial reconstruction.
+pub fn avif_decode_grid_tiles(
+  rows : Int,
+  columns : Int,
+  output_width : Int,
+  output_height : Int,
+  samples : Array[Array[Byte]],
+) -> Image? {
+  if rows <= 0 || columns <= 0 || samples.length() != rows * columns {
+    return None
+  }
+  let images : Array[Image] = []
+  for sample in samples {
+    let image = match av1_decode(sample) {
+      Some(value) => value
+      None => return None
+    }
+    images.push(image)
+  }
+  avif_reconstruct_grid(rows, columns, output_width, output_height, images)
+}
+
 ///|
 test "grid reconstruction crops edge tiles and preserves order" {
   let a = Image::new(2, 2)
@@ -64,4 +88,18 @@ test "grid reconstruction crops edge tiles and preserves order" {
 ///|
 test "grid reconstruction rejects mismatched tile counts" {
   assert_true(avif_reconstruct_grid(2, 2, 4, 4, []) is None)
+}
+
+///|
+test "grid tile decoder composes ordered AV1 samples" {
+  let sample : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
+    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
+    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+  ]
+  let image = avif_decode_grid_tiles(1, 2, 128, 64, [sample, sample]).unwrap()
+  assert_eq(image.width, 128)
+  assert_eq(image.height, 64)
+  assert_eq(image.get_pixel(0, 0).3, b'\xFF')
 }
