@@ -77,6 +77,42 @@ pub fn av1_tx_leaves(
   if walk(root, partitions, { val: cursor }, out) { Some(out) } else { None }
 }
 
+/// Decode square coefficient blocks at transform-tree leaves while sharing
+/// one mutable MSAC reader and coefficient CDF context.
+fn av1_tx_decode_coeff_leaves(
+  decoder : Av1SymbolDecoder,
+  base_q_idx : Int,
+  root : Av1TxNode,
+  partitions : Array[Av1TxPartition],
+  plane : Int,
+  bit_depth : Int,
+) -> Array[Array[Int]]? {
+  let leaves = match av1_tx_leaves(root, partitions) {
+    Some(value) => value
+    None => return None
+  }
+  let context = av1_coeff_context(base_q_idx, 3, plane)
+  let out : Array[Array[Int]] = []
+  for leaf in leaves {
+    if leaf.width != leaf.height || (leaf.width != 32 && leaf.width != 64) {
+      return None
+    }
+    let tx_ctx = if leaf.width == 64 { 4 } else { 3 }
+    context.tx_ctx = tx_ctx
+    let coeffs = match av1_decode_coeffs_square_with_decoder(
+      decoder,
+      base_q_idx,
+      context,
+      bit_depth=bit_depth,
+    ) {
+      Some(value) => value
+      None => return None
+    }
+    out.push(coeffs)
+  }
+  Some(out)
+}
+
 ///|
 test "transform tree emits four raster leaves" {
   let leaves = av1_tx_leaves(
@@ -92,4 +128,18 @@ test "transform tree emits four raster leaves" {
 test "transform tree rejects odd and undersized splits" {
   assert_eq(av1_tx_children({ row: 0, col: 0, width: 7, height: 8 }, Av1TxSplit).length(), 0)
   assert_eq(av1_tx_children({ row: 0, col: 0, width: 4, height: 4 }, Av1TxSplit).length(), 0)
+}
+
+///|
+test "transform tree coefficient walk rejects truncated entropy" {
+  let decoder = av1_msac_new([b'\x00'], true)
+  let result = av1_tx_decode_coeff_leaves(
+    decoder,
+    0,
+    { row: 0, col: 0, width: 32, height: 32 },
+    [Av1TxNone],
+    0,
+    8,
+  )
+  assert_true(result is None)
 }

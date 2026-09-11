@@ -17,7 +17,7 @@ let av1_coeff_ctx_offsets_32 : Array[Array[Int]] = [
 /// Mutable leaves for one plane/transform context. U and V retain the same
 /// instance for the tile; a fresh leaf for each symbol would lose adaptation.
 priv struct Av1CoeffContext {
-  tx_ctx : Int
+  mut tx_ctx : Int
   eob : Array[Int]
   extra : Array[Array[Int]]
   base_eob : Array[Array[Int]]
