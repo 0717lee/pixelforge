@@ -124,6 +124,16 @@ test "transform tree emits four raster leaves" {
 }
 
 ///|
+test "transform tree walks smaller AV1 leaf sizes" {
+  let leaves = av1_tx_leaves(
+    { row: 0, col: 0, width: 8, height: 8 },
+    [Av1TxSplit, Av1TxNone, Av1TxNone, Av1TxNone, Av1TxNone],
+  ).unwrap()
+  assert_eq(leaves.length(), 4)
+  assert_eq((leaves[0].width, leaves[0].height), (4, 4))
+}
+
+///|
 test "transform tree rejects odd and undersized splits" {
   assert_eq(av1_tx_children({ row: 0, col: 0, width: 7, height: 8 }, Av1TxSplit).length(), 0)
   assert_eq(av1_tx_children({ row: 0, col: 0, width: 4, height: 4 }, Av1TxSplit).length(), 0)
