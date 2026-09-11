@@ -112,6 +112,38 @@ pub fn avif_decode_animation_samples(
   avif_decode_animation_frames({ timescale, frames, }, samples)
 }
 
+/// Extract sample payloads referenced by the first animation track.
+pub fn avif_animation_sample_payloads(
+  data : Array[Byte],
+) -> (AvifAnimationDescriptor, Array[Array[Byte]])? {
+  let descriptor = match avif_animation_descriptor(data) {
+    Some(value) => value
+    None => return None
+  }
+  let samples : Array[Array[Byte]] = []
+  for frame in descriptor.frames {
+    if frame.offset < 0 || frame.length < 0 ||
+      frame.offset > data.length() - frame.length {
+      return None
+    }
+    let sample : Array[Byte] = []
+    for i in frame.offset..<(frame.offset + frame.length) {
+      sample.push(data[i])
+    }
+    samples.push(sample)
+  }
+  Some((descriptor, samples))
+}
+
+/// Parse and decode all animation samples from a self-contained BMFF buffer.
+pub fn avif_decode_animation(data : Array[Byte]) -> AvifAnimationPixels? {
+  let (descriptor, samples) = match avif_animation_sample_payloads(data) {
+    Some(value) => value
+    None => return None
+  }
+  avif_decode_animation_frames(descriptor, samples)
+}
+
 ///|
 priv suberror GridAnimError {
   Invalid

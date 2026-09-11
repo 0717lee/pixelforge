@@ -101,4 +101,7 @@ test "animation descriptor returns ordered sample extents" {
     (100, 3, 0),
   )
   assert_eq(parsed.frames[1].timestamp, 10)
+  let extracted = avif_animation_sample_payloads(data).unwrap()
+  assert_eq(extracted.1.length(), 2)
+  assert_eq(extracted.1[0].length(), 3)
 }
