@@ -93,6 +93,10 @@ pub fn av1_decode_dc_tile(
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
+    // High-bit-depth streams with larger residual payloads require the
+    // remaining AC/partition syntax; reject them until that state machine is
+    // implemented rather than returning a falsely neutral image.
+    (bit_depth != 8 && tile_payload.length() > 8) ||
     (width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
     width != height ||
