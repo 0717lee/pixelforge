@@ -1,6 +1,6 @@
 /// Pure MoonBit reduced-still monochrome AV1 alpha reconstruction.
 ///
-/// This stage handles one 64x64 DCT_DCT tile with 8-bit samples. It returns
+/// This stage handles one 32x32 or 64x64 DCT_DCT tile with 8-bit samples. It returns
 /// the decoded alpha plane; auxiliary-item extraction remains in
 /// `avif_auxiliary.mbt` and composition is intentionally a later step.
 
@@ -18,29 +18,35 @@ pub fn av1_decode_alpha_tile(
   base_q_idx : Int,
   use_128x128_superblock? : Bool = false,
 ) -> Array[Byte]? {
-  if width != 64 || height != 64 || base_q_idx <= 0 || base_q_idx > 255 ||
-    tile_payload.length() == 0 || tile_payload.length() > 64 {
+  if (width != 32 && width != 64) || width != height ||
+    base_q_idx <= 0 || base_q_idx > 255 || tile_payload.length() == 0 ||
+    tile_payload.length() > 255 {
     return None
   }
   let decoder = av1_msac_new(tile_payload, true)
-  let partition : Array[Int] = [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
+  let partition : Array[Int] = if width == 64 {
+    [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
+  } else {
+    [18462, 20920, 23124, 27647, 28227, 29049, 29519, 30178, 31544, 32768, 0]
+  }
   let skip : Array[Int] = [31671, 32768, 0]
   let y_mode : Array[Int] = [15588, 17027, 19338, 20218, 20682, 21110, 21825, 23244, 24189, 28165, 29093, 30466, 32768, 0]
   if decoder.symbol(partition) != 0 || decoder.symbol(skip) != 0 || decoder.symbol(y_mode) != 0 {
     return None
   }
   let all_zero = decoder.symbol(av1_alpha_luma_zero(base_q_idx))
-  let mut residual : Array[Int] = Array::make(4096, 0)
+  let side = width
+  let mut residual : Array[Int] = Array::make(side * side, 0)
   if all_zero == 0 {
     let coeffs = match av1_decode_coeffs_square_with_decoder(
       decoder,
       base_q_idx,
-      av1_coeff_context(base_q_idx, 4, 0),
+      av1_coeff_context(base_q_idx, if width == 64 { 4 } else { 3 }, 0),
     ) {
       Some(value) => value
       None => return None
     }
-    residual = match av1_inverse_dct_2d(coeffs, 64, 64, 8) {
+    residual = match av1_inverse_dct_2d(coeffs, side, side, 8) {
       Some(value) => value
       None => return None
     }
@@ -48,7 +54,7 @@ pub fn av1_decode_alpha_tile(
     return None
   }
   let out : Array[Byte] = []
-  for i in 0..<4096 {
+  for i in 0..<(side * side) {
     out.push(clamp_byte(128 + residual[i]))
   }
   let _ = use_128x128_superblock
@@ -61,7 +67,8 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     Some(value) => value
     None => return None
   }
-  if !sequence.monochrome || sequence.width != 64 || sequence.height != 64 {
+  if !sequence.monochrome || sequence.width != sequence.height ||
+    (sequence.width != 32 && sequence.width != 64) {
     return None
   }
   let frames = av1_obu_payloads(data, 6)
