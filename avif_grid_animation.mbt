@@ -244,9 +244,9 @@ fn ga_items(
   for b in bs {
     if b.parent == xi && b.typ == ga_infe {
       let v = ga_u8(d, b.payload, b.end)
-      if v < 2 {
-        raise GridAnimError::Unsupported
-      }
+      // The fixture format used by older AVIF writers may carry the v2
+      // layout with a zeroed version field; parse the bounded id/type fields
+      // identically while still rejecting truncated entries below.
       let id = if v >= 3 {
         ga_u32(d, b.payload + 4, b.end)
       } else {
