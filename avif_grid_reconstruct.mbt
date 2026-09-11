@@ -74,6 +74,37 @@ pub fn avif_decode_grid_tiles(
   avif_reconstruct_grid(rows, columns, output_width, output_height, images)
 }
 
+/// Decode a grid directly from a BMFF buffer and its parsed descriptor.
+/// Each tile may contain one or more iloc extents; extents are concatenated
+/// before passing the sample to the pure AV1 decoder.
+pub fn avif_decode_grid(
+  data : Array[Byte],
+  descriptor : AvifGridDescriptor,
+) -> Image? {
+  let samples : Array[Array[Byte]] = []
+  for tile in descriptor.tiles {
+    let sample : Array[Byte] = []
+    for extent in tile.extents {
+      if extent.offset < 0 || extent.length < 0 ||
+        extent.offset > data.length() - extent.length {
+        return None
+      }
+      for i in extent.offset..<(extent.offset + extent.length) {
+        sample.push(data[i])
+      }
+    }
+    if sample.length() == 0 { return None }
+    samples.push(sample)
+  }
+  avif_decode_grid_tiles(
+    descriptor.rows,
+    descriptor.columns,
+    descriptor.output_width,
+    descriptor.output_height,
+    samples,
+  )
+}
+
 ///|
 test "grid reconstruction crops edge tiles and preserves order" {
   let a = Image::new(2, 2)
