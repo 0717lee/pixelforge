@@ -41,21 +41,64 @@ fn av1_inverse_adst4(input : Array[Int]) -> Array[Int]? {
   ])
 }
 
-fn av1_inverse_adst4_2d(input : Array[Int], width : Int, height : Int, row_adst : Bool, col_adst : Bool) -> Array[Int]? {
-  if width != 4 || height != 4 || input.length() != 16 { return None }
-  let temp : Array[Int] = Array::make(16, 0)
-  for y in 0..<4 {
-    let row = [input[y * 4], input[y * 4 + 1], input[y * 4 + 2], input[y * 4 + 3]]
-    let v = if row_adst { av1_inverse_adst4(row) } else { av1_inverse_dct(row, 2, 30) }
-    let values = match v { Some(x) => x; None => return None }
-    for x in 0..<4 { temp[y * 4 + x] = values[x] }
+fn av1_inverse_adst_1d(input : Array[Int], n : Int) -> Array[Int]? {
+  let count = 1 << n
+  if (n != 3 && n != 4) || input.length() != count { return None }
+  let t = input.copy()
+  let copy = t.copy()
+  for i in 0..<count {
+    let idx = if i % 2 == 1 { i - 1 } else { count - i - 1 }
+    t[i] = copy[idx]
   }
-  let out : Array[Int] = Array::make(16, 0)
-  for x in 0..<4 {
-    let col = [temp[x], temp[4 + x], temp[8 + x], temp[12 + x]]
-    let v = if col_adst { av1_inverse_adst4(col) } else { av1_inverse_dct(col, 2, 30) }
+  if n == 3 {
+    for i in 0..<4 { av1_bfly(t, 2 * i, 2 * i + 1, 60 - 16 * i, 1) }
+    for i in 0..<4 { av1_had(t, i, 4 + i, 0, 30) }
+    for i in 0..<2 { av1_bfly(t, 4 + 3 * i, 5 + i, 48 - 32 * i, 1) }
+    for i in 0..<2 { for j in 0..<2 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, 30) } }
+    for i in 0..<2 { av1_bfly(t, 2 + 4 * i, 3 + 4 * i, 32, 1) }
+  } else {
+    for i in 0..<8 { av1_bfly(t, 2 * i, 2 * i + 1, 62 - 8 * i, 1) }
+    for i in 0..<8 { av1_had(t, i, 8 + i, 0, 30) }
+    for i in 0..<2 {
+      av1_bfly(t, 8 + 2 * i, 9 + 2 * i, 56 - 32 * i, 1)
+      av1_bfly(t, 13 + 2 * i, 12 + 2 * i, 8 + 32 * i, 1)
+    }
+    for i in 0..<4 { for j in 0..<2 { av1_had(t, 8 * j + i, 4 + 8 * j + i, 0, 30) } }
+    for i in 0..<2 { for j in 0..<2 { av1_bfly(t, 4 + 8 * j + 3 * i, 5 + 8 * j + i, 48 - 32 * i, 1) } }
+    for i in 0..<2 { for j in 0..<4 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, 30) } }
+    for i in 0..<4 { av1_bfly(t, 2 + 4 * i, 3 + 4 * i, 32, 1) }
+  }
+  let out = t.copy()
+  let bits = n
+  for i in 0..<count {
+    let a = (i >> 3) & 1
+    let b = ((i >> 2) & 1) ^ ((i >> 3) & 1)
+    let c = ((i >> 1) & 1) ^ ((i >> 2) & 1)
+    let d = (i & 1) ^ ((i >> 1) & 1)
+    let idx = ((d << 3) | (c << 2) | (b << 1) | a) >> (4 - bits)
+    out[i] = if i % 2 == 1 { -t[idx] } else { t[idx] }
+  }
+  Some(out)
+}
+
+fn av1_inverse_adst_2d(input : Array[Int], width : Int, height : Int, row_adst : Bool, col_adst : Bool) -> Array[Int]? {
+  if width != height || (width != 4 && width != 8 && width != 16) || input.length() != width * height { return None }
+  let n = if width == 4 { 2 } else if width == 8 { 3 } else { 4 }
+  let temp : Array[Int] = Array::make(width * height, 0)
+  for y in 0..<height {
+    let row : Array[Int] = []
+    for x in 0..<width { row.push(input[y * width + x]) }
+    let v = if row_adst { if n == 2 { av1_inverse_adst4(row) } else { av1_inverse_adst_1d(row, n) } } else { av1_inverse_dct(row, n, 30) }
     let values = match v { Some(x) => x; None => return None }
-    for y in 0..<4 { out[y * 4 + x] = values[y] }
+    for x in 0..<width { temp[y * width + x] = values[x] }
+  }
+  let out : Array[Int] = Array::make(width * height, 0)
+  for x in 0..<width {
+    let col : Array[Int] = []
+    for y in 0..<height { col.push(temp[y * width + x]) }
+    let v = if col_adst { if n == 2 { av1_inverse_adst4(col) } else { av1_inverse_adst_1d(col, n) } } else { av1_inverse_dct(col, n, 30) }
+    let values = match v { Some(x) => x; None => return None }
+    for y in 0..<height { out[y * width + x] = values[y] }
   }
   Some(out)
 }
@@ -72,9 +115,9 @@ pub fn av1_inverse_transform_2d(
 ) -> Array[Int]? {
   match tx_type {
     Av1TxDctDct => av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~)
-    Av1TxAdstDct => av1_inverse_adst4_2d(dequant, width, height, true, false)
-    Av1TxDctAdst => av1_inverse_adst4_2d(dequant, width, height, false, true)
-    Av1TxAdstAdst => av1_inverse_adst4_2d(dequant, width, height, true, true)
+    Av1TxAdstDct => av1_inverse_adst_2d(dequant, width, height, true, false)
+    Av1TxDctAdst => av1_inverse_adst_2d(dequant, width, height, false, true)
+    Av1TxAdstAdst => av1_inverse_adst_2d(dequant, width, height, true, true)
     _ => None
   }
 }
@@ -85,6 +128,7 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxDctDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxAdstAdst, Array::make(64, 0), 8, 8, 8) is Some(_))
 }
 
 ///|
