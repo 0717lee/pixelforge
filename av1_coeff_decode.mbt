@@ -280,6 +280,107 @@ fn av1_decode_coeffs_square_with_decoder(
   Some(out)
 }
 
+/// Decode a small square DCT_DCT block using the same bounded coefficient CDFs.
+/// AV1 uses the natural diagonal scan for these sizes; the 32x32 path above
+/// remains separate because 64x64 stores coefficients in an adjusted domain.
+fn av1_decode_coeffs_small_with_decoder(
+  decoder : Av1SymbolDecoder,
+  base_q_idx : Int,
+  context : Av1CoeffContext,
+  side : Int,
+  bit_depth? : Int = 8,
+) -> Array[Int]? {
+  if base_q_idx < 0 || base_q_idx > 255 ||
+    (side != 4 && side != 8 && side != 16) ||
+    (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
+    return None
+  }
+  let scan : Array[Int] = []
+  for sum in 0..<(side * 2 - 1) {
+    let lo = if sum - (side - 1) > 0 { sum - (side - 1) } else { 0 }
+    let hi = if sum < side - 1 { sum } else { side - 1 }
+    if sum % 2 == 0 {
+      let mut c = hi
+      while c >= lo {
+        scan.push((sum - c) * side + c)
+        c = c - 1
+      }
+    } else {
+      let mut c = lo
+      while c <= hi {
+        scan.push((sum - c) * side + c)
+        c = c + 1
+      }
+    }
+  }
+  let eob_pt = decoder.symbol(context.eob) + 1
+  if eob_pt < 1 || eob_pt > 11 { return None }
+  let mut eob = eob_pt
+  if eob_pt >= 2 { eob = (1 << (eob_pt - 2)) + 1 }
+  if eob_pt >= 3 {
+    let shift = eob_pt - 3
+    if decoder.symbol(context.extra[shift]) == 1 { eob = eob + (1 << shift) }
+    let hi = eob_pt - 2
+    if hi > 1 {
+      for i in 1..<hi {
+        if decoder.bool() == 1 { eob = eob + (1 << (hi - 1 - i)) }
+      }
+    }
+  }
+  if eob < 1 || eob > side * side { return None }
+  let quant : Array[Int] = Array::make(side * side, 0)
+  for ci in 0..<eob {
+    let c = eob - 1 - ci
+    let pos = scan[c]
+    let row = pos / side
+    let col = pos % side
+    let refs : Array[Array[Int]] = [[0, 1], [1, 0], [1, 1], [0, 2], [2, 0]]
+    let mut mag = 0
+    for delta in refs {
+      let rr = row + delta[0]
+      let cc = col + delta[1]
+      if rr < side && cc < side {
+        let v = quant[rr * side + cc]
+        mag = mag + (if (if v < 0 { -v } else { v }) < 3 { if v < 0 { -v } else { v } } else { 3 })
+      }
+    }
+    let ctx = if c == eob - 1 { 0 } else { if (mag + 1) >> 1 < 4 { (mag + 1) >> 1 } else { 4 } }
+    let mut value = if c == eob - 1 {
+      decoder.symbol(context.base_eob[ctx]) + 1
+    } else {
+      decoder.symbol(context.base[ctx])
+    }
+    if value > 2 {
+      let mut done = false
+      for _ in 0..<4 {
+        if !done {
+          let br_ctx = if (mag + 1) >> 1 < 6 { (mag + 1) >> 1 } else { 6 }
+          let br = decoder.symbol(context.br[br_ctx])
+          value = value + br
+          if br < 3 { done = true }
+        }
+      }
+    }
+    quant[pos] = value
+  }
+  for c in 0..<eob {
+    let pos = scan[c]
+    if quant[pos] != 0 {
+      let sign = if c == 0 { decoder.symbol(context.sign) } else { decoder.bool() }
+      if sign == 1 { quant[pos] = -quant[pos] }
+    }
+  }
+  let dc_q = av1_dc_quant(bit_depth, base_q_idx)
+  let ac_q = av1_ac_quant(bit_depth, base_q_idx)
+  let out : Array[Int] = Array::make(side * side, 0)
+  for i in 0..<(side * side) {
+    let q = if i == 0 { dc_q } else { ac_q }
+    let v = quant[i] * q / 2
+    out[i] = av1_clip(-(1 << (7 + bit_depth)), (1 << (7 + bit_depth)) - 1, v)
+  }
+  Some(out)
+}
+
 ///|
 /// Compatibility probe for callers that already consumed the luma syntax.
 fn av1_decode_coeffs_64x64_with_decoder(

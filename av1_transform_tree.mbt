@@ -93,17 +93,19 @@ fn av1_tx_decode_coeff_leaves(
   }
   let out : Array[Array[Int]] = []
   for leaf in leaves {
-    if leaf.width != leaf.height || (leaf.width != 32 && leaf.width != 64) {
+    if leaf.width != leaf.height ||
+      (leaf.width != 4 && leaf.width != 8 && leaf.width != 16 &&
+        leaf.width != 32 && leaf.width != 64) {
       return None
     }
-    let tx_ctx = if leaf.width == 64 { 4 } else { 3 }
-    context.tx_ctx = tx_ctx
-    let coeffs = match av1_decode_coeffs_square_with_decoder(
-      decoder,
-      base_q_idx,
-      context,
-      bit_depth=bit_depth,
-    ) {
+    let coeffs = if leaf.width <= 16 {
+      context.tx_ctx = if leaf.width == 16 { 2 } else if leaf.width == 8 { 1 } else { 0 }
+      av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth)
+    } else {
+      context.tx_ctx = if leaf.width == 64 { 4 } else { 3 }
+      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth=bit_depth)
+    }
+    let coeffs = match coeffs {
       Some(value) => value
       None => return None
     }
