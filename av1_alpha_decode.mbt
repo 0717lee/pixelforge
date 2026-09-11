@@ -17,6 +17,7 @@ pub fn av1_decode_alpha_tile(
   tile_payload : Array[Byte],
   base_q_idx : Int,
   use_128x128_superblock? : Bool = false,
+  allow_screen_content_tools? : Bool = false,
 ) -> Array[Byte]? {
   if (width != 32 && width != 64) || width != height ||
     base_q_idx <= 0 || base_q_idx > 255 || tile_payload.length() == 0 ||
@@ -32,6 +33,9 @@ pub fn av1_decode_alpha_tile(
   let skip : Array[Int] = [31671, 32768, 0]
   let y_mode : Array[Int] = [15588, 17027, 19338, 20218, 20682, 21110, 21825, 23244, 24189, 28165, 29093, 30466, 32768, 0]
   if decoder.symbol(partition) != 0 || decoder.symbol(skip) != 0 || decoder.symbol(y_mode) != 0 {
+    return None
+  }
+  if allow_screen_content_tools && decoder.symbol([32309, 32768, 0]) != 0 {
     return None
   }
   let all_zero = decoder.symbol(av1_alpha_luma_zero(base_q_idx))
@@ -83,6 +87,7 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     frame.tile_payload,
     frame.base_q_idx,
     use_128x128_superblock=sequence.use_128x128_superblock,
+    allow_screen_content_tools=frame.allow_screen_content_tools,
   )
 }
 
