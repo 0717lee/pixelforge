@@ -42,6 +42,76 @@ pub struct AvifAnimationDescriptor {
   frames : Array[AvifAnimationFrame]
 }
 
+/// A successfully decoded animation sample with its track timing.
+pub struct AvifAnimationPixelFrame {
+  index : Int
+  timestamp : Int
+  duration : Int
+  timescale : Int
+  image : Image
+}
+
+/// Decoded animation samples. Samples are supplied in the order returned by
+/// `avif_animation_descriptor`; each sample is passed to the pure AV1 decoder.
+pub struct AvifAnimationPixels {
+  timescale : Int
+  frames : Array[AvifAnimationPixelFrame]
+}
+
+/// Decode an ordered set of AV1 animation samples using the native decoder.
+/// A malformed or unsupported sample rejects the whole sequence so callers do
+/// not accidentally present a partial animation.
+pub fn avif_decode_animation_frames(
+  descriptor : AvifAnimationDescriptor,
+  samples : Array[Array[Byte]],
+) -> AvifAnimationPixels? {
+  if descriptor.frames.length() == 0 || descriptor.frames.length() != samples.length() {
+    return None
+  }
+  let frames : Array[AvifAnimationPixelFrame] = []
+  for i in 0..<samples.length() {
+    let image = match av1_decode(samples[i]) {
+      Some(value) => value
+      None => return None
+    }
+    let timing = descriptor.frames[i]
+    frames.push({
+      index: timing.index,
+      timestamp: timing.timestamp,
+      duration: timing.duration,
+      timescale: timing.timescale,
+      image,
+    })
+  }
+  Some({ timescale: descriptor.timescale, frames, })
+}
+
+/// Convenience entrypoint for callers that already extracted sample timing
+/// tables. The arrays must match the sample order and length.
+pub fn avif_decode_animation_samples(
+  timescale : Int,
+  timestamps : Array[Int],
+  durations : Array[Int],
+  samples : Array[Array[Byte]],
+) -> AvifAnimationPixels? {
+  if timescale <= 0 || timestamps.length() != samples.length() ||
+    durations.length() != samples.length() || samples.length() == 0 {
+    return None
+  }
+  let frames : Array[AvifAnimationFrame] = []
+  for i in 0..<samples.length() {
+    frames.push({
+      index: i,
+      offset: 0,
+      length: samples[i].length(),
+      timestamp: timestamps[i],
+      duration: durations[i],
+      timescale,
+    })
+  }
+  avif_decode_animation_frames({ timescale, frames, }, samples)
+}
+
 ///|
 priv suberror GridAnimError {
   Invalid
