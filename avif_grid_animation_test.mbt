@@ -30,6 +30,14 @@ test "grid and animation metadata reject malformed input" {
   assert_true(avif_animation_descriptor([]) is None)
 }
 
+test "grid descriptor returns ordered tile items" {
+  let data : Array[Byte] = [0,0,0,220,109,101,116,97,0,0,0,0,0,0,0,89,105,105,110,102,0,0,0,0,0,3,0,0,0,25,105,110,102,101,0,0,0,0,0,1,0,0,103,114,105,100,103,114,105,100,0,0,0,0,25,105,110,102,101,0,0,0,0,0,2,0,0,97,118,48,49,103,114,105,100,0,0,0,0,25,105,110,102,101,0,0,0,0,0,3,0,0,97,118,48,49,103,114,105,100,0,0,0,0,73,105,108,111,99,0,0,0,1,68,0,0,0,0,0,3,0,0,0,1,16,0,0,0,0,1,0,0,0,0,0,0,0,10,0,0,0,2,16,0,0,0,0,1,0,0,0,10,0,0,0,1,0,0,0,3,16,0,0,0,0,1,0,0,0,11,0,0,0,1,0,0,0,24,105,114,101,102,0,0,0,0,100,105,109,103,0,1,0,2,0,2,0,3,0,0,0,22,105,100,97,116,0,0,0,0,0,1,0,4,0,4,65,66,67,68]
+  let g = avif_grid_descriptor(data).unwrap()
+  assert_eq((g.item_id, g.rows, g.columns, g.output_width, g.output_height), (1, 1, 2, 4, 4))
+  assert_eq(g.tiles.map(fn(t) => t.item_id), [2, 3])
+  assert_eq(g.tiles[0].extents[0].length, 1)
+}
+
 ///|
 test "animation descriptor returns ordered sample extents" {
   let mdhd_payload : Array[Byte] = [0, 0, 0, 0]
