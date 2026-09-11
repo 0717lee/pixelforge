@@ -1,7 +1,9 @@
 ///|
 test "av1 reduced still sequence header is parsed" {
   // OBU type 1, has_size_field=1, from the external 64x64 8-bit 4:2:0 sample.
-  let obu : Array[Byte] = [b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08']
+  let obu : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+  ]
   let info = av1_sequence_info(obu)
   match info {
     Some(v) => {
@@ -63,8 +65,14 @@ test "av1 reduced frame OBU is surfaced without fake pixels" {
 
 ///|
 test "av1 msac decoder normalizes and reads booleans" {
-  assert_eq(av1_msac_read_first([b'\x00', b'\x00', b'\x00', b'\x00', b'\x00'], 128), Some(0))
-  assert_eq(av1_msac_read_first([b'\x7F', b'\x7F', b'\x7F', b'\x7F', b'\x7F'], 128), Some(1))
+  assert_eq(
+    av1_msac_read_first([b'\x00', b'\x00', b'\x00', b'\x00', b'\x00'], 128),
+    Some(0),
+  )
+  assert_eq(
+    av1_msac_read_first([b'\x7F', b'\x7F', b'\x7F', b'\x7F', b'\x7F'], 128),
+    Some(1),
+  )
 }
 
 ///|
@@ -74,9 +82,9 @@ test "av1 parses the real 8-bit 4:2:0 stage-one sample" {
     b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
     // Frame OBU payload follows; the tile bytes are intentionally not decoded
     // by this header-only regression yet.
-    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
-    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
-    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+     b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00', b'\x00',
+    b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43', b'\xD9', b'\x3A',
+    b'\x46', b'\x02', b'\x28',
   ]
   let info = av1_sequence_info(stream).unwrap()
   assert_eq((info.width, info.height, info.bit_depth), (64, 64, 8))
@@ -93,16 +101,41 @@ test "av1 parses the real 8-bit 4:2:0 stage-one sample" {
 ///|
 test "av1 accepts a validated 10-bit reduced-still frame envelope" {
   let stream : Array[Byte] = [
-    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x08', b'\x08',
-    b'\x32', b'\x13', b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03', b'\xCE', b'\x04',
-    b'\xB9', b'\x25', b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6', b'\x78', b'\x78', b'\x21', b'\x38',
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x08',
+    b'\x08', b'\x32', b'\x13', b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03',
+    b'\xCE', b'\x04', b'\xB9', b'\x25', b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6',
+    b'\x78', b'\x78', b'\x21', b'\x38',
   ]
   let sequence = av1_sequence_info(stream).unwrap()
   assert_eq((sequence.width, sequence.height, sequence.bit_depth), (64, 64, 10))
   let frame_payload : Array[Byte] = [
-    b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03', b'\xCE', b'\x04', b'\xB9', b'\x25',
-    b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6', b'\x78', b'\x78', b'\x21', b'\x38',
+    b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x03', b'\xCE', b'\x04', b'\xB9',
+    b'\x25', b'\x88', b'\x29', b'\x27', b'\x44', b'\xE6', b'\x78', b'\x78', b'\x21',
+    b'\x38',
   ]
-  assert_true(av1_parse_stage1_frame(frame_payload, sequence, allow_highbd=true) is Some(_))
+  assert_true(
+    av1_parse_stage1_frame(frame_payload, sequence, allow_highbd=true)
+    is Some(_),
+  )
   assert_true(av1_parse_stage1_frame(frame_payload, sequence) is None)
+}
+
+///|
+test "av1 decodes neutral 10-bit and 12-bit reduced-still tiles" {
+  let ten : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x08',
+    b'\x08', b'\x32', b'\x06', b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x2E',
+  ]
+  let twelve : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x58', b'\x15', b'\x7F', b'\xFE', b'\x0C',
+    b'\x61', b'\x32', b'\x06', b'\x15', b'\x00', b'\x00', b'\x00', b'\x40', b'\x2E',
+  ]
+  assert_eq(
+    av1_decode(ten).unwrap().get_pixel(0, 0),
+    (b'\x82', b'\x82', b'\x82', b'\xFF'),
+  )
+  assert_eq(
+    av1_decode(twelve).unwrap().get_pixel(0, 0),
+    (b'\x82', b'\x82', b'\x82', b'\xFF'),
+  )
 }

@@ -106,17 +106,40 @@ test "external libaom dc_yuv_mixed_q50" {
   }
 }
 
-
 ///|
 test "external libaom AC cosine luma" {
-  let stream : Array[Byte] = [b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x00', b'\x08', b'\x32', b'\x0A', b'\x45', b'\xE0', b'\x00', b'\x00', b'\x10', b'\x05', b'\x39', b'\xA3', b'\x7B', b'\x80']
+  let stream : Array[Byte] = [
+    b'\x12', b'\x00', b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFE', b'\x00',
+    b'\x08', b'\x32', b'\x0A', b'\x45', b'\xE0', b'\x00', b'\x00', b'\x10', b'\x05',
+    b'\x39', b'\xA3', b'\x7B', b'\x80',
+  ]
   let actual = av1_decode(stream).unwrap()
-  // Validate the independently decoded AC shape without coupling this
-  // regression to a particular YUV-to-RGB rounding choice.
-  assert_true(actual.get_pixel(0, 0).0 > actual.get_pixel(63, 0).0)
-  assert_true(actual.get_pixel(0, 0).0 != actual.get_pixel(32, 0).0)
-  assert_eq(actual.get_pixel(0, 0).0, b'\x8E')
-  assert_eq(actual.get_pixel(32, 0).0, b'\x82')
-  assert_eq(actual.get_pixel(63, 0).0, b'\x77')
-  assert_eq(actual.get_pixel(0, 0), actual.get_pixel(0, 63))
+  let row : Array[Byte] = [
+    b'\x8A', b'\x8A', b'\x8A', b'\x8A', b'\x8A', b'\x8A', b'\x8A', b'\x89', b'\x89',
+    b'\x89', b'\x89', b'\x89', b'\x88', b'\x88', b'\x88', b'\x87', b'\x87', b'\x87',
+    b'\x86', b'\x86', b'\x85', b'\x85', b'\x85', b'\x84', b'\x84', b'\x83', b'\x83',
+    b'\x82', b'\x82', b'\x81', b'\x81', b'\x80', b'\x80', b'\x7F', b'\x7F', b'\x7E',
+    b'\x7E', b'\x7D', b'\x7D', b'\x7C', b'\x7C', b'\x7C', b'\x7B', b'\x7B', b'\x7A',
+    b'\x7A', b'\x79', b'\x79', b'\x79', b'\x78', b'\x78', b'\x78', b'\x78', b'\x77',
+    b'\x77', b'\x77', b'\x77', b'\x76', b'\x76', b'\x76', b'\x76', b'\x76', b'\x76',
+    b'\x76',
+  ]
+  let y_plane : Array[Byte] = []
+  for _ in 0..<64 {
+    for value in row {
+      y_plane.push(value)
+    }
+  }
+  let expected = av1_yuv420_to_rgba_color(
+    64,
+    64,
+    y_plane,
+    Array::make(1024, b'\x80'),
+    Array::make(1024, b'\x80'),
+  ).unwrap()
+  for y in 0..<64 {
+    for x in 0..<64 {
+      assert_eq(actual.get_pixel(x, y), expected.get_pixel(x, y))
+    }
+  }
 }

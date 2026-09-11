@@ -13,6 +13,7 @@ pub(all) struct Av1FrameHeaderInfo {
   tx_mode_select : Bool
   coded_lossless : Bool
   disable_cdf_update : Bool
+  allow_screen_content_tools : Bool
 }
 
 ///|
@@ -59,10 +60,16 @@ pub fn av1_parse_stage1_frame(
   allow_monochrome? : Bool = false,
   allow_highbd? : Bool = false,
 ) -> Av1FrameHeaderInfo? {
-  if sequence.profile != 0 ||
+  if (
+      sequence.profile != 0 &&
+      !(allow_highbd && sequence.profile == 2 && sequence.bit_depth == 12)
+    ) ||
     (sequence.bit_depth != 8 && !allow_highbd) ||
     (sequence.monochrome && !allow_monochrome) ||
-    ((!sequence.subsampling_x || !sequence.subsampling_y) && !sequence.monochrome) ||
+    (
+      (!sequence.subsampling_x || !sequence.subsampling_y) &&
+      !sequence.monochrome
+    ) ||
     !sequence.reduced_still_picture_header ||
     sequence.separate_uv_delta_q ||
     sequence.film_grain_params_present {
@@ -301,6 +308,7 @@ pub fn av1_parse_stage1_frame(
       tx_mode_select: false,
       coded_lossless,
       disable_cdf_update,
+      allow_screen_content_tools: allow_tools,
     })
   } else {
     if r.take(1) is None {
@@ -323,6 +331,7 @@ pub fn av1_parse_stage1_frame(
       tx_mode_select: false,
       coded_lossless,
       disable_cdf_update,
+      allow_screen_content_tools: allow_tools,
     })
   }
 }

@@ -87,6 +87,7 @@ pub fn av1_decode_dc_tile(
   matrix_coefficients? : Int = 6,
   use_128x128_superblock? : Bool = false,
   bit_depth? : Int = 8,
+  allow_screen_content_tools? : Bool = false,
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
@@ -96,8 +97,25 @@ pub fn av1_decode_dc_tile(
     base_q_idx <= 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||
-    tile_payload.length() > 64 {
+    tile_payload.length() > (if width == 64 { 255 } else { 64 }) {
     return None
+  }
+  // Try the bounded four-child SPLIT path before the legacy single-block path.
+  // A failed probe leaves no shared decoder state, so normal tiles continue.
+  if width == 64 && bit_depth == 8 {
+    match
+      av1_decode_split_tile_64x64(
+        tile_payload,
+        base_q_idx,
+        disable_cdf_update~,
+        full_range~,
+        matrix_coefficients~,
+        use_128x128_superblock~,
+        allow_screen_content_tools~,
+      ) {
+      Some(image) => return Some(image)
+      None => ()
+    }
   }
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
   let y_coeff = av1_coeff_context(base_q_idx, 4, 0)
@@ -170,6 +188,19 @@ pub fn av1_decode_dc_tile(
   if uv_mode_symbol != 0 {
     return None
   }
+  if allow_screen_content_tools {
+    let palette_y : Array[Int] = if width == 64 {
+      [32450, 32768, 0]
+    } else {
+      [32309, 32768, 0]
+    }
+    if y_mode_symbol == 0 && decoder.symbol(palette_y) != 0 {
+      return None
+    }
+    if decoder.symbol([32461, 32768, 0]) != 0 {
+      return None
+    }
+  }
   let y_prediction = match
     av1_intra_predict(
       y_mode_symbol,
@@ -192,7 +223,12 @@ pub fn av1_decode_dc_tile(
       return None
     }
     let coefficients = match
-      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, y_coeff, bit_depth=bit_depth) {
+      av1_decode_coeffs_square_with_decoder(
+        decoder,
+        base_q_idx,
+        y_coeff,
+        bit_depth~,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -209,7 +245,12 @@ pub fn av1_decode_dc_tile(
   if cu == 0 {
     if width == 64 {
       let coefficients = match
-        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff, bit_depth=bit_depth) {
+        av1_decode_coeffs_square_with_decoder(
+          decoder,
+          base_q_idx,
+          uv_coeff,
+          bit_depth~,
+        ) {
         Some(value) => value
         None => return None
       }
@@ -232,7 +273,12 @@ pub fn av1_decode_dc_tile(
   if cv == 0 {
     if width == 64 {
       let coefficients = match
-        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, uv_coeff, bit_depth=bit_depth) {
+        av1_decode_coeffs_square_with_decoder(
+          decoder,
+          base_q_idx,
+          uv_coeff,
+          bit_depth~,
+        ) {
         Some(value) => value
         None => return None
       }
@@ -292,7 +338,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   if frames.length() == 0 {
     return None
   }
-  let header = av1_parse_stage1_frame(frames[0], seq)
+  let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
   match header {
     None => None
     Some(frame) =>
@@ -302,9 +348,11 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         frame.tile_payload,
         frame.base_q_idx,
         disable_cdf_update=frame.disable_cdf_update,
+        allow_screen_content_tools=frame.allow_screen_content_tools,
         full_range=seq.full_range,
         matrix_coefficients=seq.matrix_coefficients,
         use_128x128_superblock=seq.use_128x128_superblock,
+        bit_depth=seq.bit_depth,
       )
   }
 }
@@ -316,20 +364,19 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
     None => None
-    Some(value) => if value.bit_depth != 8 {
-      None
-    } else {
+    Some(value) =>
       av1_decode_dc_tile(
         value.width,
         value.height,
         value.tile_payload,
         value.base_q_idx,
         disable_cdf_update=value.disable_cdf_update,
+        allow_screen_content_tools=value.allow_screen_content_tools,
         full_range=value.full_range,
         matrix_coefficients=value.matrix_coefficients,
         use_128x128_superblock=value.use_128x128_superblock,
+        bit_depth=value.bit_depth,
       )
-    }
   }
 }
 

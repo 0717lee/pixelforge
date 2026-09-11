@@ -271,10 +271,7 @@ fn av1_decode_coeffs_square_with_decoder(
   let out : Array[Int] = Array::make(side * side, 0)
   for i in 0..<1024 {
     let q = if i == 0 { dc_q } else { ac_q }
-    // Large-transform coefficient storage is one codec scale below the
-    // pixel-domain inverse-transform input; restore it for AC terms.
-    let tx_scale = if context.tx_ctx == 4 && i != 0 { 8L } else { 1L }
-    let v = quant[i].to_int64() * q.to_int64() * tx_scale
+    let v = quant[i].to_int64() * q.to_int64()
     let magnitude = ((if v < 0 { -v } else { v }) & 0xFFFFFFL) / denom
     let signed = (if v < 0 { -magnitude } else { magnitude }).to_int()
     let limit = 1 << (7 + bit_depth)
