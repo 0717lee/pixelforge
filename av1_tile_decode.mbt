@@ -23,8 +23,10 @@ fn av1_decode_single_dc(
   base_q_idx : Int,
   tx_ctx : Int,
   context : Av1DcContext,
+  bit_depth? : Int = 8,
 ) -> Int? {
-  if tx_ctx != 3 && tx_ctx != 4 {
+  if (tx_ctx != 3 && tx_ctx != 4) ||
+    (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
   }
   if decoder.symbol(context.eob) != 0 {
@@ -65,12 +67,12 @@ fn av1_decode_single_dc(
     return None
   }
   let denom = if tx_ctx == 4 { 4 } else { 2 }
-  let dq = ((level * av1_dc_quant_8(base_q_idx)) & 0xFFFFFF) / denom
+  let dq = ((level * av1_dc_quant(bit_depth, base_q_idx)) & 0xFFFFFF) / denom
   let signed = if sign == 1 { -dq } else { dq }
   let side = if tx_ctx == 4 { 64 } else { 32 }
   let coeffs : Array[Int] = Array::make(side * side, 0)
   coeffs[0] = signed
-  match av1_inverse_dct_2d(coeffs, side, side, 8) {
+  match av1_inverse_dct_2d(coeffs, side, side, bit_depth) {
     Some(residual) => Some(residual[0])
     None => None
   }
@@ -259,7 +261,9 @@ pub fn av1_decode_dc_tile(
         None => return None
       }
     } else {
-      let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
+      let residual = match av1_decode_single_dc(
+        decoder, base_q_idx, 3, uv_dc, bit_depth~,
+      ) {
         Some(value) => value
         None => return None
       }
@@ -287,7 +291,9 @@ pub fn av1_decode_dc_tile(
         None => return None
       }
     } else {
-      let residual = match av1_decode_single_dc(decoder, base_q_idx, 3, uv_dc) {
+      let residual = match av1_decode_single_dc(
+        decoder, base_q_idx, 3, uv_dc, bit_depth~,
+      ) {
         Some(value) => value
         None => return None
       }
