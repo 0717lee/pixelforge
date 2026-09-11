@@ -96,13 +96,18 @@ fn av1_inverse_adst_1d(input : Array[Int], n : Int) -> Array[Int]? {
 }
 
 fn av1_inverse_adst_2d(input : Array[Int], width : Int, height : Int, row_adst : Bool, col_adst : Bool) -> Array[Int]? {
-  if width != height || (width != 4 && width != 8 && width != 16) || input.length() != width * height { return None }
-  let n = if width == 4 { 2 } else if width == 8 { 3 } else { 4 }
+  if (width != 4 && width != 8 && width != 16) ||
+    (height != 4 && height != 8 && height != 16) ||
+    input.length() != width * height { return None }
+  let row_n = if width == 4 { 2 } else if width == 8 { 3 } else { 4 }
+  let col_n = if height == 4 { 2 } else if height == 8 { 3 } else { 4 }
   let temp : Array[Int] = Array::make(width * height, 0)
   for y in 0..<height {
     let row : Array[Int] = []
     for x in 0..<width { row.push(input[y * width + x]) }
-    let v = if row_adst { if n == 2 { av1_inverse_adst4(row) } else { av1_inverse_adst_1d(row, n) } } else { av1_inverse_dct(row, n, 30) }
+    let v = if row_adst {
+      if row_n == 2 { av1_inverse_adst4(row) } else { av1_inverse_adst_1d(row, row_n) }
+    } else { av1_inverse_dct(row, row_n, 30) }
     let values = match v { Some(x) => x; None => return None }
     for x in 0..<width { temp[y * width + x] = values[x] }
   }
@@ -110,7 +115,9 @@ fn av1_inverse_adst_2d(input : Array[Int], width : Int, height : Int, row_adst :
   for x in 0..<width {
     let col : Array[Int] = []
     for y in 0..<height { col.push(temp[y * width + x]) }
-    let v = if col_adst { if n == 2 { av1_inverse_adst4(col) } else { av1_inverse_adst_1d(col, n) } } else { av1_inverse_dct(col, n, 30) }
+    let v = if col_adst {
+      if col_n == 2 { av1_inverse_adst4(col) } else { av1_inverse_adst_1d(col, col_n) }
+    } else { av1_inverse_dct(col, col_n, 30) }
     let values = match v { Some(x) => x; None => return None }
     for y in 0..<height { out[y * width + x] = values[y] }
   }
@@ -162,6 +169,8 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstAdst, Array::make(64, 0), 8, 8, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxDctAdst, Array::make(32, 0), 4, 8, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxAdstDct, Array::make(32, 0), 8, 4, 8) is Some(_))
 }
 
 ///|
