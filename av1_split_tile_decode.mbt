@@ -117,9 +117,6 @@ pub fn av1_decode_split_tile_64x64(
     }
     y_modes.push(mode)
     let uv_mode = decoder.symbol(av1_split_uv_mode_cdf())
-    if uv_mode != 0 {
-      return None
-    }
     let u_zero = decoder.symbol(c_zero)
     if u_zero == 1 {
       u_coeffs.push(Array::make(16 * 16, 0))
@@ -144,8 +141,11 @@ pub fn av1_decode_split_tile_64x64(
       }
       v_coeffs.push(coeffs)
     } else { return None }
-    u_modes.push(AV1_INTRA_DC)
-    v_modes.push(AV1_INTRA_DC)
+    if uv_mode < 0 || uv_mode > AV1_INTRA_PAETH {
+      return None
+    }
+    u_modes.push(uv_mode)
+    v_modes.push(uv_mode)
   }
   av1_reconstruct_split_64x64(
     y_coeffs,
