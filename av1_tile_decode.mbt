@@ -96,7 +96,7 @@ pub fn av1_decode_dc_tile(
     (width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
     width != height ||
-    base_q_idx <= 0 ||
+    base_q_idx < 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||
     tile_payload.length() > (if width == 64 { 255 } else { 64 }) {

@@ -84,7 +84,7 @@ test "av1 dc tile rejects unsupported dimensions and payload bounds" {
   assert_true(av1_decode_dc_tile(32, 64, [b'\x2E'], 43) is None)
   assert_true(av1_decode_dc_tile(32, 32, [], 43) is None)
   assert_true(av1_decode_dc_tile(32, 32, [b'\x2E', b'\x2E', b'\x2E', b'\x2E', b'\x2E'], 43) is None)
-  assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 0) is None)
+  // qindex zero is valid for lossless/high-bit-depth constant tiles.
   assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 256) is None)
 }
 

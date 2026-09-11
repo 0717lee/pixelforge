@@ -20,7 +20,7 @@ pub fn av1_decode_alpha_tile(
   allow_screen_content_tools? : Bool = false,
 ) -> Array[Byte]? {
   if (width != 32 && width != 64) || width != height ||
-    base_q_idx <= 0 || base_q_idx > 255 || tile_payload.length() == 0 ||
+    base_q_idx < 0 || base_q_idx > 255 || tile_payload.length() == 0 ||
     tile_payload.length() > 255 {
     return None
   }

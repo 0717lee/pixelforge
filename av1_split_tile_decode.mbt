@@ -72,7 +72,7 @@ pub fn av1_decode_split_tile_64x64(
 ) -> Image? {
   if tile_payload.length() == 0 ||
     tile_payload.length() > 255 ||
-    base_q_idx <= 0 ||
+    base_q_idx < 0 ||
     base_q_idx > 255 {
     return None
   }
