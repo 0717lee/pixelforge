@@ -6,6 +6,11 @@
   4:2:0 frames with DC intra prediction, square DCT_DCT coefficient decoding,
   and luma/chroma residual reconstruction. The path is validated against
   external libaom/dav1d flat and non-constant fixtures and emits RGBA.
+- Added bounded SPLIT four-child tile decoding, 8–12-bit quantization-aware
+  reconstruction, monochrome alpha SPLIT decoding, and safe rejection of
+  unsupported complex high-bit-depth residual streams.
+- Added pure MoonBit grid tile extraction/composition and animation sample
+  extraction, decoding, and timestamp-based frame selection APIs.
 - Wired the normative integer inverse-DCT path into the bounded single-DC
   reconstruction and accepted 128x128-superblock 64x64 frames.
 - Added `avif_stage1_input()` for validated AVIF-to-tile handoff; general block
