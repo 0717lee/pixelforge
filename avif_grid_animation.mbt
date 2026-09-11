@@ -144,6 +144,29 @@ pub fn avif_decode_animation(data : Array[Byte]) -> AvifAnimationPixels? {
   avif_decode_animation_frames(descriptor, samples)
 }
 
+/// Select the frame visible at a media timestamp. Playback loops at the
+/// track duration; negative timestamps are rejected.
+pub fn avif_animation_frame_at(
+  animation : AvifAnimationPixels,
+  timestamp : Int,
+) -> Image? {
+  if timestamp < 0 || animation.timescale <= 0 || animation.frames.length() == 0 {
+    return None
+  }
+  let mut total = 0
+  for frame in animation.frames {
+    total = total + frame.duration
+  }
+  if total <= 0 { return None }
+  let t = timestamp % total
+  for frame in animation.frames {
+    if t < frame.timestamp + frame.duration {
+      return Some(frame.image)
+    }
+  }
+  Some(animation.frames[animation.frames.length() - 1].image)
+}
+
 ///|
 priv suberror GridAnimError {
   Invalid

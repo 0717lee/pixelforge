@@ -10,4 +10,7 @@ test "animation samples decode in descriptor order" {
   assert_eq(result.frames.length(), 2)
   assert_eq(result.frames[1].timestamp, 10)
   assert_eq(result.frames[0].image.get_pixel(0, 0).3, b'\xFF')
+  assert_true(avif_animation_frame_at(result, 0) is Some(_))
+  assert_true(avif_animation_frame_at(result, 25) is Some(_))
+  assert_true(avif_animation_frame_at(result, -1) is None)
 }
