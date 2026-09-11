@@ -62,7 +62,8 @@ pub fn av1_parse_stage1_frame(
 ) -> Av1FrameHeaderInfo? {
   if (
       sequence.profile != 0 &&
-      !(allow_highbd && sequence.profile == 2 && sequence.bit_depth == 12)
+      !(allow_highbd && sequence.profile == 2 &&
+        (sequence.bit_depth == 10 || sequence.bit_depth == 12))
     ) ||
     (sequence.bit_depth != 8 && !allow_highbd) ||
     (sequence.monochrome && !allow_monochrome) ||
