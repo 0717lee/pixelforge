@@ -204,3 +204,18 @@ test "split reconstruction rejects malformed child blocks" {
     None,
   )
 }
+
+///|
+test "split reconstruction accepts non-DC chroma modes" {
+  let y = Array::make(32 * 32, 0)
+  let c = Array::make(16 * 16, 0)
+  let out = av1_reconstruct_split_yuv420(
+    [y.copy(), y.copy(), y.copy(), y.copy()],
+    [c.copy(), c.copy(), c.copy(), c.copy()],
+    [c.copy(), c.copy(), c.copy(), c.copy()],
+    [AV1_INTRA_DC, AV1_INTRA_DC, AV1_INTRA_DC, AV1_INTRA_DC],
+    [AV1_INTRA_V, AV1_INTRA_H, AV1_INTRA_PAETH, AV1_INTRA_DC],
+    [AV1_INTRA_H, AV1_INTRA_V, AV1_INTRA_PAETH, AV1_INTRA_DC],
+  )
+  assert_true(out is Some(_))
+}
