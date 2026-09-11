@@ -1,9 +1,10 @@
+///|
 /// High-bit-depth planar YUV420 conversion for the staged AV1 path.
 ///
-/// The public Image type stores 8-bit channels, so samples are normalized
-/// after validating the coded bit depth (8..12). Codec reconstruction remains
-/// integer-only; this adapter performs no browser or FFI fallback.
-
+/// The public Image type stores 8-bit channels; coded 8..12-bit samples are
+/// converted with the high-bit-depth matrix and narrowed only for final RGBA
+/// storage. Codec reconstruction remains integer-only; this adapter performs
+/// no browser or FFI fallback.
 pub fn av1_yuv420_highbd_to_rgba(
   width : Int,
   height : Int,
@@ -19,28 +20,61 @@ pub fn av1_yuv420_highbd_to_rgba(
   }
   let cw = (width + 1) / 2
   let ch = (height + 1) / 2
-  if y.length() != width * height || u.length() != cw * ch || v.length() != cw * ch {
+  if y.length() != width * height ||
+    u.length() != cw * ch ||
+    v.length() != cw * ch {
     return None
   }
+  // Keep coded precision through the matrix conversion. Narrowing each
+  // plane first loses limited-range offsets and adds a second rounding step.
+  let scale = 1 << (bit_depth - 8)
   let max_value = (1 << bit_depth) - 1
-  let normalize = fn(sample : Int) -> Byte {
-    let clamped = if sample < 0 { 0 } else if sample > max_value { max_value } else { sample }
-    ((clamped * 255 + (max_value >> 1)) / max_value).to_byte()
+  let clamp_sample = fn(sample : Int) -> Int {
+    if sample < 0 { 0 } else if sample > max_value { max_value } else { sample }
   }
-  let y8 : Array[Byte] = []
-  let u8 : Array[Byte] = []
-  let v8 : Array[Byte] = []
-  for sample in y { y8.push(normalize(sample)) }
-  for sample in u { u8.push(normalize(sample)) }
-  for sample in v { v8.push(normalize(sample)) }
-  av1_yuv420_to_rgba_color(
-    width,
-    height,
-    y8,
-    u8,
-    v8,
-    full_range~,
-    matrix_coefficients~,
-  )
+  let out = Image::new(width, height)
+  let round = 128 * scale
+  let to_byte = fn(value : Int) -> Byte {
+    let clamped = if value < 0 { 0 } else if value > 255 { 255 } else { value }
+    clamped.to_byte()
+  }
+  for yy in 0..<height {
+    for xx in 0..<width {
+      let yi = yy * width + xx
+      let ci = (yy / 2) * cw + xx / 2
+      let y0 = clamp_sample(y[yi])
+      let u0 = clamp_sample(u[ci]) - 128 * scale
+      let v0 = clamp_sample(v[ci]) - 128 * scale
+      let (r, g, b) = if full_range && matrix_coefficients == 1 {
+        (
+          (256 * y0 + 402 * v0 + round) / (256 * scale),
+          (256 * y0 - 48 * u0 - 120 * v0 + round) / (256 * scale),
+          (256 * y0 + 475 * u0 + round) / (256 * scale),
+        )
+      } else if full_range {
+        (
+          (256 * y0 + 359 * v0 + round) / (256 * scale),
+          (256 * y0 - 88 * u0 - 183 * v0 + round) / (256 * scale),
+          (256 * y0 + 454 * u0 + round) / (256 * scale),
+        )
+      } else {
+        let c = y0 - 16 * scale
+        if matrix_coefficients == 1 {
+          (
+            (298 * c + 459 * v0 + round) / (256 * scale),
+            (298 * c - 55 * u0 - 136 * v0 + round) / (256 * scale),
+            (298 * c + 541 * u0 + round) / (256 * scale),
+          )
+        } else {
+          (
+            (298 * c + 409 * v0 + round) / (256 * scale),
+            (298 * c - 100 * u0 - 208 * v0 + round) / (256 * scale),
+            (298 * c + 516 * u0 + round) / (256 * scale),
+          )
+        }
+      }
+      out.set_pixel(xx, yy, to_byte(r), to_byte(g), to_byte(b), b'\xFF')
+    }
+  }
+  Some(out)
 }
-
