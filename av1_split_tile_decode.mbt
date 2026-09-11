@@ -89,7 +89,7 @@ pub fn av1_decode_split_tile_64x64(
   let v_coeffs : Array[Array[Int]] = []
   let u_modes : Array[Int] = []
   let v_modes : Array[Int] = []
-  for _ in 0..<4 {
+  for child in 0..<4 {
     if decoder.symbol(av1_split_skip_cdf()) != 0 {
       return None
     }
@@ -104,12 +104,18 @@ pub fn av1_decode_split_tile_64x64(
     }
     let all_zero = decoder.symbol(y_zero)
     if all_zero == 0 {
-      let coeffs = match
-        av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, y_context) {
+      let blocks = match av1_tx_decode_coeff_leaves(
+        decoder,
+        base_q_idx,
+        y_context,
+        { row: (child / 2) * 32, col: (child % 2) * 32, width: 32, height: 32 },
+        [Av1TxNone],
+        8,
+      ) {
         Some(value) => value
         None => return None
       }
-      y_coeffs.push(coeffs)
+      y_coeffs.push(blocks[0])
     } else if all_zero == 1 {
       y_coeffs.push(Array::make(32 * 32, 0))
     } else {
@@ -121,25 +127,35 @@ pub fn av1_decode_split_tile_64x64(
     if u_zero == 1 {
       u_coeffs.push(Array::make(16 * 16, 0))
     } else if u_zero == 0 {
-      let coeffs = match av1_decode_coeffs_square_with_decoder(
-        decoder, base_q_idx, av1_coeff_context(base_q_idx, 3, 1),
+      let blocks = match av1_tx_decode_coeff_leaves(
+        decoder,
+        base_q_idx,
+        av1_coeff_context(base_q_idx, 3, 1),
+        { row: 0, col: 0, width: 32, height: 32 },
+        [Av1TxNone],
+        8,
       ) {
         Some(value) => value
         None => return None
       }
-      u_coeffs.push(coeffs)
+      u_coeffs.push(blocks[0])
     } else { return None }
     let v_zero = decoder.symbol(c_zero)
     if v_zero == 1 {
       v_coeffs.push(Array::make(16 * 16, 0))
     } else if v_zero == 0 {
-      let coeffs = match av1_decode_coeffs_square_with_decoder(
-        decoder, base_q_idx, av1_coeff_context(base_q_idx, 3, 2),
+      let blocks = match av1_tx_decode_coeff_leaves(
+        decoder,
+        base_q_idx,
+        av1_coeff_context(base_q_idx, 3, 2),
+        { row: 0, col: 0, width: 32, height: 32 },
+        [Av1TxNone],
+        8,
       ) {
         Some(value) => value
         None => return None
       }
-      v_coeffs.push(coeffs)
+      v_coeffs.push(blocks[0])
     } else { return None }
     if uv_mode < 0 || uv_mode > AV1_INTRA_PAETH {
       return None

@@ -82,16 +82,15 @@ pub fn av1_tx_leaves(
 fn av1_tx_decode_coeff_leaves(
   decoder : Av1SymbolDecoder,
   base_q_idx : Int,
+  context : Av1CoeffContext,
   root : Av1TxNode,
   partitions : Array[Av1TxPartition],
-  plane : Int,
   bit_depth : Int,
 ) -> Array[Array[Int]]? {
   let leaves = match av1_tx_leaves(root, partitions) {
     Some(value) => value
     None => return None
   }
-  let context = av1_coeff_context(base_q_idx, 3, plane)
   let out : Array[Array[Int]] = []
   for leaf in leaves {
     if leaf.width != leaf.height || (leaf.width != 32 && leaf.width != 64) {
@@ -136,9 +135,9 @@ test "transform tree coefficient walk rejects truncated entropy" {
   let result = av1_tx_decode_coeff_leaves(
     decoder,
     0,
+    av1_coeff_context(0, 3, 0),
     { row: 0, col: 0, width: 32, height: 32 },
     [Av1TxNone],
-    0,
     8,
   )
   assert_true(result is None)
