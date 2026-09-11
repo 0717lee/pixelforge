@@ -24,6 +24,12 @@ pub fn av1_decode_alpha_tile(
     tile_payload.length() > 255 {
     return None
   }
+  if width == 64 {
+    match av1_decode_alpha_split_tile(tile_payload, base_q_idx, allow_screen_content_tools) {
+      Some(value) => return Some(value)
+      None => ()
+    }
+  }
   let decoder = av1_msac_new(tile_payload, true)
   let partition : Array[Int] = if width == 64 {
     [20137, 21547, 23078, 29566, 29837, 30261, 30524, 30892, 31724, 32768, 0]
@@ -89,6 +95,45 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     use_128x128_superblock=sequence.use_128x128_superblock,
     allow_screen_content_tools=frame.allow_screen_content_tools,
   )
+}
+
+fn av1_decode_alpha_split_tile(
+  tile_payload : Array[Byte],
+  base_q_idx : Int,
+  allow_screen_content_tools : Bool,
+) -> Array[Byte]? {
+  let decoder = av1_msac_new(tile_payload, true)
+  if decoder.symbol(av1_split_partition_cdf(false)) != 3 { return None }
+  let plane : Array[Int] = Array::make(64 * 64, 128)
+  let context = av1_coeff_context(base_q_idx, 3, 0)
+  for child in 0..<4 {
+    if decoder.symbol(av1_split_skip_cdf()) != 0 { return None }
+    if decoder.symbol(av1_split_y_mode_cdf()) != 0 { return None }
+    if allow_screen_content_tools && decoder.symbol([32309, 32768, 0]) != 0 {
+      return None
+    }
+    let all_zero = decoder.symbol(av1_split_luma_zero(base_q_idx))
+    let residual = if all_zero == 1 {
+      Array::make(32 * 32, 0)
+    } else if all_zero == 0 {
+      let coeffs = match av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context) {
+        Some(value) => value
+        None => return None
+      }
+      match av1_inverse_dct_2d(coeffs, 32, 32, 8) {
+        Some(value) => value
+        None => return None
+      }
+    } else { return None }
+    let ox = (child % 2) * 32
+    let oy = (child / 2) * 32
+    for y in 0..<32 { for x in 0..<32 {
+      plane[(oy + y) * 64 + ox + x] = 128 + residual[y * 32 + x]
+    }}
+  }
+  let out : Array[Byte] = []
+  for value in plane { out.push(clamp_byte(value)) }
+  Some(out)
 }
 
 /// Decode the validated auxiliary alpha item from a complete AVIF container.
