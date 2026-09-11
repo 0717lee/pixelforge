@@ -17,6 +17,20 @@ pub(all) enum Av1TxType {
   Av1TxFlipadstDct
   Av1TxDctFlipadst
   Av1TxFlipadstFlipadst
+  Av1TxAdstFlipadst
+  Av1TxFlipadstAdst
+}
+
+fn av1_flip_transform(values : Array[Int], width : Int, height : Int, flip_rows : Bool, flip_cols : Bool) -> Array[Int] {
+  let out = Array::make(values.length(), 0)
+  for y in 0..<height {
+    for x in 0..<width {
+      let sx = if flip_rows { width - 1 - x } else { x }
+      let sy = if flip_cols { height - 1 - y } else { y }
+      out[y * width + x] = values[sy * width + sx]
+    }
+  }
+  out
 }
 
 fn av1_inverse_adst4(input : Array[Int]) -> Array[Int]? {
@@ -118,7 +132,26 @@ pub fn av1_inverse_transform_2d(
     Av1TxAdstDct => av1_inverse_adst_2d(dequant, width, height, true, false)
     Av1TxDctAdst => av1_inverse_adst_2d(dequant, width, height, false, true)
     Av1TxAdstAdst => av1_inverse_adst_2d(dequant, width, height, true, true)
-    _ => None
+    Av1TxFlipadstDct => match av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~) {
+      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
+      None => None
+    }
+    Av1TxDctFlipadst => match av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~) {
+      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
+      None => None
+    }
+    Av1TxFlipadstFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
+      Some(value) => Some(av1_flip_transform(value, width, height, true, true))
+      None => None
+    }
+    Av1TxAdstFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
+      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
+      None => None
+    }
+    Av1TxFlipadstAdst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
+      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
+      None => None
+    }
   }
 }
 
@@ -127,7 +160,7 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   let input = Array::make(16, 0)
   assert_true(av1_inverse_transform_2d(Av1TxDctDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is Some(_))
-  assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstAdst, Array::make(64, 0), 8, 8, 8) is Some(_))
 }
 
