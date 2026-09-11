@@ -85,6 +85,10 @@ pub fn av1_decode_split_tile_64x64(
   let c_zero = av1_split_chroma_zero(base_q_idx)
   let y_coeffs : Array[Array[Int]] = []
   let y_modes : Array[Int] = []
+  let u_coeffs : Array[Array[Int]] = []
+  let v_coeffs : Array[Array[Int]] = []
+  let u_modes : Array[Int] = []
+  let v_modes : Array[Int] = []
   for _ in 0..<4 {
     if decoder.symbol(av1_split_skip_cdf()) != 0 {
       return None
@@ -112,20 +116,44 @@ pub fn av1_decode_split_tile_64x64(
       return None
     }
     y_modes.push(mode)
-    if decoder.symbol(av1_split_uv_mode_cdf()) != 0 {
+    let uv_mode = decoder.symbol(av1_split_uv_mode_cdf())
+    if uv_mode != 0 {
       return None
     }
-    if decoder.symbol(c_zero) != 1 || decoder.symbol(c_zero) != 1 {
-      return None
-    }
+    let u_zero = decoder.symbol(c_zero)
+    if u_zero == 1 {
+      u_coeffs.push(Array::make(16 * 16, 0))
+    } else if u_zero == 0 {
+      let coeffs = match av1_decode_coeffs_square_with_decoder(
+        decoder, base_q_idx, av1_coeff_context(base_q_idx, 3, 1),
+      ) {
+        Some(value) => value
+        None => return None
+      }
+      u_coeffs.push(coeffs)
+    } else { return None }
+    let v_zero = decoder.symbol(c_zero)
+    if v_zero == 1 {
+      v_coeffs.push(Array::make(16 * 16, 0))
+    } else if v_zero == 0 {
+      let coeffs = match av1_decode_coeffs_square_with_decoder(
+        decoder, base_q_idx, av1_coeff_context(base_q_idx, 3, 2),
+      ) {
+        Some(value) => value
+        None => return None
+      }
+      v_coeffs.push(coeffs)
+    } else { return None }
+    u_modes.push(AV1_INTRA_DC)
+    v_modes.push(AV1_INTRA_DC)
   }
   av1_reconstruct_split_64x64(
     y_coeffs,
-    [],
-    [],
+    u_coeffs,
+    v_coeffs,
     y_modes,
-    [],
-    [],
+    u_modes,
+    v_modes,
     full_range~,
     matrix_coefficients~,
   )
