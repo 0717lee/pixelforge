@@ -19,6 +19,47 @@ pub(all) enum Av1TxType {
   Av1TxFlipadstFlipadst
 }
 
+fn av1_inverse_adst4(input : Array[Int]) -> Array[Int]? {
+  if input.length() != 4 { return None }
+  let s0 = 1321 * input[0]
+  let s1 = 2482 * input[0]
+  let s2 = 3344 * input[1]
+  let s3 = 3803 * input[2]
+  let s4 = 1321 * input[2]
+  let s5 = 2482 * input[3]
+  let s6 = 3803 * input[3]
+  let b7 = input[0] - input[2] + input[3]
+  let a0 = s0 + s3 + s5
+  let a1 = s1 - s4 - s6
+  let a2 = 3344 * b7
+  let a3 = s2
+  Some([
+    av1_round2(a0 + a3, 12),
+    av1_round2(a1 + a3, 12),
+    av1_round2(a2, 12),
+    av1_round2(a0 + a1 - a3, 12),
+  ])
+}
+
+fn av1_inverse_adst4_2d(input : Array[Int], width : Int, height : Int, row_adst : Bool, col_adst : Bool) -> Array[Int]? {
+  if width != 4 || height != 4 || input.length() != 16 { return None }
+  let temp : Array[Int] = Array::make(16, 0)
+  for y in 0..<4 {
+    let row = [input[y * 4], input[y * 4 + 1], input[y * 4 + 2], input[y * 4 + 3]]
+    let v = if row_adst { av1_inverse_adst4(row) } else { av1_inverse_dct(row, 2, 30) }
+    let values = match v { Some(x) => x; None => return None }
+    for x in 0..<4 { temp[y * 4 + x] = values[x] }
+  }
+  let out : Array[Int] = Array::make(16, 0)
+  for x in 0..<4 {
+    let col = [temp[x], temp[4 + x], temp[8 + x], temp[12 + x]]
+    let v = if col_adst { av1_inverse_adst4(col) } else { av1_inverse_dct(col, 2, 30) }
+    let values = match v { Some(x) => x; None => return None }
+    for y in 0..<4 { out[y * 4 + x] = values[y] }
+  }
+  Some(out)
+}
+
 /// Dispatch a coded transform type. DCT_DCT and lossless WHT are implemented;
 /// other AV1 transform types remain explicit unsupported boundaries.
 pub fn av1_inverse_transform_2d(
@@ -31,6 +72,9 @@ pub fn av1_inverse_transform_2d(
 ) -> Array[Int]? {
   match tx_type {
     Av1TxDctDct => av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~)
+    Av1TxAdstDct => av1_inverse_adst4_2d(dequant, width, height, true, false)
+    Av1TxDctAdst => av1_inverse_adst4_2d(dequant, width, height, false, true)
+    Av1TxAdstAdst => av1_inverse_adst4_2d(dequant, width, height, true, true)
     _ => None
   }
 }
@@ -39,7 +83,8 @@ pub fn av1_inverse_transform_2d(
 test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   let input = Array::make(16, 0)
   assert_true(av1_inverse_transform_2d(Av1TxDctDct, input, 4, 4, 8) is Some(_))
-  assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is None)
 }
 
 ///|
