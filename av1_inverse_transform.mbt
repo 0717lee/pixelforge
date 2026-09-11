@@ -19,6 +19,13 @@ pub(all) enum Av1TxType {
   Av1TxFlipadstFlipadst
   Av1TxAdstFlipadst
   Av1TxFlipadstAdst
+  Av1TxIdentityIdentity
+  Av1TxIdentityDct
+  Av1TxDctIdentity
+}
+
+fn av1_inverse_identity_2d(input : Array[Int], width : Int, height : Int) -> Array[Int]? {
+  if width <= 0 || height <= 0 || input.length() != width * height { None } else { Some(input.copy()) }
 }
 
 fn av1_flip_transform(values : Array[Int], width : Int, height : Int, flip_rows : Bool, flip_cols : Bool) -> Array[Int] {
@@ -159,6 +166,27 @@ pub fn av1_inverse_transform_2d(
       Some(value) => Some(av1_flip_transform(value, width, height, true, false))
       None => None
     }
+    Av1TxIdentityIdentity => av1_inverse_identity_2d(dequant, width, height)
+    Av1TxIdentityDct => {
+      let out : Array[Int] = Array::make(width * height, 0)
+      for y in 0..<height {
+        let row : Array[Int] = []
+        for x in 0..<width { row.push(dequant[y * width + x]) }
+        let values = match av1_inverse_dct(row, if width == 4 { 2 } else if width == 8 { 3 } else if width == 16 { 4 } else { return None }, 30) { Some(v) => v; None => return None }
+        for x in 0..<width { out[y * width + x] = values[x] }
+      }
+      Some(out)
+    }
+    Av1TxDctIdentity => {
+      let out : Array[Int] = Array::make(width * height, 0)
+      for x in 0..<width {
+        let col : Array[Int] = []
+        for y in 0..<height { col.push(dequant[y * width + x]) }
+        let values = match av1_inverse_dct(col, if height == 4 { 2 } else if height == 8 { 3 } else if height == 16 { 4 } else { return None }, 30) { Some(v) => v; None => return None }
+        for y in 0..<height { out[y * width + x] = values[y] }
+      }
+      Some(out)
+    }
   }
 }
 
@@ -169,6 +197,7 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstAdst, Array::make(64, 0), 8, 8, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxIdentityIdentity, Array::make(32, 0), 4, 8, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxDctAdst, Array::make(32, 0), 4, 8, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, Array::make(32, 0), 8, 4, 8) is Some(_))
 }
