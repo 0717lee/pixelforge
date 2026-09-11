@@ -205,6 +205,19 @@ test "split reconstruction rejects malformed child blocks" {
   )
 }
 
+fn av1_reconstruct_block_with_type(
+  coeffs : Array[Int],
+  width : Int,
+  height : Int,
+  tx_type : Av1TxType,
+  bit_depth : Int,
+) -> Array[Int]? {
+  if coeffs.length() != width * height {
+    return None
+  }
+  av1_inverse_transform_2d(tx_type, coeffs, width, height, bit_depth)
+}
+
 ///|
 test "split reconstruction accepts non-DC chroma modes" {
   let y = Array::make(32 * 32, 0)
@@ -218,4 +231,12 @@ test "split reconstruction accepts non-DC chroma modes" {
     [AV1_INTRA_H, AV1_INTRA_V, AV1_INTRA_PAETH, AV1_INTRA_DC],
   )
   assert_true(out is Some(_))
+}
+
+///|
+test "block reconstruction dispatches a four-point ADST" {
+  let values = Array::make(16, 0)
+  values[0] = 100
+  let out = av1_reconstruct_block_with_type(values, 4, 4, Av1TxAdstAdst, 8).unwrap()
+  assert_eq(out.length(), 16)
 }
