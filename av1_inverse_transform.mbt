@@ -8,6 +8,40 @@
 /// spec §7.13.2.3 and libaom `av1/common/av1_inv_txfm1d.c` at commit
 /// 8e7b6a567df174d795479b92b4ac766d271add73 (AOMedia googlesource).
 
+///| 
+pub(all) enum Av1TxType {
+  Av1TxDctDct
+  Av1TxAdstDct
+  Av1TxDctAdst
+  Av1TxAdstAdst
+  Av1TxFlipadstDct
+  Av1TxDctFlipadst
+  Av1TxFlipadstFlipadst
+}
+
+/// Dispatch a coded transform type. DCT_DCT and lossless WHT are implemented;
+/// other AV1 transform types remain explicit unsupported boundaries.
+pub fn av1_inverse_transform_2d(
+  tx_type : Av1TxType,
+  dequant : Array[Int],
+  width : Int,
+  height : Int,
+  bit_depth : Int,
+  lossless? : Bool = false,
+) -> Array[Int]? {
+  match tx_type {
+    Av1TxDctDct => av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~)
+    _ => None
+  }
+}
+
+///|
+test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
+  let input = Array::make(16, 0)
+  assert_true(av1_inverse_transform_2d(Av1TxDctDct, input, 4, 4, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxAdstDct, input, 4, 4, 8) is None)
+}
+
 ///|
 let av1_cos128_lookup : Array[Int] = [
   4096, 4095, 4091, 4085, 4076, 4065, 4052, 4036,
