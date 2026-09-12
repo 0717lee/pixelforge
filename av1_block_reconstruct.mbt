@@ -115,8 +115,9 @@ pub fn av1_reconstruct_tx_chroma(
   coefficients : Array[Array[Int]],
   mode : Int,
   types : Array[Av1TxType],
+  size? : Int = 32,
 ) -> Array[Int]? {
-  av1_reconstruct_tx_luma(32, 32, leaves, coefficients, mode, types)
+  av1_reconstruct_tx_luma(size, size, leaves, coefficients, mode, types)
 }
 
 /// Compose typed transform leaves for Y/U/V into an RGBA image.
@@ -146,11 +147,11 @@ pub fn av1_reconstruct_tx_rgba(
     Some(value) => value
     None => return None
   }
-  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types) {
+  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types, size=width / 2) {
     Some(value) => value
     None => return None
   }
-  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types) {
+  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types, size=width / 2) {
     Some(value) => value
     None => return None
   }
