@@ -192,7 +192,7 @@ pub fn av1_decode_dc_tile(
   }
   let y_mode_symbol = decoder.symbol(y_mode)
   let uv_mode_symbol = decoder.symbol(uv_mode)
-  if uv_mode_symbol != 0 {
+  if uv_mode_symbol != 0 && !tx_mode_select {
     return None
   }
   if allow_screen_content_tools {
@@ -206,6 +206,80 @@ pub fn av1_decode_dc_tile(
     }
     if decoder.symbol([32461, 32768, 0]) != 0 {
       return None
+    }
+  }
+  if tx_mode_select && bit_depth == 8 {
+    let leaves = match av1_decode_tx_tree(decoder, { row: 0, col: 0, width, height }, 0) {
+      Some(value) => value
+      None => return None
+    }
+    if leaves.length() > 1 {
+      let y_context = av1_coeff_context(base_q_idx, 3, 0)
+      let u_context = av1_coeff_context(base_q_idx, 3, 1)
+      let v_context = av1_coeff_context(base_q_idx, 3, 2)
+      let y_coeffs : Array[Array[Int]] = []
+      let u_coeffs : Array[Array[Int]] = []
+      let v_coeffs : Array[Array[Int]] = []
+      let y_types : Array[Av1TxType] = []
+      let u_types : Array[Av1TxType] = []
+      let v_types : Array[Av1TxType] = []
+      let chroma_leaves : Array[Av1TxLeaf] = []
+      for leaf in leaves {
+        let side = leaf.node.width
+        let y_zero = decoder.symbol(luma_zero)
+        if y_zero == 1 {
+          y_coeffs.push(Array::make(side * side, 0))
+          y_types.push(Av1TxDctDct)
+        } else if y_zero == 0 {
+          let tx_type = match av1_decode_intra_tx_type(decoder, side, side == 16) {
+            Some(value) => value
+            None => return None
+          }
+          match tx_type {
+            Av1TxDctDct => ()
+            _ => return None
+          }
+          let values = match av1_tx_decode_leaf_nodes(decoder, base_q_idx, y_context, [leaf], 8) {
+            Some(value) => value[0]
+            None => return None
+          }
+          y_coeffs.push(values)
+          y_types.push(tx_type)
+        } else { return None }
+        let cnode : Av1TxLeaf = {
+          node: { row: leaf.node.row / 2, col: leaf.node.col / 2, width: side / 2, height: side / 2 },
+          depth: leaf.depth,
+        }
+        chroma_leaves.push(cnode)
+        let u_zero = decoder.symbol(chroma_zero)
+        let v_zero = decoder.symbol(chroma_zero)
+        if u_zero == 1 { u_coeffs.push(Array::make((side / 2) * (side / 2), 0)); u_types.push(Av1TxDctDct) }
+        else if u_zero == 0 {
+          let values = match av1_tx_decode_leaf_nodes(
+            decoder, base_q_idx, u_context, [cnode], 8,
+          ) {
+            Some(value) => value[0]
+            None => return None
+          }
+          u_coeffs.push(values); u_types.push(Av1TxDctDct)
+        } else { return None }
+        if v_zero == 1 { v_coeffs.push(Array::make((side / 2) * (side / 2), 0)); v_types.push(Av1TxDctDct) }
+        else if v_zero == 0 {
+          let values = match av1_tx_decode_leaf_nodes(
+            decoder, base_q_idx, v_context, [cnode], 8,
+          ) {
+            Some(value) => value[0]
+            None => return None
+          }
+          v_coeffs.push(values); v_types.push(Av1TxDctDct)
+        } else { return None }
+      }
+      return av1_reconstruct_tx_rgba(
+        width, height, leaves, y_coeffs,
+        chroma_leaves, u_coeffs, chroma_leaves, v_coeffs,
+        y_mode_symbol, uv_mode_symbol, y_types, u_types, v_types, 8,
+        full_range~, matrix_coefficients~,
+      )
     }
   }
   if tx_mode_select {
