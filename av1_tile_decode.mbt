@@ -217,9 +217,16 @@ pub fn av1_decode_dc_tile(
       Some(value) => value
       None => return None
     }
-    // The legacy reconstruction path can consume one transform block only;
-    // multi-leaf coefficient assembly is the next traversal stage.
-    if leaves.length() != 1 { return None }
+    if leaves.length() != 1 {
+      // Consume every leaf through the shared CDF context before rejecting
+      // reconstruction; this keeps the entropy walk correct for the upcoming
+      // multi-block plane assembler.
+      let context = av1_coeff_context(base_q_idx, 3, 0)
+      if av1_tx_decode_leaf_nodes(decoder, base_q_idx, context, leaves, bit_depth) is None {
+        return None
+      }
+      return None
+    }
   }
   let y_prediction = match
     av1_intra_predict(
