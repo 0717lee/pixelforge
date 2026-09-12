@@ -208,7 +208,7 @@ pub fn av1_decode_dc_tile(
       return None
     }
   }
-  if tx_mode_select && bit_depth == 8 {
+  if tx_mode_select {
     let leaves = match av1_decode_tx_tree(decoder, { row: 0, col: 0, width, height }, 0) {
       Some(value) => value
       None => return None
@@ -239,7 +239,7 @@ pub fn av1_decode_dc_tile(
             Av1TxDctDct => ()
             _ => return None
           }
-          let values = match av1_tx_decode_leaf_nodes(decoder, base_q_idx, y_context, [leaf], 8) {
+          let values = match av1_tx_decode_leaf_nodes(decoder, base_q_idx, y_context, [leaf], bit_depth) {
             Some(value) => value[0]
             None => return None
           }
@@ -256,7 +256,7 @@ pub fn av1_decode_dc_tile(
         if u_zero == 1 { u_coeffs.push(Array::make((side / 2) * (side / 2), 0)); u_types.push(Av1TxDctDct) }
         else if u_zero == 0 {
           let values = match av1_tx_decode_leaf_nodes(
-            decoder, base_q_idx, u_context, [cnode], 8,
+            decoder, base_q_idx, u_context, [cnode], bit_depth,
           ) {
             Some(value) => value[0]
             None => return None
@@ -266,7 +266,7 @@ pub fn av1_decode_dc_tile(
         if v_zero == 1 { v_coeffs.push(Array::make((side / 2) * (side / 2), 0)); v_types.push(Av1TxDctDct) }
         else if v_zero == 0 {
           let values = match av1_tx_decode_leaf_nodes(
-            decoder, base_q_idx, v_context, [cnode], 8,
+            decoder, base_q_idx, v_context, [cnode], bit_depth,
           ) {
             Some(value) => value[0]
             None => return None
@@ -277,7 +277,7 @@ pub fn av1_decode_dc_tile(
       return av1_reconstruct_tx_rgba(
         width, height, leaves, y_coeffs,
         chroma_leaves, u_coeffs, chroma_leaves, v_coeffs,
-        y_mode_symbol, uv_mode_symbol, y_types, u_types, v_types, 8,
+        y_mode_symbol, uv_mode_symbol, y_types, u_types, v_types, bit_depth,
         full_range~, matrix_coefficients~,
       )
     }
