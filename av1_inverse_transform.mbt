@@ -22,6 +22,12 @@ pub(all) enum Av1TxType {
   Av1TxIdentityIdentity
   Av1TxIdentityDct
   Av1TxDctIdentity
+  Av1TxVerticalDct
+  Av1TxHorizontalDct
+  Av1TxVerticalAdst
+  Av1TxHorizontalAdst
+  Av1TxVerticalFlipadst
+  Av1TxHorizontalFlipadst
 }
 
 fn av1_inverse_identity_2d(input : Array[Int], width : Int, height : Int) -> Array[Int]? {
@@ -187,6 +193,18 @@ pub fn av1_inverse_transform_2d(
       }
       Some(out)
     }
+    Av1TxVerticalDct => av1_inverse_transform_2d(Av1TxIdentityDct, dequant, width, height, bit_depth, lossless~)
+    Av1TxHorizontalDct => av1_inverse_transform_2d(Av1TxDctIdentity, dequant, width, height, bit_depth, lossless~)
+    Av1TxVerticalAdst => av1_inverse_adst_2d(dequant, width, height, false, true)
+    Av1TxHorizontalAdst => av1_inverse_adst_2d(dequant, width, height, true, false)
+    Av1TxVerticalFlipadst => match av1_inverse_adst_2d(dequant, width, height, false, true) {
+      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
+      None => None
+    }
+    Av1TxHorizontalFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, false) {
+      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
+      None => None
+    }
   }
 }
 
@@ -200,6 +218,8 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxIdentityIdentity, Array::make(32, 0), 4, 8, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxDctAdst, Array::make(32, 0), 4, 8, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, Array::make(32, 0), 8, 4, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxVerticalDct, Array::make(32, 0), 4, 8, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxHorizontalAdst, Array::make(32, 0), 8, 4, 8) is Some(_))
 }
 
 ///|
