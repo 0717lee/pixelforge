@@ -103,14 +103,13 @@ pub fn av1_decode_dc_tile(
     width != height ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
-    tx_mode_select ||
     tile_payload.length() == 0 ||
     tile_payload.length() > (if width == 64 { 255 } else { 64 }) {
     return None
   }
   // Try the bounded four-child SPLIT path before the legacy single-block path.
   // A failed probe leaves no shared decoder state, so normal tiles continue.
-  if width == 64 && bit_depth == 8 {
+  if width == 64 && bit_depth == 8 && !tx_mode_select {
     match
       av1_decode_split_tile_64x64(
         tile_payload,
@@ -227,6 +226,16 @@ pub fn av1_decode_dc_tile(
   let luma_all_zero = decoder.symbol(luma_zero)
   let mut y_residual : Array[Int] = Array::make(width * height, 0)
   if luma_all_zero == 0 {
+    if tx_mode_select {
+      let tx_type = match av1_decode_intra_tx_type(decoder, width, width == 16) {
+        Some(value) => value
+        None => return None
+      }
+      match tx_type {
+        Av1TxDctDct => ()
+        _ => return None
+      }
+    }
     if width != 64 {
       return None
     }
