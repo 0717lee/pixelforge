@@ -18,6 +18,29 @@ pub(all) struct Av1TxNode {
   height : Int
 }
 
+/// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
+/// The context table is reduced to the three validated default rows until the
+/// full neighbour-derived 21-context table is wired into block traversal.
+fn av1_decode_tx_depth(
+  decoder : Av1SymbolDecoder,
+  max_size : Int,
+  context : Int,
+) -> Int? {
+  let ctx = if context < 0 { 0 } else if context > 2 { 2 } else { context }
+  let cdf : Array[Int] = if max_size >= 64 {
+    match ctx { 0 => [5782, 11475, 32768, 0]; 1 => [5782, 11475, 32768, 0]; _ => [16803, 22759, 32768, 0] }
+  } else if max_size >= 32 {
+    match ctx { 0 => [12986, 15180, 32768, 0]; 1 => [12986, 15180, 32768, 0]; _ => [24302, 25602, 32768, 0] }
+  } else if max_size >= 16 {
+    match ctx { 0 => [12272, 30172, 32768, 0]; 1 => [12272, 30172, 32768, 0]; _ => [18677, 30848, 32768, 0] }
+  } else {
+    [19968, 32768, 0]
+  }
+  let depth = decoder.symbol(cdf)
+  let max_depth = if max_size >= 64 { 3 } else if max_size >= 32 { 2 } else if max_size >= 16 { 1 } else { 0 }
+  if depth < 0 || depth > max_depth { None } else { Some(depth) }
+}
+
 /// Return valid children for one transform-tree partition.
 pub fn av1_tx_children(node : Av1TxNode, partition : Av1TxPartition) -> Array[Av1TxNode] {
   if node.row < 0 || node.col < 0 || node.width < 4 || node.height < 4 {
@@ -153,6 +176,13 @@ test "transform tree coefficient walk rejects truncated entropy" {
     8,
   )
   assert_true(result is None)
+}
+
+///|
+test "tx depth reader bounds frame transform depth" {
+  let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
+  assert_true(av1_decode_tx_depth(decoder, 64, 0) is Some(_))
+  assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(_))
 }
 
 ///|
