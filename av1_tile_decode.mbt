@@ -208,6 +208,19 @@ pub fn av1_decode_dc_tile(
       return None
     }
   }
+  if tx_mode_select {
+    let leaves = match av1_decode_tx_tree(
+      decoder,
+      { row: 0, col: 0, width, height },
+      0,
+    ) {
+      Some(value) => value
+      None => return None
+    }
+    // The legacy reconstruction path can consume one transform block only;
+    // multi-leaf coefficient assembly is the next traversal stage.
+    if leaves.length() != 1 { return None }
+  }
   let y_prediction = match
     av1_intra_predict(
       y_mode_symbol,
