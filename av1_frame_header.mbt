@@ -286,9 +286,6 @@ pub fn av1_parse_stage1_frame(
       Some(v) => v == 1
       None => return None
     }
-    if tx_mode_select {
-      return None
-    }
     if r.take(1) is None {
       return None
     }
@@ -306,7 +303,7 @@ pub fn av1_parse_stage1_frame(
       base_q_idx,
       tile_cols: 1,
       tile_rows: 1,
-      tx_mode_select: false,
+      tx_mode_select,
       coded_lossless,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,

@@ -53,6 +53,7 @@ pub(all) struct Av1Stage1Input {
   base_q_idx : Int
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
+  tx_mode_select : Bool
   full_range : Bool
   matrix_coefficients : Int
   use_128x128_superblock : Bool
@@ -609,6 +610,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             base_q_idx: frame.base_q_idx,
             disable_cdf_update: frame.disable_cdf_update,
             allow_screen_content_tools: frame.allow_screen_content_tools,
+            tx_mode_select: frame.tx_mode_select,
             full_range: seq.full_range,
             matrix_coefficients: seq.matrix_coefficients,
             use_128x128_superblock: seq.use_128x128_superblock,

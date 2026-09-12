@@ -90,6 +90,7 @@ pub fn av1_decode_dc_tile(
   use_128x128_superblock? : Bool = false,
   bit_depth? : Int = 8,
   allow_screen_content_tools? : Bool = false,
+  tx_mode_select? : Bool = false,
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
@@ -102,6 +103,7 @@ pub fn av1_decode_dc_tile(
     width != height ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
+    tx_mode_select ||
     tile_payload.length() == 0 ||
     tile_payload.length() > (if width == 64 { 255 } else { 64 }) {
     return None
@@ -363,6 +365,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         matrix_coefficients=seq.matrix_coefficients,
         use_128x128_superblock=seq.use_128x128_superblock,
         bit_depth=seq.bit_depth,
+        tx_mode_select=frame.tx_mode_select,
       )
   }
 }
@@ -386,6 +389,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         matrix_coefficients=value.matrix_coefficients,
         use_128x128_superblock=value.use_128x128_superblock,
         bit_depth=value.bit_depth,
+        tx_mode_select=value.tx_mode_select,
       )
   }
 }
