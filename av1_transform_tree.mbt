@@ -41,6 +41,42 @@ fn av1_decode_tx_depth(
   if depth < 0 || depth > max_depth { None } else { Some(depth) }
 }
 
+/// Decode the intra luma tx_type symbol after all_zero and before EOB.
+/// Set 2 is used for the reduced 5-symbol set; set 1 exposes seven symbols.
+fn av1_decode_intra_tx_type(
+  decoder : Av1SymbolDecoder,
+  tx_size : Int,
+  use_set2 : Bool,
+) -> Av1TxType? {
+  if tx_size > 32 { return Some(Av1TxDctDct) }
+  let symbol = if use_set2 {
+    decoder.symbol([6554, 13107, 19661, 26214, 32768, 0])
+  } else {
+    decoder.symbol([1535, 8035, 9461, 12751, 23467, 27825, 32768, 0])
+  }
+  if use_set2 {
+    match symbol {
+      0 => Some(Av1TxIdentityIdentity)
+      1 => Some(Av1TxDctDct)
+      2 => Some(Av1TxAdstAdst)
+      3 => Some(Av1TxAdstDct)
+      4 => Some(Av1TxDctAdst)
+      _ => None
+    }
+  } else {
+    match symbol {
+      0 => Some(Av1TxIdentityIdentity)
+      1 => Some(Av1TxDctDct)
+      2 => Some(Av1TxVerticalDct)
+      3 => Some(Av1TxHorizontalDct)
+      4 => Some(Av1TxAdstAdst)
+      5 => Some(Av1TxAdstDct)
+      6 => Some(Av1TxDctAdst)
+      _ => None
+    }
+  }
+}
+
 /// Return valid children for one transform-tree partition.
 pub fn av1_tx_children(node : Av1TxNode, partition : Av1TxPartition) -> Array[Av1TxNode] {
   if node.row < 0 || node.col < 0 || node.width < 4 || node.height < 4 {
@@ -183,6 +219,14 @@ test "tx depth reader bounds frame transform depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   assert_true(av1_decode_tx_depth(decoder, 64, 0) is Some(_))
   assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(_))
+}
+
+///|
+test "intra tx type reader maps both bounded symbol sets" {
+  let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
+  assert_true(av1_decode_intra_tx_type(decoder, 16, true) is Some(_))
+  assert_true(av1_decode_intra_tx_type(decoder, 16, false) is Some(_))
+  assert_true(av1_decode_intra_tx_type(decoder, 64, false) is Some(_))
 }
 
 ///|
