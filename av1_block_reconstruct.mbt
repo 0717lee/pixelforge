@@ -31,6 +31,7 @@ fn av1_reconstruct_child_with_type(
   coeffs : Array[Int],
   side : Int,
   tx_type : Av1TxType,
+  bit_depth? : Int = 8,
 ) -> Bool {
   if child.size != side || child.row + side > frame_height || child.col + side > frame_width {
     return false
@@ -59,23 +60,25 @@ fn av1_reconstruct_child_with_type(
       if have_above && have_left {
         plane[(child.row - 1) * frame_width + child.col - 1]
       } else {
-        128
+        1 << (bit_depth - 1)
       },
-      8,
+      bit_depth,
       have_above~,
       have_left~,
     ) {
     Some(value) => value
     None => return false
   }
-  let residual = match av1_reconstruct_block_with_type(coeffs, side, side, tx_type, 8) {
+  let residual = match av1_reconstruct_block_with_type(coeffs, side, side, tx_type, bit_depth) {
     Some(value) => value
     None => return false
   }
   for y in 0..<side {
     for x in 0..<side {
       let idx = (child.row + y) * frame_width + child.col + x
-      plane[idx] = clamp_int_8(prediction[y * side + x] + residual[y * side + x])
+      let value = prediction[y * side + x] + residual[y * side + x]
+      let hi = (1 << bit_depth) - 1
+      plane[idx] = if value < 0 { 0 } else if value > hi { hi } else { value }
     }
   }
   true
@@ -89,12 +92,13 @@ pub fn av1_reconstruct_tx_luma(
   coefficients : Array[Array[Int]],
   mode : Int,
   types : Array[Av1TxType],
+  bit_depth? : Int = 8,
 ) -> Array[Int]? {
   if width <= 0 || height <= 0 || leaves.length() == 0 ||
     leaves.length() != coefficients.length() || leaves.length() != types.length() {
     return None
   }
-  let plane : Array[Int] = Array::make(width * height, 128)
+  let plane : Array[Int] = Array::make(width * height, 1 << (bit_depth - 1))
   for i in 0..<leaves.length() {
     let leaf = leaves[i].node
     if leaf.row + leaf.height > height || leaf.col + leaf.width > width ||
@@ -103,7 +107,7 @@ pub fn av1_reconstruct_tx_luma(
     }
     let child = av1_partition_node(leaf.row, leaf.col, leaf.width, width, height)
     if !av1_reconstruct_child_with_type(
-      plane, width, height, child, mode, coefficients[i], leaf.width, types[i],
+      plane, width, height, child, mode, coefficients[i], leaf.width, types[i], bit_depth=bit_depth,
     ) { return None }
   }
   Some(plane)
@@ -116,8 +120,9 @@ pub fn av1_reconstruct_tx_chroma(
   mode : Int,
   types : Array[Av1TxType],
   size? : Int = 32,
+  bit_depth? : Int = 8,
 ) -> Array[Int]? {
-  av1_reconstruct_tx_luma(size, size, leaves, coefficients, mode, types)
+  av1_reconstruct_tx_luma(size, size, leaves, coefficients, mode, types, bit_depth~)
 }
 
 /// Compose typed transform leaves for Y/U/V into an RGBA image.
@@ -143,39 +148,22 @@ pub fn av1_reconstruct_tx_rgba(
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
   }
-  let y = match av1_reconstruct_tx_luma(width, height, y_leaves, y_coefficients, y_mode, y_types) {
+  let y = match av1_reconstruct_tx_luma(width, height, y_leaves, y_coefficients, y_mode, y_types, bit_depth~) {
     Some(value) => value
     None => return None
   }
-  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types, size=width / 2) {
+  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types, size=width / 2, bit_depth~) {
     Some(value) => value
     None => return None
   }
-  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types, size=width / 2) {
+  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types, size=width / 2, bit_depth~) {
     Some(value) => value
     None => return None
-  }
-  let scale = 1 << (bit_depth - 8)
-  let scale_plane = fn(values : Array[Int]) {
-    let out : Array[Int] = []
-    for value in values { out.push(value * scale) }
-    out
   }
   av1_yuv420_highbd_to_rgba(
-    width, height, scale_plane(y), scale_plane(u), scale_plane(v),
+    width, height, y, u, v,
     bit_depth, full_range~, matrix_coefficients~,
   )
-}
-
-///| clamp an intermediate reconstruction sample to 8-bit range.
-fn clamp_int_8(value : Int) -> Int {
-  if value < 0 {
-    0
-  } else if value > 255 {
-    255
-  } else {
-    value
-  }
 }
 
 ///| convert an integer plane to bytes without allocating per sample.
