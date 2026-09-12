@@ -81,6 +81,34 @@ fn av1_reconstruct_child_with_type(
   true
 }
 
+/// Reconstruct luma from raster-ordered transform leaves.
+pub fn av1_reconstruct_tx_luma(
+  width : Int,
+  height : Int,
+  leaves : Array[Av1TxLeaf],
+  coefficients : Array[Array[Int]],
+  mode : Int,
+  types : Array[Av1TxType],
+) -> Array[Int]? {
+  if width <= 0 || height <= 0 || leaves.length() == 0 ||
+    leaves.length() != coefficients.length() || leaves.length() != types.length() {
+    return None
+  }
+  let plane : Array[Int] = Array::make(width * height, 128)
+  for i in 0..<leaves.length() {
+    let leaf = leaves[i].node
+    if leaf.row + leaf.height > height || leaf.col + leaf.width > width ||
+      leaf.width != leaf.height {
+      return None
+    }
+    let child = av1_partition_node(leaf.row, leaf.col, leaf.width, width, height)
+    if !av1_reconstruct_child_with_type(
+      plane, width, height, child, mode, coefficients[i], leaf.width, types[i],
+    ) { return None }
+  }
+  Some(plane)
+}
+
 ///| clamp an intermediate reconstruction sample to 8-bit range.
 fn clamp_int_8(value : Int) -> Int {
   if value < 0 {
@@ -305,4 +333,21 @@ test "typed split reconstruction carries per-plane transform types" {
     [Av1TxDctDct, Av1TxDctDct, Av1TxDctDct, Av1TxDctDct],
   )
   assert_true(result is Some(_))
+}
+
+///|
+test "tx luma assembler places raster leaves" {
+  let leaves : Array[Av1TxLeaf] = [
+    { node: { row: 0, col: 0, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 0, col: 16, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 16, col: 0, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 16, col: 16, width: 16, height: 16 }, depth: 1 },
+  ]
+  let coeff = Array::make(16 * 16, 0)
+  let plane = av1_reconstruct_tx_luma(
+    32, 32, leaves, [coeff.copy(), coeff.copy(), coeff.copy(), coeff.copy()],
+    AV1_INTRA_DC, [Av1TxDctDct, Av1TxDctDct, Av1TxDctDct, Av1TxDctDct],
+  ).unwrap()
+  assert_eq(plane.length(), 1024)
+  assert_eq(plane[0], 128)
 }
