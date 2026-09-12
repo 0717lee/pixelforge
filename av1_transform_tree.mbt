@@ -81,12 +81,26 @@ fn av1_tx_depth_leaves(
   true
 }
 
+fn av1_decode_tx_tree(
+  decoder : Av1SymbolDecoder,
+  root : Av1TxNode,
+  context : Int,
+) -> Array[Av1TxLeaf]? {
+  let max_size = if root.width > root.height { root.width } else { root.height }
+  let depth = match av1_decode_tx_depth(decoder, max_size, context) {
+    Some(value) => value
+    None => return None
+  }
+  let out : Array[Av1TxLeaf] = []
+  if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
+}
+
 /// Decode the root `tx_depth` symbol and recursively emit transform leaves in
 /// raster order.  The caller supplies the block context used by the bounded
 /// default CDF rows.  Malformed geometry, an out-of-range symbol, or a depth
 /// that cannot be represented by the node returns `None` without emitting a
 /// partial result.
-fn av1_decode_tx_tree(
+fn av1_decode_tx_depth_tree(
   decoder : Av1SymbolDecoder,
   root : Av1TxNode,
   context : Int,
@@ -104,15 +118,6 @@ fn av1_decode_tx_tree(
     return None
   }
   Some(out)
-}
-
-/// Alias with an explicit leaf-oriented name for residual callers.
-fn av1_decode_tx_tree_leaves(
-  decoder : Av1SymbolDecoder,
-  root : Av1TxNode,
-  context : Int,
-) -> Array[Av1TxLeaf]? {
-  av1_decode_tx_tree(decoder, root, context)
 }
 
 /// Decode the intra luma tx_type symbol after all_zero and before EOB.
@@ -298,7 +303,7 @@ test "tx depth reader bounds frame transform depth" {
 ///|
 test "tx depth entropy walker emits root leaf for zero depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
-  let leaves = av1_decode_tx_tree(
+  let leaves = av1_decode_tx_depth_tree(
     decoder,
     { row: 0, col: 0, width: 4, height: 4 },
     0,
@@ -323,6 +328,13 @@ test "intra tx type reader maps both bounded symbol sets" {
   assert_true(av1_decode_intra_tx_type(decoder, 16, true) is Some(_))
   assert_true(av1_decode_intra_tx_type(decoder, 16, false) is Some(_))
   assert_true(av1_decode_intra_tx_type(decoder, 64, false) is Some(_))
+}
+
+///|
+test "tx depth entropy recursively emits transform leaves" {
+  let decoder = av1_msac_new(Array::make(32, b'\x00'), true)
+  let leaves = av1_decode_tx_depth_tree(decoder, { row: 0, col: 0, width: 16, height: 16 }, 0).unwrap()
+  assert_true(leaves.length() >= 1)
 }
 
 ///|
