@@ -109,6 +109,16 @@ pub fn av1_reconstruct_tx_luma(
   Some(plane)
 }
 
+/// Reconstruct one 4:2:0 chroma plane from 16×16 transform leaves.
+pub fn av1_reconstruct_tx_chroma(
+  leaves : Array[Av1TxLeaf],
+  coefficients : Array[Array[Int]],
+  mode : Int,
+  types : Array[Av1TxType],
+) -> Array[Int]? {
+  av1_reconstruct_tx_luma(32, 32, leaves, coefficients, mode, types)
+}
+
 ///| clamp an intermediate reconstruction sample to 8-bit range.
 fn clamp_int_8(value : Int) -> Int {
   if value < 0 {
@@ -350,4 +360,21 @@ test "tx luma assembler places raster leaves" {
   ).unwrap()
   assert_eq(plane.length(), 1024)
   assert_eq(plane[0], 128)
+}
+
+///|
+test "tx chroma assembler uses 16 pixel leaves" {
+  let leaves : Array[Av1TxLeaf] = [
+    { node: { row: 0, col: 0, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 0, col: 16, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 16, col: 0, width: 16, height: 16 }, depth: 1 },
+    { node: { row: 16, col: 16, width: 16, height: 16 }, depth: 1 },
+  ]
+  let coeff = Array::make(16 * 16, 0)
+  let plane = av1_reconstruct_tx_chroma(
+    leaves, [coeff.copy(), coeff.copy(), coeff.copy(), coeff.copy()],
+    AV1_INTRA_DC, [Av1TxDctDct, Av1TxDctDct, Av1TxDctDct, Av1TxDctDct],
+  ).unwrap()
+  assert_eq(plane.length(), 1024)
+  assert_eq(plane[1023], 128)
 }
