@@ -18,6 +18,15 @@ pub(all) struct Av1TxNode {
   height : Int
 }
 
+/// A transform-tree leaf together with the depth selected by the frame's
+/// `tx_depth` symbol.  AV1 signals one depth for an intra block and derives
+/// the geometry by repeatedly applying the split transform size; keeping the
+/// depth on each leaf makes that relationship explicit for residual readers.
+pub(all) struct Av1TxLeaf {
+  node : Av1TxNode
+  depth : Int
+}
+
 /// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
 /// The context table is reduced to the three validated default rows until the
 /// full neighbour-derived 21-context table is wired into block traversal.
@@ -39,6 +48,71 @@ fn av1_decode_tx_depth(
   let depth = decoder.symbol(cdf)
   let max_depth = if max_size >= 64 { 3 } else if max_size >= 32 { 2 } else if max_size >= 16 { 1 } else { 0 }
   if depth < 0 || depth > max_depth { None } else { Some(depth) }
+}
+
+/// Build the leaves selected by one `tx_depth` value.  The entropy syntax
+/// carries the depth once at the block root; subsequent nodes are geometric
+/// splits and do not consume additional symbols.  This helper is deliberately
+/// separate from coefficient decoding so callers can traverse the same leaf
+/// order for prediction, residuals and context updates.
+fn av1_tx_depth_leaves(
+  node : Av1TxNode,
+  remaining : Int,
+  depth : Int,
+  out : Array[Av1TxLeaf],
+) -> Bool {
+  if node.row < 0 || node.col < 0 || node.width < 4 || node.height < 4 ||
+    remaining < 0 || depth < 0 {
+    return false
+  }
+  if remaining == 0 {
+    out.push({ node, depth })
+    return true
+  }
+  let children = av1_tx_children(node, Av1TxSplit)
+  if children.length() != 4 {
+    return false
+  }
+  for child in children {
+    if !av1_tx_depth_leaves(child, remaining - 1, depth + 1, out) {
+      return false
+    }
+  }
+  true
+}
+
+/// Decode the root `tx_depth` symbol and recursively emit transform leaves in
+/// raster order.  The caller supplies the block context used by the bounded
+/// default CDF rows.  Malformed geometry, an out-of-range symbol, or a depth
+/// that cannot be represented by the node returns `None` without emitting a
+/// partial result.
+fn av1_decode_tx_tree(
+  decoder : Av1SymbolDecoder,
+  root : Av1TxNode,
+  context : Int,
+) -> Array[Av1TxLeaf]? {
+  if root.row < 0 || root.col < 0 || root.width < 4 || root.height < 4 {
+    return None
+  }
+  let max_size = if root.width > root.height { root.width } else { root.height }
+  let depth = match av1_decode_tx_depth(decoder, max_size, context) {
+    Some(value) => value
+    None => return None
+  }
+  let out : Array[Av1TxLeaf] = []
+  if !av1_tx_depth_leaves(root, depth, 0, out) {
+    return None
+  }
+  Some(out)
+}
+
+/// Alias with an explicit leaf-oriented name for residual callers.
+fn av1_decode_tx_tree_leaves(
+  decoder : Av1SymbolDecoder,
+  root : Av1TxNode,
+  context : Int,
+) -> Array[Av1TxLeaf]? {
+  av1_decode_tx_tree(decoder, root, context)
 }
 
 /// Decode the intra luma tx_type symbol after all_zero and before EOB.
@@ -219,6 +293,28 @@ test "tx depth reader bounds frame transform depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   assert_true(av1_decode_tx_depth(decoder, 64, 0) is Some(_))
   assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(_))
+}
+
+///|
+test "tx depth entropy walker emits root leaf for zero depth" {
+  let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
+  let leaves = av1_decode_tx_tree(
+    decoder,
+    { row: 0, col: 0, width: 4, height: 4 },
+    0,
+  ).unwrap()
+  assert_eq(leaves.length(), 1)
+  assert_eq(leaves[0].depth, 0)
+  assert_eq((leaves[0].node.width, leaves[0].node.height), (4, 4))
+}
+
+///|
+test "tx depth walker rejects a split below minimum geometry" {
+  let out : Array[Av1TxLeaf] = []
+  assert_false(
+    av1_tx_depth_leaves({ row: 0, col: 0, width: 4, height: 4 }, 1, 0, out),
+  )
+  assert_eq(out.length(), 0)
 }
 
 ///|
