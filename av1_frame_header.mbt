@@ -11,6 +11,7 @@ pub(all) struct Av1FrameHeaderInfo {
   tile_cols : Int
   tile_rows : Int
   tx_mode_select : Bool
+  reduced_tx_set : Bool
   coded_lossless : Bool
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
@@ -286,8 +287,10 @@ pub fn av1_parse_stage1_frame(
       Some(v) => v == 1
       None => return None
     }
-    if r.take(1) is None {
-      return None
+    // reduced_tx_set follows tx_mode for intra still frames (AV1 §5.9.24).
+    let reduced_tx_set = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
     }
     let offset = (r.bit_pos + 7) / 8
     if offset > frame_payload.length() {
@@ -304,6 +307,7 @@ pub fn av1_parse_stage1_frame(
       tile_cols: 1,
       tile_rows: 1,
       tx_mode_select,
+      reduced_tx_set,
       coded_lossless,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,
@@ -327,6 +331,7 @@ pub fn av1_parse_stage1_frame(
       tile_cols: 1,
       tile_rows: 1,
       tx_mode_select: false,
+      reduced_tx_set: false,
       coded_lossless,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,

@@ -58,7 +58,9 @@ test "reference single-DC residual envelope is parsed" {
 
 ///|
 test "av1 decodes a 32x32 neutral tile" {
-  let image = av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 80, disable_cdf_update=true).unwrap()
+  // Crafted with scripts/craft_av1_fixture.py (LARGEST tx mode, all-skip,
+  // uv_mode read from the CFL-allowed table used for 32x32 blocks).
+  let image = av1_decode_dc_tile(32, 32, [b'\x14', b'\x80'], 80, disable_cdf_update=true).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
   assert_eq(image.get_pixel(31, 31), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }

@@ -95,29 +95,40 @@ fn av1_decode_tx_tree(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
+///|
+/// Read one leaf's coefficients while sharing one mutable MSAC reader and
+/// coefficient CDF context. `scan_class` selects the coefficient scan ordered
+/// by the leaf's transform type; `dc_sign_ctx` is the neighbour dc-sign
+/// context (0..2).
 fn av1_tx_decode_leaf_nodes(
   decoder : Av1SymbolDecoder,
   base_q_idx : Int,
   context : Av1CoeffContext,
   leaves : Array[Av1TxLeaf],
   bit_depth : Int,
-) -> Array[Array[Int]]? {
+  scan_class? : Int = AV1_SCAN_DEFAULT,
+  dc_sign_ctx? : Int = 0,
+) -> Array[Av1LeafCoeffs]? {
   if leaves.length() == 0 { return None }
-  let out : Array[Array[Int]] = []
+  let out : Array[Av1LeafCoeffs] = []
   for leaf in leaves {
     let side = leaf.node.width
     if side != leaf.node.height ||
       (side != 4 && side != 8 && side != 16 && side != 32 && side != 64) {
       return None
     }
-    let coeffs = if side <= 16 {
+    let leaf_coeffs = if side <= 16 {
       context.tx_ctx = if side == 16 { 2 } else if side == 8 { 1 } else { 0 }
-      av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, side, bit_depth=bit_depth)
+      av1_decode_coeffs_leaf_with_decoder(
+        decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~,
+      )
     } else {
       context.tx_ctx = if side == 64 { 4 } else { 3 }
-      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth=bit_depth)
+      av1_decode_coeffs_leaf_with_decoder(
+        decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~,
+      )
     }
-    match coeffs {
+    match leaf_coeffs {
       Some(value) => out.push(value)
       None => return None
     }
@@ -125,39 +136,186 @@ fn av1_tx_decode_leaf_nodes(
   Some(out)
 }
 
-/// Decode the intra luma tx_type symbol after all_zero and before EOB.
-/// Set 2 is used for the reduced 5-symbol set; set 1 exposes seven symbols.
+///|
+/// Transform set for an intra transform block (AV1 spec get_tx_set):
+/// 0 = DCT only (32x32 and larger), 1 = seven-symbol set, 2 = five-symbol set
+/// (16x16 leaves, or every size under a reduced_tx_set frame header).
+fn av1_intra_tx_set(side : Int, reduced_tx_set : Bool) -> Int {
+  if side > 32 {
+    return 0
+  }
+  if side == 32 {
+    return 0
+  }
+  if side == 16 {
+    return 2
+  }
+  if reduced_tx_set {
+    return 2
+  }
+  1
+}
+
+///|
+/// Map a TX_SET_INTRA_1 symbol to its transform type (AV1 spec
+/// Tx_Type_Intra_Inv_Set1: IDTX, DCT_DCT, V_DCT, H_DCT, ADST_ADST,
+/// ADST_DCT, DCT_ADST).
+fn av1_tx_type_intra_set1(symbol : Int) -> Av1TxType? {
+  match symbol {
+    0 => Some(Av1TxIdentityIdentity)
+    1 => Some(Av1TxDctDct)
+    2 => Some(Av1TxVerticalDct)
+    3 => Some(Av1TxHorizontalDct)
+    4 => Some(Av1TxAdstAdst)
+    5 => Some(Av1TxAdstDct)
+    6 => Some(Av1TxDctAdst)
+    _ => None
+  }
+}
+
+///|
+/// Map a TX_SET_INTRA_2 symbol to its transform type (AV1 spec
+/// Tx_Type_Intra_Inv_Set2: IDTX, DCT_DCT, ADST_ADST, ADST_DCT, DCT_ADST).
+fn av1_tx_type_intra_set2(symbol : Int) -> Av1TxType? {
+  match symbol {
+    0 => Some(Av1TxIdentityIdentity)
+    1 => Some(Av1TxDctDct)
+    2 => Some(Av1TxAdstAdst)
+    3 => Some(Av1TxAdstDct)
+    4 => Some(Av1TxDctAdst)
+    _ => None
+  }
+}
+
+///|
+/// Filter-intra modes remap to the intra direction used for the tx_type CDF
+/// context (AV1 spec Filter_Intra_Mode_To_Intra_Dir): DC, V, H, D157, DC.
+fn av1_filter_intra_mode_to_intra_dir(mode : Int) -> Int? {
+  match mode {
+    0 => Some(0)
+    1 => Some(1)
+    2 => Some(2)
+    3 => Some(6)
+    4 => Some(0)
+    _ => None
+  }
+}
+
+///|
+/// Chroma transform type derived from the UV intra mode (AV1 spec
+/// mode_to_txfm). D65..D113 directional rows follow the spec table order:
+/// DC, V, H, D45, D135, D113, D157, D203, D67, SMOOTH, SMOOTH_V, SMOOTH_H,
+/// PAETH.
+fn av1_mode_to_txfm(mode : Int) -> Av1TxType? {
+  match mode {
+    0 => Some(Av1TxDctDct)
+    1 => Some(Av1TxAdstDct)
+    2 => Some(Av1TxDctAdst)
+    3 => Some(Av1TxDctDct)
+    4 => Some(Av1TxAdstAdst)
+    5 => Some(Av1TxAdstDct)
+    6 => Some(Av1TxDctAdst)
+    7 => Some(Av1TxDctAdst)
+    8 => Some(Av1TxAdstDct)
+    9 => Some(Av1TxAdstAdst)
+    10 => Some(Av1TxAdstDct)
+    11 => Some(Av1TxDctAdst)
+    12 => Some(Av1TxAdstAdst)
+    _ => None
+  }
+}
+
+///|
+/// Whether a transform type belongs to the given intra transform set.
+fn av1_tx_type_in_set(tx_type : Av1TxType, set : Int) -> Bool {
+  if set == 0 {
+    return tx_type is Av1TxDctDct
+  }
+  match tx_type {
+    Av1TxDctDct => true
+    Av1TxIdentityIdentity => true
+    Av1TxAdstAdst => true
+    Av1TxAdstDct => true
+    Av1TxDctAdst => true
+    Av1TxVerticalDct => set == 1
+    Av1TxHorizontalDct => set == 1
+    _ => false
+  }
+}
+
+///|
+/// Read the luma intra_tx_type symbol for one transform leaf (AV1 spec
+/// transform_type). The symbol is consumed only when the transform set is
+/// non-empty and the effective quantizer is non-zero; otherwise DCT_DCT is
+/// implied. `intra_dir` is the luma prediction direction (remapped through
+/// filter-intra when that tool is active).
 fn av1_decode_intra_tx_type(
   decoder : Av1SymbolDecoder,
-  tx_size : Int,
-  use_set2 : Bool,
+  side : Int,
+  intra_dir : Int,
+  reduced_tx_set : Bool,
+  effective_qidx : Int,
 ) -> Av1TxType? {
-  if tx_size > 32 { return Some(Av1TxDctDct) }
-  let symbol = if use_set2 {
-    decoder.symbol([6554, 13107, 19661, 26214, 32768, 0])
-  } else {
-    decoder.symbol([1535, 8035, 9461, 12751, 23467, 27825, 32768, 0])
+  let set = av1_intra_tx_set(side, reduced_tx_set)
+  if set == 0 || effective_qidx <= 0 {
+    return Some(Av1TxDctDct)
   }
-  if use_set2 {
-    match symbol {
-      0 => Some(Av1TxIdentityIdentity)
-      1 => Some(Av1TxDctDct)
-      2 => Some(Av1TxAdstAdst)
-      3 => Some(Av1TxAdstDct)
-      4 => Some(Av1TxDctAdst)
-      _ => None
-    }
+  if intra_dir < 0 || intra_dir > 12 {
+    return None
+  }
+  let symbol = if set == 1 {
+    decoder.symbol(
+      av1_intra_tx_type_set1_cdf[if side == 4 { 0 } else { 1 }][intra_dir].copy(),
+    )
   } else {
-    match symbol {
-      0 => Some(Av1TxIdentityIdentity)
-      1 => Some(Av1TxDctDct)
-      2 => Some(Av1TxVerticalDct)
-      3 => Some(Av1TxHorizontalDct)
-      4 => Some(Av1TxAdstAdst)
-      5 => Some(Av1TxAdstDct)
-      6 => Some(Av1TxDctAdst)
-      _ => None
+    let row = if side == 4 {
+      0
+    } else if side == 8 {
+      1
+    } else {
+      2
     }
+    decoder.symbol(av1_intra_tx_type_set2_cdf[row][intra_dir].copy())
+  }
+  if set == 1 {
+    av1_tx_type_intra_set1(symbol)
+  } else {
+    av1_tx_type_intra_set2(symbol)
+  }
+}
+
+///|
+/// Derive the chroma transform type from the UV mode without consuming a
+/// symbol (AV1 spec compute_tx_type). Types outside the chroma's set fall
+/// back to DCT_DCT.
+fn av1_chroma_tx_type(
+  uv_mode : Int,
+  side : Int,
+  reduced_tx_set : Bool,
+) -> Av1TxType? {
+  let set = av1_intra_tx_set(side, reduced_tx_set)
+  if set == 0 {
+    return Some(Av1TxDctDct)
+  }
+  let candidate = match av1_mode_to_txfm(uv_mode) {
+    Some(value) => value
+    None => return None
+  }
+  if av1_tx_type_in_set(candidate, set) {
+    Some(candidate)
+  } else {
+    Some(Av1TxDctDct)
+  }
+}
+
+///|
+/// Scan class selected by a transform type: vertical/horizontal 1D types use
+/// the matching scan order; everything else uses the default diagonal.
+fn av1_tx_scan_class(tx_type : Av1TxType) -> Int {
+  match tx_type {
+    Av1TxVerticalDct | Av1TxVerticalAdst | Av1TxVerticalFlipadst => AV1_SCAN_VERT
+    Av1TxHorizontalDct | Av1TxHorizontalAdst | Av1TxHorizontalFlipadst => AV1_SCAN_HORZ
+    _ => AV1_SCAN_DEFAULT
   }
 }
 
@@ -328,11 +486,52 @@ test "tx depth walker rejects a split below minimum geometry" {
 }
 
 ///|
-test "intra tx type reader maps both bounded symbol sets" {
+test "intra tx type reader gates on qindex and transform set" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
-  assert_true(av1_decode_intra_tx_type(decoder, 16, true) is Some(_))
-  assert_true(av1_decode_intra_tx_type(decoder, 16, false) is Some(_))
-  assert_true(av1_decode_intra_tx_type(decoder, 64, false) is Some(_))
+  // Zero qindex implies DCT_DCT without consuming a symbol.
+  assert_true(
+    av1_decode_intra_tx_type(decoder, 4, 0, false, 0)
+    is Some(Av1TxDctDct),
+  )
+  // 32x32 leaves are DCT-only for intra frames.
+  assert_true(
+    av1_decode_intra_tx_type(decoder, 32, 0, false, 128)
+    is Some(Av1TxDctDct),
+  )
+  // Non-zero qindex with 4x4/16x16 leaves consumes one symbol; all-zero
+  // entropy decodes symbol zero (IDTX).
+  assert_true(
+    av1_decode_intra_tx_type(decoder, 4, 0, false, 64)
+    is Some(Av1TxIdentityIdentity),
+  )
+  assert_true(
+    av1_decode_intra_tx_type(decoder, 16, 0, false, 64)
+    is Some(Av1TxIdentityIdentity),
+  )
+  assert_true(av1_decode_intra_tx_type(decoder, 8, 5, true, 64) is Some(_))
+}
+
+///|
+test "chroma tx type follows the uv mode table" {
+  assert_true(av1_chroma_tx_type(0, 16, false) is Some(Av1TxDctDct))
+  assert_true(av1_chroma_tx_type(1, 16, false) is Some(Av1TxAdstDct))
+  assert_true(av1_chroma_tx_type(2, 16, false) is Some(Av1TxDctAdst))
+  // 32x32 chroma transforms are DCT-only for intra frames.
+  assert_true(av1_chroma_tx_type(1, 32, false) is Some(Av1TxDctDct))
+}
+
+///|
+test "tx type scan class selects 1D scans" {
+  assert_eq(av1_tx_scan_class(Av1TxDctDct), AV1_SCAN_DEFAULT)
+  assert_eq(av1_tx_scan_class(Av1TxVerticalDct), AV1_SCAN_VERT)
+  assert_eq(av1_tx_scan_class(Av1TxHorizontalAdst), AV1_SCAN_HORZ)
+}
+
+///|
+test "tx type inverse sets reject out-of-range symbols" {
+  assert_true(av1_tx_type_intra_set1(7) is None)
+  assert_true(av1_tx_type_intra_set2(5) is None)
+  assert_true(av1_filter_intra_mode_to_intra_dir(5) is None)
 }
 
 ///|

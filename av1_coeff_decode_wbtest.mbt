@@ -5,10 +5,15 @@ test "square coefficient context retains mutable CDF leaves" {
   let context = av1_coeff_context(33, 3, 1)
   assert_eq(context.tx_ctx, 3)
   assert_eq(context.eob.length(), 12)
-  assert_eq(context.extra.length(), 9)
-  assert_eq(context.base_eob.length(), 4)
-  assert_eq(context.base.length(), 42)
-  assert_eq(context.br.length(), 21)
+  // Rows are kept per transform-size context (txSzCtx 0..4, br capped at 3).
+  assert_eq(context.extra.length(), 5)
+  assert_eq(context.extra[3].length(), 9)
+  assert_eq(context.base_eob.length(), 5)
+  assert_eq(context.base_eob[3].length(), 4)
+  assert_eq(context.base.length(), 5)
+  assert_eq(context.base[3].length(), 42)
+  assert_eq(context.br.length(), 4)
+  assert_eq(context.br[3].length(), 21)
   assert_eq(context.sign.length(), 3)
   let first = context.eob[0]
   context.eob[0] = first - 1

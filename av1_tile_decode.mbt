@@ -1,10 +1,11 @@
 /// First executable AV1 tile milestone.
 ///
-/// This module intentionally accepts one very small, fully specified subset:
-/// a 32x32 or 64x64 reduced-still key frame, one tile, DC intra prediction,
-/// with square DCT_DCT residuals. Entropy
-/// symbols are decoded from the tile with the stateful MSAC reader. Other
-/// streams return None and remain eligible for later tile/transform milestones.
+/// This module accepts a small, fully specified subset: a 32x32 or 64x64
+/// reduced-still key frame, one tile, intra prediction, with square DCT_DCT
+/// residuals for the legacy path and the full tx-mode leaf walk for frames
+/// that select transform sizes. Entropy symbols are decoded from the tile
+/// with the stateful MSAC reader. Other streams return None and remain
+/// eligible for later milestones.
 
 ///|
 /// Mutable CDF state for one transform context. UV blocks share one context
@@ -79,6 +80,296 @@ fn av1_decode_single_dc(
 }
 
 ///|
+/// Transform size context for the all_zero CDF (AV1 spec §5.11.39:
+/// txSzCtx = (Tx_Size_Sqr + Tx_Size_Sqr_Up + 1) >> 1, which for square
+/// transforms is 0..4 for 4x4..64x64).
+fn av1_tx_size_ctx(side : Int) -> Int {
+  if side <= 4 {
+    0
+  } else if side == 8 {
+    1
+  } else if side == 16 {
+    2
+  } else if side == 32 {
+    3
+  } else {
+    4
+  }
+}
+
+///|
+/// Luma all_zero context from the neighbour level model (AV1 spec §8.3,
+/// readAllZero). `top`/`left` are the maximum neighbour cul levels over the
+/// leaf's 4x4 units.
+fn av1_txb_skip_ctx_luma(top : Int, left : Int, whole : Bool) -> Int {
+  if whole {
+    return 0
+  }
+  if top == 0 && left == 0 {
+    return 1
+  }
+  if top == 0 || left == 0 {
+    return if (if top > left { top } else { left }) > 3 { 3 } else { 2 }
+  }
+  if (if top > left { top } else { left }) <= 3 {
+    return 4
+  }
+  if (if top < left { top } else { left }) <= 3 {
+    return 5
+  }
+  6
+}
+
+///|
+/// Chroma all_zero context (AV1 spec §8.3): 7 plus one per non-empty
+/// neighbour side, plus 3 when the residual block exceeds the transform.
+fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bool) -> Int {
+  let ctx = 7 +
+    (if above_nonzero { 1 } else { 0 }) +
+    (if left_nonzero { 1 } else { 0 })
+  if whole {
+    ctx
+  } else {
+    ctx + 3
+  }
+}
+
+///|
+/// dc_sign context from the neighbour dc categories (AV1 spec §8.3).
+fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, units : Int) -> Int {
+  let mut score = 0
+  for k in 0..<units {
+    let a = above_dc[x4 + k]
+    if a == 1 {
+      score = score - 1
+    } else if a == 2 {
+      score = score + 1
+    }
+    let l = left_dc[y4 + k]
+    if l == 1 {
+      score = score - 1
+    } else if l == 2 {
+      score = score + 1
+    }
+  }
+  if score < 0 {
+    1
+  } else if score > 0 {
+    2
+  } else {
+    0
+  }
+}
+
+///|
+/// Consume the block-level filter_intra_mode_info symbols (AV1 spec
+/// §5.11.45). The filter-intra predictor itself is not implemented in this
+/// bounded path, so an active flag rejects the stream after the bits are
+/// consumed in the correct order. Returns false when the caller must reject.
+fn av1_read_filter_intra_bits(
+  decoder : Av1SymbolDecoder,
+  width : Int,
+  y_mode : Int,
+  enable_filter_intra : Bool,
+) -> Bool {
+  if !enable_filter_intra || y_mode != 0 || width > 32 {
+    return true
+  }
+  let use_cdf : Array[Int] = if width >= 32 {
+    [22343, 32768, 0]
+  } else if width >= 16 {
+    [12408, 32768, 0]
+  } else if width >= 8 {
+    [7866, 32768, 0]
+  } else {
+    [4621, 32768, 0]
+  }
+  if decoder.symbol(use_cdf) == 1 {
+    // filter_intra_mode uses the five-symbol default CDF.
+    if decoder.symbol([8949, 12776, 17211, 29558, 32768, 0]) > 4 {
+      return false
+    }
+    return false
+  }
+  true
+}
+
+///|
+/// Decode one intra frame block's residuals for the tx-mode multi-leaf path:
+/// all luma transform leaves first, then one chroma transform per plane (AV1
+/// spec residual(): chroma tx size is the plane maximum, independent of the
+/// luma tx_depth). Neighbour level/dc contexts track the all_zero CDF rows.
+fn av1_decode_tx_mode_residuals(
+  decoder : Av1SymbolDecoder,
+  width : Int,
+  height : Int,
+  leaves : Array[Av1TxLeaf],
+  base_q_idx : Int,
+  y_mode : Int,
+  uv_mode : Int,
+  bit_depth : Int,
+  reduced_tx_set : Bool,
+) -> (Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Av1TxType], Array[Av1TxType], Array[Av1TxType], Array[Av1TxLeaf])? {
+  let qctx = av1_dc_q_context(base_q_idx)
+  let y_context = av1_coeff_context(base_q_idx, 3, 0)
+  let y_coeff_results : Array[Av1LeafCoeffs] = []
+  let y_types : Array[Av1TxType] = []
+  let units = width / 4
+  let above_level : Array[Int] = Array::make(units, 0)
+  let left_level : Array[Int] = Array::make(units, 0)
+  let above_dc : Array[Int] = Array::make(units, 0)
+  let left_dc : Array[Int] = Array::make(units, 0)
+  for leaf in leaves {
+    let side = leaf.node.width
+    if side != leaf.node.height || side < 4 || side > 64 {
+      return None
+    }
+    let x4 = leaf.node.col / 4
+    let y4 = leaf.node.row / 4
+    let w4 = side / 4
+    if x4 + w4 > units || y4 + w4 > units {
+      return None
+    }
+    let mut top = 0
+    for k in 0..<w4 {
+      if above_level[x4 + k] > top {
+        top = above_level[x4 + k]
+      }
+    }
+    let mut left = 0
+    for k in 0..<w4 {
+      if left_level[y4 + k] > left {
+        left = left_level[y4 + k]
+      }
+    }
+    let whole = side == width && side == height
+    let ctx = av1_txb_skip_ctx_luma(top, left, whole)
+    // The table rows are adapted in place, so each decode owns copies.
+    let y_zero = decoder.symbol(
+      av1_txb_skip_cdf[qctx][av1_tx_size_ctx(side)][ctx].copy(),
+    )
+    if y_zero > 1 {
+      return None
+    }
+    if y_zero == 1 {
+      y_coeff_results.push({
+        coeffs: Array::make(side * side, 0),
+        cul_level: 0,
+        dc_category: 0,
+      })
+      y_types.push(Av1TxDctDct)
+    } else {
+      let tx_type = match
+        av1_decode_intra_tx_type(decoder, side, y_mode, reduced_tx_set, base_q_idx) {
+        Some(value) => value
+        None => return None
+      }
+      let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4)
+      let decoded = match
+        av1_tx_decode_leaf_nodes(
+          decoder,
+          base_q_idx,
+          y_context,
+          [leaf],
+          bit_depth,
+          scan_class=av1_tx_scan_class(tx_type),
+          dc_sign_ctx=dsc,
+        ) {
+        Some(value) => value
+        None => return None
+      }
+      let result = decoded[0]
+      for i in 0..<w4 {
+        above_level[x4 + i] = result.cul_level
+        above_dc[x4 + i] = result.dc_category
+      }
+      for j in 0..<w4 {
+        left_level[y4 + j] = result.cul_level
+        left_dc[y4 + j] = result.dc_category
+      }
+      y_coeff_results.push(result)
+      y_types.push(tx_type)
+    }
+  }
+  // Chroma: one transform per plane at the plane's maximum size.
+  let chroma_side = width / 2
+  let c_leaf : Av1TxLeaf = { node: { row: 0, col: 0, width: chroma_side, height: chroma_side }, depth: 0 }
+  let chroma_leaves : Array[Av1TxLeaf] = [c_leaf]
+  let u_type = match av1_chroma_tx_type(uv_mode, chroma_side, reduced_tx_set) {
+    Some(value) => value
+    None => return None
+  }
+  let v_type = u_type
+  let mut u_results : Array[Av1LeafCoeffs] = []
+  let mut v_results : Array[Av1LeafCoeffs] = []
+  for plane in 0..<2 {
+    // Coefficient CDF tables are indexed by plane class (0 = luma, 1 = chroma);
+    // U and V share the chroma rows.
+    let plane_idx = 1
+    let context = av1_coeff_context(
+      base_q_idx,
+      if chroma_side == 32 { 3 } else { 2 },
+      plane_idx,
+    )
+    // One chroma transform covers the whole plane, so its neighbours lie
+    // outside the frame and contribute nothing to the all_zero context.
+    let ctx = av1_txb_skip_ctx_chroma(false, false, true)
+    let zero = decoder.symbol(
+      av1_txb_skip_cdf[qctx][av1_tx_size_ctx(chroma_side)][ctx].copy(),
+    )
+    if zero > 1 {
+      return None
+    }
+    let mut results : Array[Av1LeafCoeffs] = []
+    if zero == 1 {
+      results.push({
+        coeffs: Array::make(chroma_side * chroma_side, 0),
+        cul_level: 0,
+        dc_category: 0,
+      })
+    } else {
+      let scan_class = if plane == 0 {
+        av1_tx_scan_class(u_type)
+      } else {
+        av1_tx_scan_class(v_type)
+      }
+      let decoded = match
+        av1_tx_decode_leaf_nodes(
+          decoder,
+          base_q_idx,
+          context,
+          chroma_leaves,
+          bit_depth,
+          scan_class~,
+          dc_sign_ctx=0,
+        ) {
+        Some(value) => value
+        None => return None
+      }
+      results = decoded
+    }
+    if plane == 0 {
+      u_results = results
+    } else {
+      v_results = results
+    }
+  }
+  let y_coeffs : Array[Array[Int]] = []
+  for result in y_coeff_results {
+    y_coeffs.push(result.coeffs)
+  }
+  let u_coeffs : Array[Array[Int]] = []
+  for result in u_results {
+    u_coeffs.push(result.coeffs)
+  }
+  let v_coeffs : Array[Array[Int]] = []
+  for result in v_results {
+    v_coeffs.push(result.coeffs)
+  }
+  Some((y_coeffs, u_coeffs, v_coeffs, y_types, [u_type], [v_type], chroma_leaves))
+}
+
+///|
 pub fn av1_decode_dc_tile(
   width : Int,
   height : Int,
@@ -91,6 +382,8 @@ pub fn av1_decode_dc_tile(
   bit_depth? : Int = 8,
   allow_screen_content_tools? : Bool = false,
   tx_mode_select? : Bool = false,
+  reduced_tx_set? : Bool = false,
+  enable_filter_intra? : Bool = false,
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
@@ -145,10 +438,20 @@ pub fn av1_decode_dc_tile(
     15588, 17027, 19338, 20218, 20682, 21110, 21825, 23244, 24189, 28165, 29093,
     30466, 32768, 0,
   ]
-  let uv_mode : Array[Int] = [
-    22631, 24152, 25378, 25661, 25986, 26520, 27055, 27923, 28244, 30059, 30941,
-    31961, 32768, 0,
-  ]
+  let uv_mode : Array[Int] = if width > 32 {
+    // Blocks larger than 32x32 do not allow CFL_PRED and use the dedicated
+    // uv_mode table row (AV1 spec uv_mode()).
+    [
+      22631, 24152, 25378, 25661, 25986, 26520, 27055, 27923, 28244, 30059,
+      30941, 31961, 32768, 0,
+    ]
+  } else {
+    // Up to 32x32 CFL_PRED is allowed, switching the uv_mode CDF table.
+    [
+      10407, 11208, 12900, 13181, 13823, 14175, 14899, 15656, 15986, 20086,
+      20995, 22455, 24212, 32768, 0,
+    ]
+  }
   let luma_zero : Array[Int] = if width == 64 {
     if base_q_idx <= 20 {
       [6308, 32768, 0]
@@ -204,9 +507,15 @@ pub fn av1_decode_dc_tile(
     if y_mode_symbol == 0 && decoder.symbol(palette_y) != 0 {
       return None
     }
-    if decoder.symbol([32461, 32768, 0]) != 0 {
+    // The chroma palette flag follows the luma flag and is only signalled
+    // for DC_PRED luma blocks (AV1 spec palette_mode_info).
+    if y_mode_symbol == 0 && decoder.symbol([32461, 32768, 0]) != 0 {
       return None
     }
+  }
+  // filter_intra_mode_info is part of the block mode info for both tx modes.
+  if !av1_read_filter_intra_bits(decoder, width, y_mode_symbol, enable_filter_intra) {
+    return None
   }
   if tx_mode_select {
     let leaves = match av1_decode_tx_tree(decoder, { row: 0, col: 0, width, height }, 0) {
@@ -214,92 +523,21 @@ pub fn av1_decode_dc_tile(
       None => return None
     }
     if leaves.length() > 1 {
-      let y_context = av1_coeff_context(base_q_idx, 3, 0)
-      let u_context = av1_coeff_context(base_q_idx, 3, 1)
-      let v_context = av1_coeff_context(base_q_idx, 3, 2)
-      let y_coeffs : Array[Array[Int]] = []
-      let u_coeffs : Array[Array[Int]] = []
-      let v_coeffs : Array[Array[Int]] = []
-      let y_types : Array[Av1TxType] = []
-      let u_types : Array[Av1TxType] = []
-      let v_types : Array[Av1TxType] = []
-      let chroma_leaves : Array[Av1TxLeaf] = []
-      for leaf in leaves {
-        let side = leaf.node.width
-        let y_zero = decoder.symbol(luma_zero)
-        if y_zero == 1 {
-          y_coeffs.push(Array::make(side * side, 0))
-          y_types.push(Av1TxDctDct)
-        } else if y_zero == 0 {
-          let tx_type = match av1_decode_intra_tx_type(decoder, side, side == 16) {
-            Some(value) => value
-            None => return None
-          }
-          match tx_type {
-            Av1TxDctDct => ()
-            _ => return None
-          }
-          let values = match av1_tx_decode_leaf_nodes(decoder, base_q_idx, y_context, [leaf], bit_depth) {
-            Some(value) => value[0]
-            None => return None
-          }
-          y_coeffs.push(values)
-          y_types.push(tx_type)
-        } else { return None }
-        let cnode : Av1TxLeaf = {
-          node: { row: leaf.node.row / 2, col: leaf.node.col / 2, width: side / 2, height: side / 2 },
-          depth: leaf.depth,
-        }
-        chroma_leaves.push(cnode)
-        let u_zero = decoder.symbol(chroma_zero)
-        let v_zero = decoder.symbol(chroma_zero)
-        if u_zero == 1 { u_coeffs.push(Array::make((side / 2) * (side / 2), 0)); u_types.push(Av1TxDctDct) }
-        else if u_zero == 0 {
-          let values = match av1_tx_decode_leaf_nodes(
-            decoder, base_q_idx, u_context, [cnode], bit_depth,
-          ) {
-            Some(value) => value[0]
-            None => return None
-          }
-          u_coeffs.push(values); u_types.push(Av1TxDctDct)
-        } else { return None }
-        if v_zero == 1 { v_coeffs.push(Array::make((side / 2) * (side / 2), 0)); v_types.push(Av1TxDctDct) }
-        else if v_zero == 0 {
-          let values = match av1_tx_decode_leaf_nodes(
-            decoder, base_q_idx, v_context, [cnode], bit_depth,
-          ) {
-            Some(value) => value[0]
-            None => return None
-          }
-          v_coeffs.push(values); v_types.push(Av1TxDctDct)
-        } else { return None }
+      let assembled = match
+        av1_decode_tx_mode_residuals(
+          decoder, width, height, leaves, base_q_idx, y_mode_symbol,
+          uv_mode_symbol, bit_depth, reduced_tx_set,
+        ) {
+        Some(value) => value
+        None => return None
       }
+      let (y_coeffs, u_coeffs, v_coeffs, y_types, u_types, v_types, chroma_leaves) = assembled
       return av1_reconstruct_tx_rgba(
         width, height, leaves, y_coeffs,
         chroma_leaves, u_coeffs, chroma_leaves, v_coeffs,
         y_mode_symbol, uv_mode_symbol, y_types, u_types, v_types, bit_depth,
         full_range~, matrix_coefficients~,
       )
-    }
-  }
-  if tx_mode_select {
-    let leaves = match av1_decode_tx_tree(
-      decoder,
-      { row: 0, col: 0, width, height },
-      0,
-    ) {
-      Some(value) => value
-      None => return None
-    }
-    if leaves.length() != 1 {
-      // Consume every leaf through the shared CDF context before rejecting
-      // reconstruction; this keeps the entropy walk correct for the upcoming
-      // multi-block plane assembler.
-      let context = av1_coeff_context(base_q_idx, 3, 0)
-      if av1_tx_decode_leaf_nodes(decoder, base_q_idx, context, leaves, bit_depth) is None {
-        return None
-      }
-      return None
     }
   }
   let y_prediction = match
@@ -319,9 +557,11 @@ pub fn av1_decode_dc_tile(
   }
   let luma_all_zero = decoder.symbol(luma_zero)
   let mut y_residual : Array[Int] = Array::make(width * height, 0)
+  let mut y_tx_type = Av1TxDctDct
   if luma_all_zero == 0 {
     if tx_mode_select {
-      let tx_type = match av1_decode_intra_tx_type(decoder, width, width == 16) {
+      let tx_type = match
+        av1_decode_intra_tx_type(decoder, width, y_mode_symbol, reduced_tx_set, base_q_idx) {
         Some(value) => value
         None => return None
       }
@@ -329,21 +569,24 @@ pub fn av1_decode_dc_tile(
         Av1TxDctDct => ()
         _ => return None
       }
+      y_tx_type = tx_type
     }
     if width != 64 {
       return None
     }
-    let coefficients = match
-      av1_decode_coeffs_square_with_decoder(
+    let leaf_coeffs = match
+      av1_decode_coeffs_leaf_with_decoder(
         decoder,
         base_q_idx,
         y_coeff,
+        64,
         bit_depth~,
       ) {
       Some(value) => value
       None => return None
     }
-    y_residual = match av1_inverse_dct_2d(coefficients, 64, 64, bit_depth) {
+    y_residual = match
+      av1_inverse_transform_2d(y_tx_type, leaf_coeffs.coeffs, 64, 64, bit_depth) {
       Some(value) => value
       None => return None
     }
@@ -469,6 +712,8 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         use_128x128_superblock=seq.use_128x128_superblock,
         bit_depth=seq.bit_depth,
         tx_mode_select=frame.tx_mode_select,
+        reduced_tx_set=frame.reduced_tx_set,
+        enable_filter_intra=seq.enable_filter_intra,
       )
   }
 }
@@ -493,6 +738,8 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         use_128x128_superblock=value.use_128x128_superblock,
         bit_depth=value.bit_depth,
         tx_mode_select=value.tx_mode_select,
+        reduced_tx_set=value.reduced_tx_set,
+        enable_filter_intra=value.enable_filter_intra,
       )
   }
 }
@@ -508,4 +755,43 @@ test "single DC helper decodes a chroma coefficient" {
   }
   let residual = av1_decode_single_dc(decoder, 33, 3, context).unwrap()
   assert_eq(residual, 0)
+}
+
+///|
+test "tx size context maps square transforms to rows" {
+  assert_eq(av1_tx_size_ctx(4), 0)
+  assert_eq(av1_tx_size_ctx(8), 1)
+  assert_eq(av1_tx_size_ctx(16), 2)
+  assert_eq(av1_tx_size_ctx(32), 3)
+  assert_eq(av1_tx_size_ctx(64), 4)
+}
+
+///|
+test "txb skip context ladder follows the neighbour model" {
+  // A single transform covering the whole residual block uses context 0.
+  assert_eq(av1_txb_skip_ctx_luma(0, 0, true), 0)
+  // Nothing decoded above or left uses context 1.
+  assert_eq(av1_txb_skip_ctx_luma(0, 0, false), 1)
+  // One empty side uses context 2 (or 3 when the other level exceeds 3).
+  assert_eq(av1_txb_skip_ctx_luma(0, 2, false), 2)
+  assert_eq(av1_txb_skip_ctx_luma(0, 9, false), 3)
+  // Both sides populated.
+  assert_eq(av1_txb_skip_ctx_luma(2, 2, false), 4)
+  assert_eq(av1_txb_skip_ctx_luma(9, 2, false), 5)
+  assert_eq(av1_txb_skip_ctx_luma(9, 9, false), 6)
+  // Chroma context offsets from 7 and grows with neighbour occupancy.
+  assert_eq(av1_txb_skip_ctx_chroma(false, false, true), 7)
+  assert_eq(av1_txb_skip_ctx_chroma(true, false, true), 8)
+  assert_eq(av1_txb_skip_ctx_chroma(true, true, true), 9)
+  assert_eq(av1_txb_skip_ctx_chroma(true, true, false), 12)
+}
+
+///|
+test "dc sign context scores neighbour categories" {
+  let above : Array[Int] = [0, 0, 2, 0]
+  let left : Array[Int] = [1, 0, 0, 0]
+  // +1 from the positive DC above, -1 from the negative DC left: neutral.
+  assert_eq(av1_dc_sign_ctx_from(above, left, 0, 0, 4), 0)
+  assert_eq(av1_dc_sign_ctx_from([2, 2, 2, 2], [0, 0, 0, 0], 0, 0, 4), 2)
+  assert_eq(av1_dc_sign_ctx_from([1, 1, 1, 1], [0, 0, 0, 0], 0, 0, 4), 1)
 }
