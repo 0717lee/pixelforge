@@ -95,6 +95,36 @@ fn av1_decode_tx_tree(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
+fn av1_tx_decode_leaf_nodes(
+  decoder : Av1SymbolDecoder,
+  base_q_idx : Int,
+  context : Av1CoeffContext,
+  leaves : Array[Av1TxLeaf],
+  bit_depth : Int,
+) -> Array[Array[Int]]? {
+  if leaves.length() == 0 { return None }
+  let out : Array[Array[Int]] = []
+  for leaf in leaves {
+    let side = leaf.node.width
+    if side != leaf.node.height ||
+      (side != 4 && side != 8 && side != 16 && side != 32 && side != 64) {
+      return None
+    }
+    let coeffs = if side <= 16 {
+      context.tx_ctx = if side == 16 { 2 } else if side == 8 { 1 } else { 0 }
+      av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, side, bit_depth=bit_depth)
+    } else {
+      context.tx_ctx = if side == 64 { 4 } else { 3 }
+      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth=bit_depth)
+    }
+    match coeffs {
+      Some(value) => out.push(value)
+      None => return None
+    }
+  }
+  Some(out)
+}
+
 /// Decode the intra luma tx_type symbol after all_zero and before EOB.
 /// Set 2 is used for the reduced 5-symbol set; set 1 exposes seven symbols.
 fn av1_decode_intra_tx_type(
@@ -326,4 +356,15 @@ test "transform tree decodes a small zero-EOB coefficient leaf" {
   assert_eq(result.length(), 1)
   assert_eq(result[0].length(), 16)
   assert_eq(result[0][0], 2)
+}
+
+///|
+test "transform tree decodes multiple leaves with one CDF context" {
+  let decoder = av1_msac_new(Array::make(128, b'\x00'), true)
+  let leaves : Array[Av1TxLeaf] = [
+    { node: { row: 0, col: 0, width: 4, height: 4 }, depth: 1 },
+    { node: { row: 0, col: 4, width: 4, height: 4 }, depth: 1 },
+  ]
+  let result = av1_tx_decode_leaf_nodes(decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8)
+  assert_true(result is Some(_))
 }
