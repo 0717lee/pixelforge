@@ -95,27 +95,6 @@ fn av1_decode_tx_tree(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
-/// Decode one root `tx_depth` symbol and recursively emit transform leaves in
-/// raster order. Subsequent nodes are geometric splits and consume no extra
-/// entropy symbols. Invalid geometry or a depth that cannot be represented by
-/// the node returns `None`.
-fn av1_decode_tx_tree(
-  decoder : Av1SymbolDecoder,
-  root : Av1TxNode,
-  context : Int,
-) -> Array[Av1TxLeaf]? {
-  if root.row < 0 || root.col < 0 || root.width < 4 || root.height < 4 {
-    return None
-  }
-  let max_size = if root.width > root.height { root.width } else { root.height }
-  let depth = match av1_decode_tx_depth(decoder, max_size, context) {
-    Some(value) => value
-    None => return None
-  }
-  let out : Array[Av1TxLeaf] = []
-  if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
-}
-
 /// Decode the intra luma tx_type symbol after all_zero and before EOB.
 /// Set 2 is used for the reduced 5-symbol set; set 1 exposes seven symbols.
 fn av1_decode_intra_tx_type(
