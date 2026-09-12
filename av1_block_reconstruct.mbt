@@ -119,6 +119,53 @@ pub fn av1_reconstruct_tx_chroma(
   av1_reconstruct_tx_luma(32, 32, leaves, coefficients, mode, types)
 }
 
+/// Compose typed transform leaves for Y/U/V into an RGBA image.
+pub fn av1_reconstruct_tx_rgba(
+  width : Int,
+  height : Int,
+  y_leaves : Array[Av1TxLeaf],
+  y_coefficients : Array[Array[Int]],
+  u_leaves : Array[Av1TxLeaf],
+  u_coefficients : Array[Array[Int]],
+  v_leaves : Array[Av1TxLeaf],
+  v_coefficients : Array[Array[Int]],
+  y_mode : Int,
+  uv_mode : Int,
+  y_types : Array[Av1TxType],
+  u_types : Array[Av1TxType],
+  v_types : Array[Av1TxType],
+  bit_depth : Int,
+  full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
+) -> Image? {
+  if width != height || (width != 32 && width != 64) ||
+    (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
+    return None
+  }
+  let y = match av1_reconstruct_tx_luma(width, height, y_leaves, y_coefficients, y_mode, y_types) {
+    Some(value) => value
+    None => return None
+  }
+  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types) {
+    Some(value) => value
+    None => return None
+  }
+  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types) {
+    Some(value) => value
+    None => return None
+  }
+  let scale = 1 << (bit_depth - 8)
+  let scale_plane = fn(values : Array[Int]) {
+    let out : Array[Int] = []
+    for value in values { out.push(value * scale) }
+    out
+  }
+  av1_yuv420_highbd_to_rgba(
+    width, height, scale_plane(y), scale_plane(u), scale_plane(v),
+    bit_depth, full_range~, matrix_coefficients~,
+  )
+}
+
 ///| clamp an intermediate reconstruction sample to 8-bit range.
 fn clamp_int_8(value : Int) -> Int {
   if value < 0 {
@@ -377,4 +424,18 @@ test "tx chroma assembler uses 16 pixel leaves" {
   ).unwrap()
   assert_eq(plane.length(), 1024)
   assert_eq(plane[1023], 128)
+}
+
+///|
+test "typed transform planes compose through the highbd RGBA path" {
+  let y_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 32, height: 32 }, depth: 0 }]
+  let c_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 16, height: 16 }, depth: 0 }]
+  let y = Array::make(32 * 32, 0)
+  let c = Array::make(16 * 16, 0)
+  let image = av1_reconstruct_tx_rgba(
+    32, 32, y_leaf, [y], c_leaf, [c.copy()], c_leaf, [c.copy()],
+    AV1_INTRA_DC, AV1_INTRA_DC,
+    [Av1TxDctDct], [Av1TxDctDct], [Av1TxDctDct], 10,
+  ).unwrap()
+  assert_eq(image.get_pixel(0, 0).3, b'\xFF')
 }
