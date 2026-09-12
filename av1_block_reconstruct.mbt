@@ -428,3 +428,17 @@ test "typed transform planes compose through the highbd RGBA path" {
   ).unwrap()
   assert_eq(image.get_pixel(0, 0).3, b'\xFF')
 }
+
+///|
+test "typed transform planes compose at 12-bit precision" {
+  let y_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 32, height: 32 }, depth: 0 }]
+  let c_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 16, height: 16 }, depth: 0 }]
+  let y = Array::make(32 * 32, 0)
+  let c = Array::make(16 * 16, 0)
+  let image = av1_reconstruct_tx_rgba(
+    32, 32, y_leaf, [y], c_leaf, [c.copy()], c_leaf, [c.copy()],
+    AV1_INTRA_DC, AV1_INTRA_DC,
+    [Av1TxDctDct], [Av1TxDctDct], [Av1TxDctDct], 12,
+  ).unwrap()
+  assert_eq(image.get_pixel(0, 0).3, b'\xFF')
+}
