@@ -27,6 +27,82 @@ pub(all) struct Av1TxLeaf {
   depth : Int
 }
 
+/// Neighbour transform dimensions collected while walking a tile in raster
+/// order.  Entries are indexed in 4x4 units; `-1` means that no block has
+/// been decoded at that edge yet.  Keeping unavailable edges explicit avoids
+/// manufacturing neighbour sizes for the first block in a tile.
+pub struct Av1TxTraversalState {
+  cols : Int
+  rows : Int
+  above_width : Array[Int]
+  left_height : Array[Int]
+}
+
+/// Create empty neighbour state for one tile.  The state is intentionally
+/// independent from the entropy CDF state so callers can reuse it across
+/// blocks without resetting tx_depth adaptation.
+pub fn av1_tx_traversal_state(width : Int, height : Int) -> Av1TxTraversalState {
+  let cols = if width > 0 { (width + 3) / 4 } else { 0 }
+  let rows = if height > 0 { (height + 3) / 4 } else { 0 }
+  {
+    cols,
+    rows,
+    above_width: Array::make(cols, -1),
+    left_height: Array::make(rows, -1),
+  }
+}
+
+/// Derive tx_depth context from dimensions of the blocks immediately above
+/// and to the left of `node`.  Missing edges remain `-1` and contribute zero.
+pub fn av1_tx_depth_context_for_node(
+  state : Av1TxTraversalState,
+  node : Av1TxNode,
+) -> Int {
+  let x4 = node.col / 4
+  let y4 = node.row / 4
+  let w4 = if node.width > 0 { (node.width + 3) / 4 } else { 0 }
+  let h4 = if node.height > 0 { (node.height + 3) / 4 } else { 0 }
+  let mut above = -1
+  if y4 > 0 {
+    for i in 0..<w4 {
+      let x = x4 + i
+      if x >= 0 && x < state.cols && state.above_width[x] > above {
+        above = state.above_width[x]
+      }
+    }
+  }
+  let mut left = -1
+  if x4 > 0 {
+    for i in 0..<h4 {
+      let y = y4 + i
+      if y >= 0 && y < state.rows && state.left_height[y] > left {
+        left = state.left_height[y]
+      }
+    }
+  }
+  av1_tx_depth_context_from_sizes(above, left, node.width, node.height)
+}
+
+/// Record a decoded block's dimensions for subsequent raster neighbours.
+pub fn av1_tx_traversal_record(state : Av1TxTraversalState, node : Av1TxNode) -> Unit {
+  let x4 = node.col / 4
+  let y4 = node.row / 4
+  let w4 = if node.width > 0 { (node.width + 3) / 4 } else { 0 }
+  let h4 = if node.height > 0 { (node.height + 3) / 4 } else { 0 }
+  for i in 0..<w4 {
+    let x = x4 + i
+    if x >= 0 && x < state.cols {
+      state.above_width[x] = node.width
+    }
+  }
+  for i in 0..<h4 {
+    let y = y4 + i
+    if y >= 0 && y < state.rows {
+      state.left_height[y] = node.height
+    }
+  }
+}
+
 /// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
 /// The context table is reduced to the three validated default rows until the
 /// full neighbour-derived 21-context table is wired into block traversal.
@@ -184,6 +260,10 @@ fn av1_tx_decode_leaf_nodes(
   let out : Array[Av1LeafCoeffs] = []
   for leaf in leaves {
     let side = leaf.node.width
+    // The coefficient entropy reader still indexes square tx-size CDF rows.
+    // Rectangular transform leaves are supported by the reconstruction API,
+    // but remain rejected here until width/height-specific CDF contexts are
+    // wired through the scan and EOB tables.
     if side != leaf.node.height ||
       (side != 4 && side != 8 && side != 16 && side != 32 && side != 64) {
       return None
@@ -566,6 +646,30 @@ test "tx depth context derives from neighbour transform sizes" {
 }
 
 ///|
+test "tx traversal state keeps unavailable edges explicit" {
+  let state = av1_tx_traversal_state(64, 64)
+  let first = { row: 0, col: 0, width: 32, height: 32 }
+  assert_eq(av1_tx_depth_context_for_node(state, first), 0)
+  av1_tx_traversal_record(state, first)
+  // A block to the right sees the recorded left height; a block below sees
+  // the recorded above width.  No dimensions are invented for other edges.
+  assert_eq(
+    av1_tx_depth_context_for_node(state, { row: 0, col: 32, width: 32, height: 32 }),
+    1,
+  )
+  assert_eq(
+    av1_tx_depth_context_for_node(state, { row: 32, col: 0, width: 32, height: 32 }),
+    1,
+  )
+  av1_tx_traversal_record(state, { row: 0, col: 32, width: 32, height: 32 })
+  av1_tx_traversal_record(state, { row: 32, col: 0, width: 32, height: 32 })
+  assert_eq(
+    av1_tx_depth_context_for_node(state, { row: 32, col: 32, width: 32, height: 32 }),
+    2,
+  )
+}
+
+///|
 test "tx depth entropy walker emits root leaf for zero depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   let leaves = av1_decode_tx_tree(
@@ -672,4 +776,16 @@ test "transform tree decodes multiple leaves with one CDF context" {
   ]
   let result = av1_tx_decode_leaf_nodes(decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8)
   assert_true(result is Some(_))
+}
+
+///|
+test "transform tree documents rectangular coefficient boundary" {
+  let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
+  let leaves : Array[Av1TxLeaf] = [
+    { node: { row: 0, col: 0, width: 8, height: 4 }, depth: 0 },
+  ]
+  let result = av1_tx_decode_leaf_nodes(
+    decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,
+  )
+  assert_true(result is None)
 }

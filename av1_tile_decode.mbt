@@ -587,14 +587,18 @@ pub fn av1_decode_dc_tile(
     return None
   }
   if tx_mode_select {
-    // Keep tx_depth CDF rows alive for the complete tile traversal. The
-    // compatibility wrapper allocates a fresh state on every call.
+    // Keep tx_depth CDF rows and neighbour dimensions alive for the complete
+    // tile traversal.  The first block has unavailable edges (context 0);
+    // subsequent blocks can reuse this state when block traversal expands.
     let tx_depth_state = av1_tx_depth_state()
+    let tx_traversal_state = av1_tx_traversal_state(width, height)
+    let root = { row: 0, col: 0, width, height }
+    let tx_depth_context = av1_tx_depth_context_for_node(tx_traversal_state, root)
     let leaves = match av1_decode_tx_tree_with_state(
       decoder,
       tx_depth_state,
-      { row: 0, col: 0, width, height },
-      0,
+      root,
+      tx_depth_context,
     ) {
       Some(value) => value
       None => return None
@@ -616,12 +620,21 @@ pub fn av1_decode_dc_tile(
         None => return None
       }
       let (y_coeffs, u_coeffs, v_coeffs, y_types, u_types, v_types, chroma_leaves) = assembled
-      return av1_reconstruct_tx_rgba(
+      let image = av1_reconstruct_tx_rgba(
         width, height, leaves, y_coeffs,
         chroma_leaves, u_coeffs, chroma_leaves, v_coeffs,
         y_mode_symbol, uv_mode_symbol, y_types, u_types, v_types, bit_depth,
         full_range~, matrix_coefficients~,
       )
+      // Record the completed block only after all syntax and reconstruction
+      // succeeds; failed probes must not leak neighbour dimensions.
+      return match image {
+        Some(value) => {
+          av1_tx_traversal_record(tx_traversal_state, root)
+          Some(value)
+        }
+        None => None
+      }
     }
   let y_prediction = match
     av1_intra_predict(
