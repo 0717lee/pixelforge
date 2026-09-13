@@ -171,7 +171,14 @@ pub fn avif_animation_frame_at(
   }
   let mut total = 0
   for frame in animation.frames {
-    total = total + frame.duration
+    if frame.duration <= 0 {
+      return None
+    }
+    let next_total = total + frame.duration
+    if next_total < total {
+      return None
+    }
+    total = next_total
   }
   if total <= 0 { return None }
   let t = timestamp % total
