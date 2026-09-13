@@ -159,13 +159,19 @@ def obu(obu_type: int, payload: bytes) -> bytes:
     return bytes([obu_type << 3 | 0x02]) + leb128(len(payload)) + payload
 
 
-def sequence_header(width: int, height: int) -> bytes:
+def sequence_header(width: int, height: int, profile: int = 0, bit_depth: int = 8) -> bytes:
     w = width - 1
     h = height - 1
     width_bits = max(1, w.bit_length())
     height_bits = max(1, h.bit_length())
     bw = BitWriter()
-    bw.f(0, 3)  # seq_profile
+    if profile not in (0, 2):
+        raise ValueError("crafted fixtures support profile 0 or 2")
+    if bit_depth not in (8, 10, 12):
+        raise ValueError("crafted fixtures support 8/10/12-bit")
+    if profile == 0 and bit_depth != 8:
+        raise ValueError("profile 0 is 8-bit only")
+    bw.f(profile, 3)  # seq_profile
     bw.f(1, 1)  # still_picture
     bw.f(1, 1)  # reduced_still_picture_header
     # The reduced path implies timing info, operating points and seq_tier.
@@ -180,11 +186,22 @@ def sequence_header(width: int, height: int) -> bytes:
     bw.f(0, 1)  # enable_superres
     bw.f(0, 1)  # enable_cdef
     bw.f(0, 1)  # enable_restoration
-    bw.f(0, 1)  # high_bitdepth
+    high = 1 if bit_depth >= 10 else 0
+    bw.f(high, 1)  # high_bitdepth
+    if profile == 2 and high:
+        bw.f(1 if bit_depth == 12 else 0, 1)  # twelve_bit
     bw.f(0, 1)  # mono_chrome
     bw.f(0, 1)  # color_description_present_flag
     bw.f(0, 1)  # color_range
-    bw.f(0, 2)  # chroma_sample_position
+    if profile == 2 and bit_depth == 12:
+        bw.f(1, 1)  # subsampling_x
+        bw.f(1, 1)  # subsampling_y
+        bw.f(0, 2)  # chroma_sample_position
+    elif profile == 2 and bit_depth == 10:
+        bw.f(1, 1)  # subsampling_x
+        bw.f(0, 1)  # subsampling_y
+    elif profile == 0:
+        bw.f(0, 2)  # chroma_sample_position (4:2:0)
     bw.f(0, 1)  # separate_uv_delta_q
     bw.f(0, 1)  # film_grain_params_present
     bw.trailing()
@@ -217,10 +234,19 @@ def frame_header(base_q_idx: int, tx_mode_select: int, reduced_tx_set: int) -> b
     return bw.to_bytes()
 
 
-def build_obu(width: int, height: int, base_q_idx: int, tile: bytes, tx_mode_select: int = 1, reduced_tx_set: int = 0) -> bytes:
+def build_obu(
+    width: int,
+    height: int,
+    base_q_idx: int,
+    tile: bytes,
+    tx_mode_select: int = 1,
+    reduced_tx_set: int = 0,
+    profile: int = 0,
+    bit_depth: int = 8,
+) -> bytes:
     stream = bytearray()
     stream += obu(2, b"")  # temporal delimiter
-    stream += obu(1, sequence_header(width, height))
+    stream += obu(1, sequence_header(width, height, profile, bit_depth))
     frame = frame_header(base_q_idx, tx_mode_select, reduced_tx_set) + tile
     stream += obu(6, frame)  # OBU_FRAME
     return bytes(stream)
@@ -590,6 +616,26 @@ def main() -> int:
     streams["txsel_32_depth2_1dscan"] = build_obu(
         32, 32, 120, craft_tile(fresh(), 120, 32, 2, plans_c, [LeafPlan(), LeafPlan()]),
     )
+
+    # D: profile 2 12-bit tx_mode=SELECT stream with a non-neutral luma DC.
+    # This exercises the highbd tx-tree, dequantisation and RGBA assembly path.
+    streams["txsel_highbd12_dc"] = build_obu(
+        64,
+        64,
+        120,
+        craft_tile(
+            fresh(),
+            120,
+            64,
+            1,
+            [LeafPlan(zero=False, levels={0: 1})]
+            + [LeafPlan(zero=True) for _ in range(3)],
+            [LeafPlan(), LeafPlan()],
+        ),
+        profile=2,
+        bit_depth=12,
+    )
+
 
     for name, data in streams.items():
         if args.check:

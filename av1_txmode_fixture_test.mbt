@@ -86,3 +86,16 @@ test "crafted tx-mode 32x32 one-dimensional scan fixture has valid sequence" {
   let info = av1_sequence_info(sequence).unwrap()
   assert_eq((info.width, info.height, info.bit_depth), (32, 32, 8))
 }
+
+///|
+/// Profile 2 12-bit fixture with a non-zero luma DC coefficient. The public
+/// image API quantises high-bit-depth samples to 8-bit channels, so both ends
+/// of the tile should round to 0x83 instead of the neutral 0x82 baseline.
+test "tx-mode highbd 12-bit DC residual reconstructs pixels" {
+  let stream = hex_bytes(
+    "12000a0658157ffc0c613208178000002008f9e0",
+  )
+  let image = av1_decode(stream).unwrap()
+  assert_eq(image.get_pixel(0, 0), (b'\x83', b'\x83', b'\x83', b'\xFF'))
+  assert_eq(image.get_pixel(63, 63), (b'\x83', b'\x83', b'\x83', b'\xFF'))
+}
