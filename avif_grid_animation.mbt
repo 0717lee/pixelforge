@@ -866,7 +866,11 @@ pub fn avif_animation_descriptor(
         duration: durations[i],
         timescale: scale,
       })
-      t = t + durations[i]
+      let next_t = t + durations[i]
+      if next_t < t {
+        raise GridAnimError::Invalid
+      }
+      t = next_t
     }
     Some({ timescale: scale, frames, })
   } catch {
