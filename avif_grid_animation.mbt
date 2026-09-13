@@ -819,6 +819,9 @@ pub fn avif_animation_descriptor(
     }
     let tp = stts.payload + 4
     let ne = ga_u32(data, tp, stts.end)
+    if ne <= 0 || ne > 4096 {
+      raise GridAnimError::Unsupported
+    }
     let durations : Array[Int] = []
     for i in 0..<ne {
       let c = ga_u32(data, tp + 4 + i * 8, stts.end)
