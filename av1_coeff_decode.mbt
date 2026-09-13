@@ -71,12 +71,11 @@ fn av1_coeff_context(
   for i in 0..<3 {
     sign.push(av1_coeff_dc_sign_default(qctx, plane, i))
   }
-  // Small-leaf eob_pt rows for the square kinds used by this context:
-  // slot 0 = eobPt16 (4x4), 1 = eobPt64 (8x8), 2 = eobPt256 (16x16), each for
-  // both transform classes. They must adapt across every leaf of the tile.
+  // Small-leaf eob_pt rows for every area class (16..512), including the
+  // odd classes used by rectangular transforms such as 4x8 (32) and 8x16
+  // (128), for both transform classes.
   let eob_small : Array[Array[Int]] = []
-  for kind_slot in 0..<3 {
-    let kind = kind_slot * 2
+  for kind in 0..<6 {
     for tx_class in 0..<2 {
       eob_small.push(av1_coeff_eob_small_default(kind, qctx, plane, tx_class))
     }
@@ -453,7 +452,7 @@ fn av1_decode_coeffs_leaf_with_decoder(
       return None
     }
   } else {
-    let kind_slot = (log2_w + log2_h - 4) / 2
+    let kind_slot = log2_w + log2_h - 4
     let pt_ctx = if scan_class == AV1_SCAN_DEFAULT { 0 } else { 1 }
     let eob_pt = decoder.symbol(context.eob_small[kind_slot * 2 + pt_ctx]) + 1
     if eob_pt < 1 || eob_pt > 11 {
@@ -500,6 +499,8 @@ fn av1_decode_coeffs_leaf_with_decoder(
     3
   }
   let quant : Array[Int] = Array::make(area, 0)
+  let mut cul_level = 0
+  let mut dc_category = 0
   for ci in 0..<eob {
     let c = eob - 1 - ci
     let pos = scan[c]
@@ -534,15 +535,13 @@ fn av1_decode_coeffs_leaf_with_decoder(
     if decoder.symbol_max_bits < -14 {
       return None
     }
-    quant[pos] = value
-  }
-  let mut cul_level = 0
-  let mut dc_category = 0
-  for c in 0..<eob {
-    let pos = scan[c]
-    let mut sign = 0
     if quant[pos] != 0 {
-      sign = if c == 0 {
+      // AV1 residual syntax emits each coefficient's sign immediately after
+      // its magnitude (including any br/extra bits), while coefficients are
+      // visited in reverse scan order.  Keeping sign consumption in this
+      // loop is essential: reading all signs afterward swaps AC/DC signs and
+      // desynchronizes the following chroma symbols.
+      let sign = if c == 0 {
         decoder.symbol(context.sign[dc_sign_ctx])
       } else {
         decoder.bool()
