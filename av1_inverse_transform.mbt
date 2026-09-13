@@ -389,8 +389,9 @@ pub fn av1_inverse_transform_2d(
     Av1TxAdstFlipadst => av1_inverse_adst_2d(dequant, width, height, true, true, false, true, bit_depth~)
     Av1TxFlipadstAdst => av1_inverse_adst_2d(dequant, width, height, true, true, true, false, bit_depth~)
     Av1TxIdentityIdentity => av1_inverse_identity_identity_2d(dequant, width, height, bit_depth)
-    Av1TxIdentityDct => av1_inverse_identity_dct_2d(dequant, width, height, false, bit_depth~)
-    Av1TxDctIdentity => av1_inverse_identity_dct_2d(dequant, width, height, true, bit_depth~)
+    // `cols_dct=true` means rows are identity and columns are DCT.
+    Av1TxIdentityDct => av1_inverse_identity_dct_2d(dequant, width, height, true, bit_depth~)
+    Av1TxDctIdentity => av1_inverse_identity_dct_2d(dequant, width, height, false, bit_depth~)
     Av1TxVerticalDct => av1_inverse_identity_dct_2d(dequant, width, height, true, bit_depth~)
     Av1TxHorizontalDct => av1_inverse_identity_dct_2d(dequant, width, height, false, bit_depth~)
     Av1TxVerticalAdst => av1_inverse_adst_2d(dequant, width, height, false, true, false, false, bit_depth~)
@@ -446,6 +447,16 @@ test "identity transform applies normative 1D scaling and validates shapes" {
   assert_true(av1_inverse_transform_2d(Av1TxIdentityDct, Array::make(1024, 0), 32, 32, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxDctIdentity, Array::make(1024, 0), 32, 32, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxIdentityIdentity, Array::make(16, 0), 4, 4, 7) is None)
+}
+
+///| 
+test "identity mixed transform dispatch selects the correct axis" {
+  let input : Array[Int] = Array::make(16, 0)
+  input[1] = 100
+  let expected_idct = av1_inverse_identity_dct_2d(input, 4, 4, true, bit_depth=8).unwrap()
+  let expected_dctid = av1_inverse_identity_dct_2d(input, 4, 4, false, bit_depth=8).unwrap()
+  assert_eq(av1_inverse_transform_2d(Av1TxIdentityDct, input, 4, 4, 8).unwrap(), expected_idct)
+  assert_eq(av1_inverse_transform_2d(Av1TxDctIdentity, input, 4, 4, 8).unwrap(), expected_dctid)
 }
 
 ///|
