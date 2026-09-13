@@ -243,6 +243,33 @@ test "iloc rejects unsupported construction method" {
   assert_true(rejected)
 }
 
+test "iloc resolves idat construction method extents" {
+  let data : Array[Byte] = [
+    b'\x01', b'\x00', b'\x00', b'\x00',
+    b'\x44', b'\x00',
+    b'\x00', b'\x00', b'\x00', b'\x01',
+    b'\x00', b'\x01',
+    b'\x10', b'\x00', // construction method 1
+    b'\x00', b'\x00',
+    b'\x00', b'\x01',
+    b'\x00', b'\x00', b'\x00', b'\x05',
+    b'\x00', b'\x00', b'\x00', b'\x03',
+  ]
+  let box : GaBox = { typ: ga_iloc, start: 0, payload: 0, end: data.length(), parent: -1 }
+  let items : Array[GaItem] = [{
+    id: 1,
+    typ: ga_grid,
+    method_id: 0,
+    base: 0,
+    offs: [],
+    lens: [],
+  }]
+  ga_parse_iloc(data, box, items)
+  assert_eq(items[0].method_id, 1)
+  assert_eq(items[0].offs[0], 5)
+  assert_eq(items[0].lens[0], 3)
+}
+
 ///|
 priv suberror GridAnimError {
   Invalid
