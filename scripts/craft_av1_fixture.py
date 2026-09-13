@@ -374,7 +374,10 @@ def build_scan(side: int, scan_class: int) -> list[int]:
     for total in range(side * 2 - 1):
         lo = max(0, total - (side - 1))
         hi = min(total, side - 1)
-        rng = range(hi, lo - 1, -1) if total % 2 == 0 else range(lo, hi + 1)
+        # AV1 diagonal scans enumerate each anti-diagonal from the highest
+        # row toward the lowest row for both parity classes.  Keeping this
+        # direction aligned with the decoder is essential for AC positions.
+        rng = range(hi, lo - 1, -1)
         for c in rng:
             scan.append((total - c) * side + c)
     return scan
