@@ -12,6 +12,21 @@ test "av1 idct4 matches scalar AV1 schedule vector" {
   assert_eq(av1_inverse_dct([1, 2, 3, 4], 2, 32).unwrap(), [6, -4, 2, 0])
 }
 
+/// The 32-point path must preserve non-DC AC content.  This single-frequency
+/// vector is independently derived from the AV1 Cos128 Q12 inverse-DCT
+/// schedule (input coefficient k=1 = 100, clamp range 32).
+test "av1 idct32 preserves first AC basis" {
+  let input = Array::make(32, 0)
+  input[1] = 100
+  let out = av1_inverse_dct(input, 5, 32).unwrap()
+  assert_eq(out, [
+    100, 99, 97, 94, 91, 86, 81, 74,
+    67, 59, 52, 42, 34, 24, 15, 5,
+    -5, -15, -24, -34, -42, -52, -59, -67,
+    -74, -81, -86, -91, -94, -97, -99, -100,
+  ])
+}
+
 ///|
 test "av1 inverse dct dc is constant for every supported size" {
   for n in 2..<7 {
