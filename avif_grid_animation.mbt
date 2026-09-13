@@ -585,36 +585,58 @@ pub fn avif_grid_descriptor(data : Array[Byte]) -> AvifGridDescriptor? {
       raise GridAnimError::Unsupported
     }
     let idw = if vv == 0 { 2 } else { 4 }
-    let mut rq = refbox.payload + 4
-    while rq < refbox.end {
-      if refbox.end - rq < 4 + idw + 2 {
-        raise GridAnimError::Invalid
-      }
-      let rt = ga_u32(data, rq, refbox.end)
-      rq = rq + 4
-      let from = if idw == 2 {
-        ga_u16(data, rq, refbox.end)
-      } else {
-        ga_u32(data, rq, refbox.end)
-      }
-      rq = rq + idw
-      let n = ga_u16(data, rq, refbox.end)
-      rq = rq + 2
-      if rq + n * idw > refbox.end {
-        raise GridAnimError::Invalid
-      }
-      for _ in 0..<n {
-        let to = if idw == 2 {
-          ga_u16(data, rq, refbox.end)
-        } else {
-          ga_u32(data, rq, refbox.end)
+    // ISO BMFF stores an entry_count immediately after the FullBox header,
+    // followed by sized dimg reference boxes.  Older fixtures used the
+    // pre-entry-count payload; retain that bounded form for compatibility.
+    let first = if refbox.end - refbox.payload >= 8 {
+      ga_u32(data, refbox.payload + 4, refbox.end)
+    } else {
+      0
+    }
+    let standard = first != ga_dimg && first <= 4096
+    let mut rq = refbox.payload + (if standard { 8 } else { 4 })
+    let mut entries = if standard { first } else { -1 }
+    while rq < refbox.end && (entries < 0 || entries > 0) {
+      if standard {
+        if refbox.end - rq < 8 {
+          raise GridAnimError::Invalid
         }
+        let size = ga_u32(data, rq, refbox.end)
+        if size < 8 || size > refbox.end - rq {
+          raise GridAnimError::Invalid
+        }
+        let end = rq + size
+        let rt = ga_u32(data, rq + 4, end)
+        let qp = rq + 8
+        let from = if idw == 2 { ga_u16(data, qp, end) } else { ga_u32(data, qp, end) }
+        let np = qp + idw
+        let n = ga_u16(data, np, end)
+        rq = np + 2
+        if rq + n * idw > end { raise GridAnimError::Invalid }
+        for _ in 0..<n {
+          let to = if idw == 2 { ga_u16(data, rq, end) } else { ga_u32(data, rq, end) }
+          rq = rq + idw
+          if rt == ga_dimg && from == grid.id { tile_ids.push(to) }
+        }
+        rq = end
+        entries = entries - 1
+      } else {
+        if refbox.end - rq < 4 + idw + 2 { raise GridAnimError::Invalid }
+        let rt = ga_u32(data, rq, refbox.end)
+        rq = rq + 4
+        let from = if idw == 2 { ga_u16(data, rq, refbox.end) } else { ga_u32(data, rq, refbox.end) }
         rq = rq + idw
-        if rt == ga_dimg && from == grid.id {
-          tile_ids.push(to)
+        let n = ga_u16(data, rq, refbox.end)
+        rq = rq + 2
+        if rq + n * idw > refbox.end { raise GridAnimError::Invalid }
+        for _ in 0..<n {
+          let to = if idw == 2 { ga_u16(data, rq, refbox.end) } else { ga_u32(data, rq, refbox.end) }
+          rq = rq + idw
+          if rt == ga_dimg && from == grid.id { tile_ids.push(to) }
         }
       }
     }
+    if standard && entries != 0 { raise GridAnimError::Invalid }
     if tile_ids.length() != rows * cols {
       raise GridAnimError::Invalid
     }
