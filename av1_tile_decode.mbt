@@ -299,13 +299,40 @@ fn av1_decode_tx_mode_residuals(
       y_types.push(tx_type)
     }
   }
-  // Chroma uses one transform block per plane at the plane maximum. A full
-  // independent chroma transform tree is not yet signalled by this bounded
-  // tile parser, so preserve the validated single-block syntax here.
+  // Chroma residual() is traversed independently from the luma transform
+  // tree.  For 4:2:0 each plane is covered in raster order by transform
+  // blocks at the plane maximum (32x32 for a 64x64 luma block, 16x16 for a
+  // 32x32 block).  Keep the geometry explicit so larger callers can be
+  // tiled without accidentally collapsing the plane into one block.
   let chroma_side = width / 2
-  let c_leaf : Av1TxLeaf = { node: { row: 0, col: 0, width: chroma_side, height: chroma_side }, depth: 0 }
-  let chroma_leaves : Array[Av1TxLeaf] = [c_leaf]
-  let u_type = match av1_chroma_tx_type(uv_mode, chroma_side, reduced_tx_set) {
+  let chroma_tx_side = if chroma_side >= 32 { 32 } else { 16 }
+  let chroma_leaves : Array[Av1TxLeaf] = []
+  let mut chroma_row = 0
+  while chroma_row < chroma_side {
+    let mut chroma_col = 0
+    while chroma_col < chroma_side {
+      let side = if chroma_side - chroma_col < chroma_tx_side {
+        chroma_side - chroma_col
+      } else {
+        chroma_tx_side
+      }
+      if side < 4 || side != chroma_tx_side {
+        return None
+      }
+      chroma_leaves.push({
+        node: {
+          row: chroma_row,
+          col: chroma_col,
+          width: side,
+          height: side,
+        },
+        depth: 0,
+      })
+      chroma_col = chroma_col + chroma_tx_side
+    }
+    chroma_row = chroma_row + chroma_tx_side
+  }
+  let u_type = match av1_chroma_tx_type(uv_mode, chroma_tx_side, reduced_tx_set) {
     Some(value) => value
     None => return None
   }
@@ -316,41 +343,79 @@ fn av1_decode_tx_mode_residuals(
     let plane_idx = 1
     let context = av1_coeff_context(
       base_q_idx,
-      if chroma_side == 32 { 3 } else { 2 },
+      if chroma_tx_side == 32 { 3 } else { 2 },
       plane_idx,
     )
-    let ctx = av1_txb_skip_ctx_chroma(false, false, true)
-    let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(chroma_side)][ctx])
-    if zero > 1 {
-      return None
-    }
-    let mut results : Array[Av1LeafCoeffs] = []
-    if zero == 1 {
-      results.push({
-        coeffs: Array::make(chroma_side * chroma_side, 0),
-        cul_level: 0,
-        dc_category: 0,
-      })
-    } else {
-      let scan_class = if plane == 0 {
-        av1_tx_scan_class(u_type)
+    let units = chroma_side / 4
+    let above_level : Array[Int] = Array::make(units, 0)
+    let left_level : Array[Int] = Array::make(units, 0)
+    let above_dc : Array[Int] = Array::make(units, 0)
+    let left_dc : Array[Int] = Array::make(units, 0)
+    let results : Array[Av1LeafCoeffs] = []
+    for leaf in chroma_leaves {
+      let side = leaf.node.width
+      let x4 = leaf.node.col / 4
+      let y4 = leaf.node.row / 4
+      let w4 = side / 4
+      let mut above_nonzero = false
+      let mut left_nonzero = false
+      for i in 0..<w4 {
+        if above_level[x4 + i] > 0 {
+          above_nonzero = true
+        }
+        if left_level[y4 + i] > 0 {
+          left_nonzero = true
+        }
+      }
+      let whole = side == chroma_side
+      let ctx = av1_txb_skip_ctx_chroma(above_nonzero, left_nonzero, whole)
+      let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(side)][ctx])
+      if zero > 1 {
+        return None
+      }
+      if zero == 1 {
+        let skipped = {
+          coeffs: Array::make(side * side, 0),
+          cul_level: 0,
+          dc_category: 0,
+        }
+        results.push(skipped)
+        for i in 0..<w4 {
+          above_level[x4 + i] = 0
+          above_dc[x4 + i] = 0
+        }
+        for j in 0..<w4 {
+          left_level[y4 + j] = 0
+          left_dc[y4 + j] = 0
+        }
       } else {
-        av1_tx_scan_class(v_type)
+        let tx_type = if plane == 0 { u_type } else { v_type }
+        let scan_class = av1_tx_scan_class(tx_type)
+        let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4)
+        let decoded = match
+          av1_tx_decode_leaf_nodes(
+            decoder,
+            base_q_idx,
+            context,
+            [leaf],
+            bit_depth,
+            scan_class~,
+            dc_sign_ctx=dsc,
+          ) {
+          Some(value) => value
+          None => return None
+        }
+        let result = decoded[0]
+        results.push(result)
+        for i in 0..<w4 {
+          above_level[x4 + i] = result.cul_level
+          above_dc[x4 + i] = result.dc_category
+        }
+        for j in 0..<w4 {
+          left_level[y4 + j] = result.cul_level
+          left_dc[y4 + j] = result.dc_category
+        }
       }
-      let decoded = match
-        av1_tx_decode_leaf_nodes(
-          decoder,
-          base_q_idx,
-          context,
-          chroma_leaves,
-          bit_depth,
-          scan_class~,
-          dc_sign_ctx=0,
-        ) {
-        Some(value) => value
-        None => return None
-      }
-      results = decoded
     }
     if plane == 0 {
       u_results = results
