@@ -487,13 +487,14 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     av1_coeff_scan_square(domain_w, scan_class)
   }
-  let size_row = if domain_w == 4 && domain_h == 4 {
+  let max_dim = if domain_w > domain_h { domain_w } else { domain_h }
+  let size_row = if max_dim == 4 {
     0
-  } else if domain_w == 8 && domain_h == 8 {
+  } else if max_dim == 8 {
     1
-  } else if domain_w == 16 && domain_h == 16 {
+  } else if max_dim == 16 {
     2
-  } else if side == 64 {
+  } else if max_dim == 64 {
     4
   } else {
     3
@@ -535,17 +536,13 @@ fn av1_decode_coeffs_leaf_with_decoder(
     if decoder.symbol_max_bits < -14 {
       return None
     }
+    quant[pos] = value
     if quant[pos] != 0 {
       // AV1 residual syntax emits each coefficient's sign immediately after
       // its magnitude (including any br/extra bits), while coefficients are
       // visited in reverse scan order.  Keeping sign consumption in this
       // loop is essential: reading all signs afterward swaps AC/DC signs and
       // desynchronizes the following chroma symbols.
-      let sign = if c == 0 {
-        decoder.symbol(context.sign[dc_sign_ctx])
-      } else {
-        decoder.bool()
-      }
       if quant[pos] > 14 {
         let mut length = 0
         let mut terminated = false
@@ -561,6 +558,11 @@ fn av1_decode_coeffs_leaf_with_decoder(
           code = (code << 1) | decoder.bool().to_int64()
         }
         quant[pos] = ((code + 14L) & 0xFFFFFL).to_int()
+      }
+      let sign = if c == 0 {
+        decoder.symbol(context.sign[dc_sign_ctx])
+      } else {
+        decoder.bool()
       }
       if sign == 1 {
         quant[pos] = -quant[pos]
