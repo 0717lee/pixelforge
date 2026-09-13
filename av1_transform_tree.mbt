@@ -57,6 +57,26 @@ pub fn av1_tx_depth_context_from_neighbors(above_depth : Int, left_depth : Int) 
   above + left
 }
 
+/// Derive the tx_depth context from the transform dimensions recorded for
+/// the neighbouring blocks (AV1 spec section 8.3).  The syntax context is a
+/// pair of independent flags: one for an above neighbour whose transform
+/// width reaches the current maximum width, and one for a left neighbour whose
+/// transform height reaches the current maximum height.  A negative dimension
+/// denotes an unavailable edge and contributes zero.
+pub fn av1_tx_depth_context_from_sizes(
+  above_width : Int,
+  left_height : Int,
+  max_tx_width : Int,
+  max_tx_height : Int,
+) -> Int {
+  if max_tx_width <= 0 || max_tx_height <= 0 {
+    return 0
+  }
+  let above = if above_width >= max_tx_width && above_width >= 0 { 1 } else { 0 }
+  let left = if left_height >= max_tx_height && left_height >= 0 { 1 } else { 0 }
+  above + left
+}
+
 fn av1_decode_tx_depth_with_state(
   decoder : Av1SymbolDecoder,
   state : Av1TxDepthState,
@@ -147,7 +167,6 @@ fn av1_decode_tx_tree_with_state(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
-///|
 /// Read one leaf's coefficients while sharing one mutable MSAC reader and
 /// coefficient CDF context. `scan_class` selects the coefficient scan ordered
 /// by the leaf's transform type; `dc_sign_ctx` is the neighbour dc-sign
@@ -534,6 +553,16 @@ test "tx depth context derives from neighbours" {
   assert_eq(av1_tx_depth_context_from_neighbors(-1, -1), 0)
   assert_eq(av1_tx_depth_context_from_neighbors(1, -1), 1)
   assert_eq(av1_tx_depth_context_from_neighbors(2, 3), 2)
+}
+
+test "tx depth context derives from neighbour transform sizes" {
+  // Unavailable edges and transforms smaller than the root do not contribute.
+  assert_eq(av1_tx_depth_context_from_sizes(-1, -1, 32, 32), 0)
+  assert_eq(av1_tx_depth_context_from_sizes(16, 32, 32, 32), 1)
+  assert_eq(av1_tx_depth_context_from_sizes(32, 32, 32, 32), 2)
+  // Rectangular roots compare width and height independently.
+  assert_eq(av1_tx_depth_context_from_sizes(32, 16, 32, 64), 1)
+  assert_eq(av1_tx_depth_context_from_sizes(0, 0, 0, 32), 0)
 }
 
 ///|
