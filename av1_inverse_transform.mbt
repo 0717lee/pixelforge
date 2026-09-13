@@ -415,6 +415,18 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxHorizontalAdst, Array::make(32, 0), 8, 4, 8) is Some(_))
 }
 
+/// AV1's intra transform set is DCT-only for 32x32 and larger blocks
+/// (spec get_tx_set, §7.13.1).  ADST is defined only up to 16 points;
+/// keep the unsupported 32-point boundary explicit so callers do not treat
+/// a non-normative extension as a valid AV1 decode path.
+test "32 point ADST is rejected by the AV1 transform-size boundary" {
+  let coeffs : Array[Int] = Array::make(32 * 32, 0)
+  assert_true(av1_inverse_transform_2d(Av1TxAdstDct, coeffs, 32, 32, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxDctAdst, coeffs, 32, 32, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxAdstAdst, coeffs, 32, 32, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxFlipadstDct, coeffs, 32, 32, 8) is None)
+}
+
 /// Nonzero regression coverage for axis-specific FLIPADST dispatch.  A
 /// flip must be applied inside the corresponding 1D transform axis; flipping
 /// a completed 2D DCT image produces a different result for non-symmetric
@@ -457,6 +469,15 @@ test "identity mixed transform dispatch selects the correct axis" {
   let expected_dctid = av1_inverse_identity_dct_2d(input, 4, 4, false, bit_depth=8).unwrap()
   assert_eq(av1_inverse_transform_2d(Av1TxIdentityDct, input, 4, 4, 8).unwrap(), expected_idct)
   assert_eq(av1_inverse_transform_2d(Av1TxDctIdentity, input, 4, 4, 8).unwrap(), expected_dctid)
+}
+
+///| 
+test "32 point ADST remains an explicit unsupported boundary" {
+  assert_true(av1_inverse_adst_1d(Array::make(32, 0), 5, 16) is None)
+  assert_true(
+    av1_inverse_transform_2d(Av1TxAdstDct, Array::make(1024, 0), 32, 32, 8)
+    is None,
+  )
 }
 
 ///|
