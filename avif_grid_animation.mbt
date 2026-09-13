@@ -90,7 +90,14 @@ pub fn avif_decode_animation_frames(
       timescale: timing.timescale,
       image,
     })
-    expected_timestamp = expected_timestamp + timing.duration
+    // Guard the cumulative presentation timestamp against signed overflow.
+    // A wrapped value would make subsequent monotonicity checks meaningless
+    // and could select an incorrect frame during playback.
+    let next_timestamp = expected_timestamp + timing.duration
+    if next_timestamp < expected_timestamp {
+      return None
+    }
+    expected_timestamp = next_timestamp
   }
   Some({ timescale: descriptor.timescale, frames, })
 }

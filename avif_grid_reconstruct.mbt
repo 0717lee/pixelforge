@@ -121,6 +121,37 @@ test "grid reconstruction rejects mismatched tile counts" {
   assert_true(avif_reconstruct_grid(2, 2, 4, 4, []) is None)
 }
 
+/// Multiple iloc extents are concatenated before AV1 decoding.  Construction
+/// method is metadata only at this stage; the descriptor has already resolved
+/// each extent to a data-relative offset.
+test "grid decoder concatenates split construction-method extents" {
+  let sample : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
+    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
+    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+  ]
+  let data : Array[Byte] = []
+  for b in sample { data.push(b) }
+  let descriptor : AvifGridDescriptor = {
+    item_id: 1,
+    rows: 1,
+    columns: 1,
+    output_width: 64,
+    output_height: 64,
+    tiles: [{
+      item_id: 2,
+      extents: [
+        { offset: 0, length: 8, construction_method: 1 },
+        { offset: 8, length: sample.length() - 8, construction_method: 1 },
+      ],
+    }],
+  }
+  let image = avif_decode_grid(data, descriptor).unwrap()
+  assert_eq((image.width, image.height), (64, 64))
+  assert_eq(image.get_pixel(0, 0).3, b'\xFF')
+}
+
 ///|
 test "grid tile decoder composes ordered AV1 samples" {
   let sample : Array[Byte] = [
