@@ -65,16 +65,24 @@ pub fn avif_decode_animation_frames(
   descriptor : AvifAnimationDescriptor,
   samples : Array[Array[Byte]],
 ) -> AvifAnimationPixels? {
-  if descriptor.frames.length() == 0 || descriptor.frames.length() != samples.length() {
+  if descriptor.timescale <= 0 || descriptor.frames.length() == 0 ||
+    descriptor.frames.length() != samples.length() {
     return None
   }
   let frames : Array[AvifAnimationPixelFrame] = []
+  let mut expected_timestamp = 0
   for i in 0..<samples.length() {
+    let timing = descriptor.frames[i]
+    // AVIF image sequences are presented in decode order. Reject malformed
+    // timing tables instead of silently attaching pixels to the wrong frame.
+    if timing.index != i || timing.timescale != descriptor.timescale ||
+      timing.timestamp != expected_timestamp || timing.duration <= 0 {
+      return None
+    }
     let image = match av1_decode(samples[i]) {
       Some(value) => value
       None => return None
     }
-    let timing = descriptor.frames[i]
     frames.push({
       index: timing.index,
       timestamp: timing.timestamp,
@@ -82,6 +90,7 @@ pub fn avif_decode_animation_frames(
       timescale: timing.timescale,
       image,
     })
+    expected_timestamp = expected_timestamp + timing.duration
   }
   Some({ timescale: descriptor.timescale, frames, })
 }
@@ -165,6 +174,29 @@ pub fn avif_animation_frame_at(
     }
   }
   Some(animation.frames[animation.frames.length() - 1].image)
+}
+
+/// Timing metadata must describe the same ordered sequence as the samples.
+/// Accepting an out-of-order table would render valid pixels at the wrong
+/// presentation time, which is especially hard to diagnose in a player.
+/// This regression stays beside the private record fields so it can construct
+/// an intentionally malformed descriptor without widening the public API.
+///|
+test "animation decoder rejects noncontiguous timing tables" {
+  let sample : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
+    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
+    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+  ]
+  let descriptor : AvifAnimationDescriptor = {
+    timescale: 1000,
+    frames: [
+      { index: 0, offset: 0, length: sample.length(), timestamp: 0, duration: 10, timescale: 1000 },
+      { index: 1, offset: 0, length: sample.length(), timestamp: 20, duration: 10, timescale: 1000 },
+    ],
+  }
+  assert_true(avif_decode_animation_frames(descriptor, [sample, sample]) is None)
 }
 
 ///|
@@ -592,10 +624,22 @@ pub fn avif_grid_descriptor(data : Array[Byte]) -> AvifGridDescriptor? {
       if ti < 0 || xs[ti].offs.length() == 0 {
         raise GridAnimError::Invalid
       }
+      // iloc construction_method=1 stores extents relative to the idat
+      // payload. Resolve that base while the enclosing BMFF boxes are still
+      // available; callers of `avif_decode_grid` receive data-relative
+      // offsets for both construction methods.
+      let tile_base = if xs[ti].method_id == 1 {
+        match idat {
+          Some(x) => x.payload + xs[ti].base
+          None => raise GridAnimError::Invalid
+        }
+      } else {
+        xs[ti].base
+      }
       let ex : Array[AvifGridExtent] = []
       for j in 0..<xs[ti].offs.length() {
         ex.push({
-          offset: xs[ti].base + xs[ti].offs[j],
+          offset: tile_base + xs[ti].offs[j],
           length: xs[ti].lens[j],
           construction_method: xs[ti].method_id,
         })
