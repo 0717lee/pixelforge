@@ -441,3 +441,47 @@ let av1_coeff_base_ctx_offset : Array[Array[Array[Int]]] = [
     [21, 21, 21, 21, 21]
   ]
 ]
+
+///|
+/// Per-decode copies of the adaptive tx entropy tables. The default tables
+/// above must never be adapted in place: a decode that mutated them would
+/// corrupt every later decode in the same process. One instance is created
+/// per tile decode and shared by every symbol read within it, so the CDFs
+/// adapt across leaves exactly as the bitstream expects.
+priv struct Av1TxEntTables {
+  txb_skip : Array[Array[Array[Int]]]
+  tx_set1 : Array[Array[Array[Int]]]
+  tx_set2 : Array[Array[Array[Int]]]
+}
+
+///|
+/// Builds the per-decode table set for one effective q context. Only the
+/// active qctx slice of the all_zero table is retained.
+fn av1_tx_ent_tables(base_q_idx : Int) -> Av1TxEntTables {
+  let qctx = av1_dc_q_context(base_q_idx)
+  let txb : Array[Array[Array[Int]]] = []
+  for tx in 0..<5 {
+    let rows : Array[Array[Int]] = []
+    for ctx in 0..<13 {
+      rows.push(av1_txb_skip_cdf[qctx][tx][ctx].copy())
+    }
+    txb.push(rows)
+  }
+  let set1 : Array[Array[Array[Int]]] = []
+  for row in 0..<2 {
+    let dirs : Array[Array[Int]] = []
+    for dir in 0..<13 {
+      dirs.push(av1_intra_tx_type_set1_cdf[row][dir].copy())
+    }
+    set1.push(dirs)
+  }
+  let set2 : Array[Array[Array[Int]]] = []
+  for row in 0..<3 {
+    let dirs : Array[Array[Int]] = []
+    for dir in 0..<13 {
+      dirs.push(av1_intra_tx_type_set2_cdf[row][dir].copy())
+    }
+    set2.push(dirs)
+  }
+  { txb_skip: txb, tx_set1: set1, tx_set2: set2 }
+}

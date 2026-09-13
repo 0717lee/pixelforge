@@ -201,6 +201,7 @@ fn av1_read_filter_intra_bits(
 /// luma tx_depth). Neighbour level/dc contexts track the all_zero CDF rows.
 fn av1_decode_tx_mode_residuals(
   decoder : Av1SymbolDecoder,
+  tables : Av1TxEntTables,
   width : Int,
   height : Int,
   leaves : Array[Av1TxLeaf],
@@ -210,7 +211,6 @@ fn av1_decode_tx_mode_residuals(
   bit_depth : Int,
   reduced_tx_set : Bool,
 ) -> (Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Av1TxType], Array[Av1TxType], Array[Av1TxType], Array[Av1TxLeaf])? {
-  let qctx = av1_dc_q_context(base_q_idx)
   let y_context = av1_coeff_context(base_q_idx, 3, 0)
   let y_coeff_results : Array[Av1LeafCoeffs] = []
   let y_types : Array[Av1TxType] = []
@@ -244,14 +244,22 @@ fn av1_decode_tx_mode_residuals(
     }
     let whole = side == width && side == height
     let ctx = av1_txb_skip_ctx_luma(top, left, whole)
-    // The table rows are adapted in place, so each decode owns copies.
-    let y_zero = decoder.symbol(
-      av1_txb_skip_cdf[qctx][av1_tx_size_ctx(side)][ctx].copy(),
-    )
+    let y_zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(side)][ctx])
     if y_zero > 1 {
       return None
     }
     if y_zero == 1 {
+      // A skipped transform block contributes zero level/DC context to every
+      // covered 4x4 unit. Keep neighbour state consistent for following
+      // leaves in raster order.
+      for i in 0..<w4 {
+        above_level[x4 + i] = 0
+        above_dc[x4 + i] = 0
+      }
+      for j in 0..<w4 {
+        left_level[y4 + j] = 0
+        left_dc[y4 + j] = 0
+      }
       y_coeff_results.push({
         coeffs: Array::make(side * side, 0),
         cul_level: 0,
@@ -260,7 +268,7 @@ fn av1_decode_tx_mode_residuals(
       y_types.push(Av1TxDctDct)
     } else {
       let tx_type = match
-        av1_decode_intra_tx_type(decoder, side, y_mode, reduced_tx_set, base_q_idx) {
+        av1_decode_intra_tx_type(decoder, tables, side, y_mode, reduced_tx_set, base_q_idx) {
         Some(value) => value
         None => return None
       }
@@ -291,7 +299,9 @@ fn av1_decode_tx_mode_residuals(
       y_types.push(tx_type)
     }
   }
-  // Chroma: one transform per plane at the plane's maximum size.
+  // Chroma uses one transform block per plane at the plane maximum. A full
+  // independent chroma transform tree is not yet signalled by this bounded
+  // tile parser, so preserve the validated single-block syntax here.
   let chroma_side = width / 2
   let c_leaf : Av1TxLeaf = { node: { row: 0, col: 0, width: chroma_side, height: chroma_side }, depth: 0 }
   let chroma_leaves : Array[Av1TxLeaf] = [c_leaf]
@@ -303,20 +313,14 @@ fn av1_decode_tx_mode_residuals(
   let mut u_results : Array[Av1LeafCoeffs] = []
   let mut v_results : Array[Av1LeafCoeffs] = []
   for plane in 0..<2 {
-    // Coefficient CDF tables are indexed by plane class (0 = luma, 1 = chroma);
-    // U and V share the chroma rows.
     let plane_idx = 1
     let context = av1_coeff_context(
       base_q_idx,
       if chroma_side == 32 { 3 } else { 2 },
       plane_idx,
     )
-    // One chroma transform covers the whole plane, so its neighbours lie
-    // outside the frame and contribute nothing to the all_zero context.
     let ctx = av1_txb_skip_ctx_chroma(false, false, true)
-    let zero = decoder.symbol(
-      av1_txb_skip_cdf[qctx][av1_tx_size_ctx(chroma_side)][ctx].copy(),
-    )
+    let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(chroma_side)][ctx])
     if zero > 1 {
       return None
     }
@@ -387,10 +391,10 @@ pub fn av1_decode_dc_tile(
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
-    // High-bit-depth streams with larger residual payloads require the
-    // remaining AC/partition syntax; reject them until that state machine is
-    // implemented rather than returning a falsely neutral image.
-    (bit_depth != 8 && tile_payload.length() > 8) ||
+    // The legacy single-block reader does not consume high-bit-depth AC and
+    // partition syntax. tx_mode_select uses the bounded tree reader below;
+    // keep the explicit rejection only for that legacy path.
+    (bit_depth != 8 && tile_payload.length() > 8 && !tx_mode_select) ||
     (width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
     width != height ||
@@ -518,15 +522,30 @@ pub fn av1_decode_dc_tile(
     return None
   }
   if tx_mode_select {
-    let leaves = match av1_decode_tx_tree(decoder, { row: 0, col: 0, width, height }, 0) {
+    // Keep tx_depth CDF rows alive for the complete tile traversal. The
+    // compatibility wrapper allocates a fresh state on every call.
+    let tx_depth_state = av1_tx_depth_state()
+    let leaves = match av1_decode_tx_tree_with_state(
+      decoder,
+      tx_depth_state,
+      { row: 0, col: 0, width, height },
+      0,
+    ) {
       Some(value) => value
       None => return None
     }
-    if leaves.length() > 1 {
       let assembled = match
         av1_decode_tx_mode_residuals(
-          decoder, width, height, leaves, base_q_idx, y_mode_symbol,
-          uv_mode_symbol, bit_depth, reduced_tx_set,
+        decoder,
+        av1_tx_ent_tables(base_q_idx),
+        width,
+        height,
+        leaves,
+        base_q_idx,
+        y_mode_symbol,
+        uv_mode_symbol,
+        bit_depth,
+        reduced_tx_set,
         ) {
         Some(value) => value
         None => return None
@@ -539,7 +558,6 @@ pub fn av1_decode_dc_tile(
         full_range~, matrix_coefficients~,
       )
     }
-  }
   let y_prediction = match
     av1_intra_predict(
       y_mode_symbol,
@@ -561,7 +579,14 @@ pub fn av1_decode_dc_tile(
   if luma_all_zero == 0 {
     if tx_mode_select {
       let tx_type = match
-        av1_decode_intra_tx_type(decoder, width, y_mode_symbol, reduced_tx_set, base_q_idx) {
+        av1_decode_intra_tx_type(
+          decoder,
+          av1_tx_ent_tables(base_q_idx),
+          width,
+          y_mode_symbol,
+          reduced_tx_set,
+          base_q_idx,
+        ) {
         Some(value) => value
         None => return None
       }

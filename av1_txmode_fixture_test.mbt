@@ -1,8 +1,11 @@
 ///|
-/// Crafted tx_mode=SELECT fixtures (scripts/craft_av1_fixture.py), validated
-/// against ffmpeg/libdav1d. Each test decodes the embedded OBU stream and
-/// compares the full RGBA output against the reference planes decoded by
-/// dav1d, converted through the shared YUV->RGBA path.
+/// Crafted tx_mode=SELECT fixtures (scripts/craft_av1_fixture.py). The
+/// fixtures exercise tx-depth splitting, transform-type signalling, and
+/// one-dimensional scan classes. The tests below verify that the embedded
+/// streams are accepted by the MoonBit parser and produce images of the
+/// signalled dimensions. Pixel-for-pixel reference validation is kept in the
+/// optional scripts/verify-av1-reference.py workflow; this test does not claim
+/// that the synthesised streams were independently decoded by dav1d.
 fn hex_bytes(hex : String) -> Array[Byte] {
   let out : Array[Byte] = []
   let chars = hex.to_array()
@@ -37,7 +40,7 @@ fn rgba_from_planes(width : Int, yuv_hex : String) -> Image {
 }
 
 ///|
-test "crafted tx-mode depth1_64 matches libdav1d" {
+test "crafted tx-mode depth1_64 decodes" {
   let stream = hex_bytes(
     "12000a0618157ffc00083208178000002008f9e0",
   )
@@ -48,4 +51,38 @@ test "crafted tx-mode depth1_64 matches libdav1d" {
       assert_eq(actual.get_pixel(x, y), expected.get_pixel(x, y))
     }
   }
+}
+
+///|
+test "crafted tx-mode depth2_16x16 transform fixture has valid sequence" {
+  // The full tx_type/AC pixel assertion remains pending until the generic
+  // multi-leaf entropy path is complete. Keep the fixture in CI by checking
+  // its independently parseable sequence header instead of asserting a
+  // fabricated pixel reference.
+  let stream = hex_bytes(
+    "12000A0618157FFC0008320B178000002012294FEF2DC0",
+  )
+  assert_eq(stream[0], b'\x12')
+  assert_true(stream.length() > 20)
+  let sequence : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFC', b'\x00', b'\x08',
+  ]
+  let info = av1_sequence_info(sequence).unwrap()
+  assert_eq((info.width, info.height, info.bit_depth), (64, 64, 8))
+}
+
+///|
+test "crafted tx-mode 32x32 one-dimensional scan fixture has valid sequence" {
+  // Pixel-level validation is intentionally deferred; this ensures the
+  // 32x32 stream remains present and its sequence header stays well formed.
+  let stream = hex_bytes(
+    "12000A0618113FF00020320C17800000200A03AE0565217C",
+  )
+  assert_eq(stream[0], b'\x12')
+  assert_true(stream.length() > 20)
+  let sequence : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x11', b'\x3F', b'\xF0', b'\x00', b'\x20',
+  ]
+  let info = av1_sequence_info(sequence).unwrap()
+  assert_eq((info.width, info.height, info.bit_depth), (32, 32, 8))
 }

@@ -23,8 +23,8 @@ priv struct Av1LeafCoeffs {
 /// txSzCtx 0..4).
 priv struct Av1CoeffContext {
   mut tx_ctx : Int
-  plane : Int
   eob : Array[Int]
+  eob_small : Array[Array[Int]]
   extra : Array[Array[Array[Int]]]
   base_eob : Array[Array[Array[Int]]]
   base : Array[Array[Array[Int]]]
@@ -71,10 +71,20 @@ fn av1_coeff_context(
   for i in 0..<3 {
     sign.push(av1_coeff_dc_sign_default(qctx, plane, i))
   }
+  // Small-leaf eob_pt rows for the square kinds used by this context:
+  // slot 0 = eobPt16 (4x4), 1 = eobPt64 (8x8), 2 = eobPt256 (16x16), each for
+  // both transform classes. They must adapt across every leaf of the tile.
+  let eob_small : Array[Array[Int]] = []
+  for kind_slot in 0..<3 {
+    let kind = kind_slot * 2
+    for tx_class in 0..<2 {
+      eob_small.push(av1_coeff_eob_small_default(kind, qctx, plane, tx_class))
+    }
+  }
   {
     tx_ctx,
-    plane,
     eob: av1_coeff_eob1024_default(qctx, plane),
+    eob_small,
     extra,
     base_eob,
     base,
@@ -269,6 +279,20 @@ fn av1_coeff_br_ctx_square(
   }
 }
 
+/// Apply dequantisation while retaining the full Int64 product until clip.
+fn av1_dequant_clip(value : Int, q : Int, denom : Int64, bit_depth : Int) -> Int {
+  let scaled = value.to_int64() * q.to_int64() / denom
+  let limit = 1 << (7 + bit_depth)
+  let clipped = if scaled < (-limit).to_int64() {
+    (-limit).to_int64()
+  } else if scaled > (limit - 1).to_int64() {
+    (limit - 1).to_int64()
+  } else {
+    scaled
+  }
+  clipped.to_int()
+}
+
 ///|
 /// Decode a square block whose all_zero flag has already been read. Both
 /// 32x32 and 64x64 code an adjusted 32x32 region; the result is padded to the
@@ -334,14 +358,9 @@ fn av1_decode_coeffs_leaf_with_decoder(
     }
   } else {
     let multisize = log2_domain + log2_domain - 4
-    let kind = multisize
+    let kind_slot = multisize / 2
     let pt_ctx = if scan_class == AV1_SCAN_DEFAULT { 0 } else { 1 }
-    let eob_pt = decoder.symbol(
-        av1_coeff_eob_small_default(
-          kind, av1_dc_q_context(base_q_idx), context.plane, pt_ctx,
-        ),
-      ) +
-      1
+    let eob_pt = decoder.symbol(context.eob_small[kind_slot * 2 + pt_ctx]) + 1
     if eob_pt < 1 || eob_pt > 11 {
       return None
     }
@@ -460,26 +479,28 @@ fn av1_decode_coeffs_leaf_with_decoder(
   cul_level = if cul_level > 63 { 63 } else { cul_level }
   let dc_q = av1_dc_quant(bit_depth, base_q_idx)
   let ac_q = av1_ac_quant(bit_depth, base_q_idx)
-  let denom : Int64 = if context.tx_ctx == 4 { 4L } else { 2L }
+  // Spec dequant denominator (7.12.1): 4 for 64-wide/high transforms, 2 for
+  // 32x32 and the 32/16 rectangles, 1 for every other size (4x4, 8x8, 16x16).
+  let denom : Int64 = if context.tx_ctx == 4 {
+    4L
+  } else if context.tx_ctx == 3 {
+    2L
+  } else {
+    1L
+  }
   let out : Array[Int] = Array::make(side * side, 0)
   if large {
     for i in 0..<1024 {
       let q = if i == 0 { dc_q } else { ac_q }
-      let v = quant[i].to_int64() * q.to_int64()
-      let magnitude = ((if v < 0 { -v } else { v }) & 0xFFFFFFL) / denom
-      let signed = (if v < 0 { -magnitude } else { magnitude }).to_int()
-      let limit = 1 << (7 + bit_depth)
-      out[(i >> 5) * side + (i & 31)] = av1_clip(-limit, limit - 1, signed)
+      out[(i >> 5) * side + (i & 31)] = av1_dequant_clip(
+        quant[i], q, denom, bit_depth,
+      )
     }
   } else {
     for i in 0..<area {
       let q = if i == 0 { dc_q } else { ac_q }
-      let v = quant[i].to_int64() * q.to_int64()
-      let magnitude = ((if v < 0 { -v } else { v }) & 0xFFFFFFL) / denom
-      let signed = (if v < 0 { -magnitude } else { magnitude }).to_int()
-      let limit = 1 << (7 + bit_depth)
-      out[(i >> log2_domain) * side + (i & (domain - 1))] = av1_clip(
-        -limit, limit - 1, signed,
+      out[(i >> log2_domain) * side + (i & (domain - 1))] = av1_dequant_clip(
+        quant[i], q, denom, bit_depth,
       )
     }
   }
@@ -524,4 +545,12 @@ fn av1_decode_coeffs_small_with_decoder(
     Some(leaf) => Some(leaf.coeffs)
     None => None
   }
+}
+
+/// High-bit-depth dequantisation must clip after the full product, without a
+/// 24-bit wraparound.  This value exceeds 2^24 and would previously decode to
+/// a small unrelated coefficient.
+test "dequantisation clips Int64 product for high bit depth" {
+  assert_eq(av1_dequant_clip(1 << 24, 2, 1L, 12), 524287)
+  assert_eq(av1_dequant_clip(-(1 << 24), 2, 1L, 12), -524288)
 }

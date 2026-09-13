@@ -6,8 +6,10 @@ multi-leaf tile path cannot be exercised with encoder-produced fixtures. This
 script synthesizes bitstreams instead: an od_ec range encoder (ported from the
 go-av1 reference decoder's msac/encoder.go, which itself ports libaom's
 od_ec_enc) writes the tile symbols in the exact AV1 spec order, and the
-resulting OBU is validated with ffmpeg/libdav1d before it is embedded in a
-MoonBit regression test.
+resulting OBU is written as a deterministic fixture for the MoonBit regression
+tests. This synthesiser does not invoke an external decoder; run
+``scripts/verify-av1-reference.py`` separately when an ffmpeg/libdav1d
+cross-check is available.
 """
 
 from __future__ import annotations

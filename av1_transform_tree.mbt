@@ -30,24 +30,64 @@ pub(all) struct Av1TxLeaf {
 /// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
 /// The context table is reduced to the three validated default rows until the
 /// full neighbour-derived 21-context table is wired into block traversal.
-fn av1_decode_tx_depth(
+/// Mutable tx-depth CDFs retained for the lifetime of a tile.  AV1 adapts
+/// these rows after every symbol; keeping them in a caller-owned state avoids
+/// resetting adaptation for each block.
+pub struct Av1TxDepthState {
+  cdf16 : Array[Array[Int]]
+  cdf32 : Array[Array[Int]]
+  cdf64 : Array[Array[Int]]
+}
+
+fn av1_tx_depth_state() -> Av1TxDepthState {
+  {
+    cdf16: [[12272, 30172, 32768, 0], [12272, 30172, 32768, 0], [18677, 30848, 32768, 0]],
+    cdf32: [[12986, 15180, 32768, 0], [12986, 15180, 32768, 0], [24302, 25602, 32768, 0]],
+    cdf64: [[5782, 11475, 32768, 0], [5782, 11475, 32768, 0], [16803, 22759, 32768, 0]],
+  }
+}
+
+/// Derive the reduced tx-depth context from neighbouring block depths.  The
+/// full AV1 table has 21 geometry-specific rows; this package currently uses
+/// three validated rows, where each neighbour contributes one level of split
+/// evidence.  Callers should pass -1 for an unavailable edge.
+pub fn av1_tx_depth_context_from_neighbors(above_depth : Int, left_depth : Int) -> Int {
+  let above = if above_depth > 0 { 1 } else { 0 }
+  let left = if left_depth > 0 { 1 } else { 0 }
+  above + left
+}
+
+fn av1_decode_tx_depth_with_state(
   decoder : Av1SymbolDecoder,
+  state : Av1TxDepthState,
   max_size : Int,
   context : Int,
 ) -> Int? {
+  // 4x4 roots have no tx_depth syntax; depth zero is implied by geometry.
+  if max_size < 16 {
+    return Some(0)
+  }
   let ctx = if context < 0 { 0 } else if context > 2 { 2 } else { context }
   let cdf : Array[Int] = if max_size >= 64 {
-    match ctx { 0 => [5782, 11475, 32768, 0]; 1 => [5782, 11475, 32768, 0]; _ => [16803, 22759, 32768, 0] }
+    state.cdf64[ctx]
   } else if max_size >= 32 {
-    match ctx { 0 => [12986, 15180, 32768, 0]; 1 => [12986, 15180, 32768, 0]; _ => [24302, 25602, 32768, 0] }
+    state.cdf32[ctx]
   } else if max_size >= 16 {
-    match ctx { 0 => [12272, 30172, 32768, 0]; 1 => [12272, 30172, 32768, 0]; _ => [18677, 30848, 32768, 0] }
+    state.cdf16[ctx]
   } else {
     [19968, 32768, 0]
   }
   let depth = decoder.symbol(cdf)
   let max_depth = if max_size >= 64 { 3 } else if max_size >= 32 { 2 } else if max_size >= 16 { 1 } else { 0 }
   if depth < 0 || depth > max_depth { None } else { Some(depth) }
+}
+
+fn av1_decode_tx_depth(
+  decoder : Av1SymbolDecoder,
+  max_size : Int,
+  context : Int,
+) -> Int? {
+  av1_decode_tx_depth_with_state(decoder, av1_tx_depth_state(), max_size, context)
 }
 
 /// Build the leaves selected by one `tx_depth` value.  The entropy syntax
@@ -86,11 +126,23 @@ fn av1_decode_tx_tree(
   root : Av1TxNode,
   context : Int,
 ) -> Array[Av1TxLeaf]? {
+  av1_decode_tx_tree_with_state(decoder, av1_tx_depth_state(), root, context)
+}
+
+/// Stateful variant used by tile traversal; the wrapper above remains for
+/// compatibility with existing callers and isolated tests.
+fn av1_decode_tx_tree_with_state(
+  decoder : Av1SymbolDecoder,
+  state : Av1TxDepthState,
+  root : Av1TxNode,
+  context : Int,
+) -> Array[Av1TxLeaf]? {
   let max_size = if root.width > root.height { root.width } else { root.height }
-  let depth = match av1_decode_tx_depth(decoder, max_size, context) {
+  let depth = match av1_decode_tx_depth_with_state(decoder, state, max_size, context) {
     Some(value) => value
     None => return None
   }
+
   let out : Array[Av1TxLeaf] = []
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
@@ -251,6 +303,7 @@ fn av1_tx_type_in_set(tx_type : Av1TxType, set : Int) -> Bool {
 /// filter-intra when that tool is active).
 fn av1_decode_intra_tx_type(
   decoder : Av1SymbolDecoder,
+  tables : Av1TxEntTables,
   side : Int,
   intra_dir : Int,
   reduced_tx_set : Bool,
@@ -264,9 +317,7 @@ fn av1_decode_intra_tx_type(
     return None
   }
   let symbol = if set == 1 {
-    decoder.symbol(
-      av1_intra_tx_type_set1_cdf[if side == 4 { 0 } else { 1 }][intra_dir].copy(),
-    )
+    decoder.symbol(tables.tx_set1[if side == 4 { 0 } else { 1 }][intra_dir])
   } else {
     let row = if side == 4 {
       0
@@ -275,7 +326,7 @@ fn av1_decode_intra_tx_type(
     } else {
       2
     }
-    decoder.symbol(av1_intra_tx_type_set2_cdf[row][intra_dir].copy())
+    decoder.symbol(tables.tx_set2[row][intra_dir])
   }
   if set == 1 {
     av1_tx_type_intra_set1(symbol)
@@ -463,6 +514,28 @@ test "tx depth reader bounds frame transform depth" {
   assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(_))
 }
 
+test "4x4 tx depth is implied without entropy read" {
+  let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
+  let before = decoder.bit_pos
+  assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(0))
+  assert_eq(decoder.bit_pos, before)
+}
+
+test "tx depth CDF state adapts across blocks" {
+  let decoder = av1_msac_new(Array::make(16, b'\x00'), true)
+  let state = av1_tx_depth_state()
+  let before = state.cdf32[0][3]
+  ignore(av1_decode_tx_depth_with_state(decoder, state, 32, 0))
+  ignore(av1_decode_tx_depth_with_state(decoder, state, 32, 0))
+  assert_true(state.cdf32[0][3] > before)
+}
+
+test "tx depth context derives from neighbours" {
+  assert_eq(av1_tx_depth_context_from_neighbors(-1, -1), 0)
+  assert_eq(av1_tx_depth_context_from_neighbors(1, -1), 1)
+  assert_eq(av1_tx_depth_context_from_neighbors(2, 3), 2)
+}
+
 ///|
 test "tx depth entropy walker emits root leaf for zero depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
@@ -485,30 +558,34 @@ test "tx depth walker rejects a split below minimum geometry" {
   assert_eq(out.length(), 0)
 }
 
-///|
 test "intra tx type reader gates on qindex and transform set" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   // Zero qindex implies DCT_DCT without consuming a symbol.
   assert_true(
-    av1_decode_intra_tx_type(decoder, 4, 0, false, 0)
+    av1_decode_intra_tx_type(decoder, av1_tx_ent_tables(0), 4, 0, false, 0)
     is Some(Av1TxDctDct),
   )
   // 32x32 leaves are DCT-only for intra frames.
   assert_true(
-    av1_decode_intra_tx_type(decoder, 32, 0, false, 128)
+    av1_decode_intra_tx_type(
+      decoder, av1_tx_ent_tables(128), 32, 0, false, 128,
+    )
     is Some(Av1TxDctDct),
   )
   // Non-zero qindex with 4x4/16x16 leaves consumes one symbol; all-zero
   // entropy decodes symbol zero (IDTX).
   assert_true(
-    av1_decode_intra_tx_type(decoder, 4, 0, false, 64)
+    av1_decode_intra_tx_type(decoder, av1_tx_ent_tables(64), 4, 0, false, 64)
     is Some(Av1TxIdentityIdentity),
   )
   assert_true(
-    av1_decode_intra_tx_type(decoder, 16, 0, false, 64)
+    av1_decode_intra_tx_type(decoder, av1_tx_ent_tables(64), 16, 0, false, 64)
     is Some(Av1TxIdentityIdentity),
   )
-  assert_true(av1_decode_intra_tx_type(decoder, 8, 5, true, 64) is Some(_))
+  assert_true(
+    av1_decode_intra_tx_type(decoder, av1_tx_ent_tables(64), 8, 5, true, 64)
+    is Some(_),
+  )
 }
 
 ///|
@@ -554,7 +631,7 @@ test "transform tree decodes a small zero-EOB coefficient leaf" {
   ).unwrap()
   assert_eq(result.length(), 1)
   assert_eq(result[0].length(), 16)
-  assert_eq(result[0][0], 2)
+  assert_eq(result[0][0], 4)
 }
 
 ///|

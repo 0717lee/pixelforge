@@ -30,45 +30,44 @@ pub(all) enum Av1TxType {
   Av1TxHorizontalFlipadst
 }
 
-fn av1_inverse_identity_2d(input : Array[Int], width : Int, height : Int) -> Array[Int]? {
-  if width <= 0 || height <= 0 || input.length() != width * height { None } else { Some(input.copy()) }
+/// 2D assembly for IdentityIdentity.  Identity is a scaled 1D transform in
+/// AV1; returning the coefficient plane unchanged is therefore incorrect.
+fn av1_inverse_identity_identity_2d(
+  input : Array[Int],
+  width : Int,
+  height : Int,
+  bit_depth : Int,
+) -> Array[Int]? {
+  av1_inverse_identity_dct_2d(input, width, height, false, bit_depth~, row_identity=true, col_identity=true)
 }
 
-fn av1_flip_transform(values : Array[Int], width : Int, height : Int, flip_rows : Bool, flip_cols : Bool) -> Array[Int] {
-  let out = Array::make(values.length(), 0)
-  for y in 0..<height {
-    for x in 0..<width {
-      let sx = if flip_rows { width - 1 - x } else { x }
-      let sy = if flip_cols { height - 1 - y } else { y }
-      out[y * width + x] = values[sy * width + sx]
-    }
-  }
-  out
+/// Spec inverse ADST4 (7.13.2.6) with the SINPI constants.
+fn av1_inv_adst4_1d(in0 : Int, in1 : Int, in2 : Int, in3 : Int) -> Array[Int] {
+  let s0 = 1321 * in0
+  let s1 = 2482 * in0
+  let s2 = 3344 * in1
+  let s3 = 3803 * in2
+  let s4 = 1321 * in2
+  let s5 = 2482 * in3
+  let s6 = 3803 * in3
+  let a7 = in0 - in2
+  let b7 = a7 + in3
+  let s0b = s0 + s3 + s5
+  let s1b = s1 - s4 - s6
+  let s3b = s2
+  let s2b = 3344 * b7
+  [
+    av1_round2(s0b + s3b, 12),
+    av1_round2(s1b + s3b, 12),
+    av1_round2(s2b, 12),
+    av1_round2(s0b + s1b - s3b, 12),
+  ]
 }
 
-fn av1_inverse_adst4(input : Array[Int]) -> Array[Int]? {
-  if input.length() != 4 { return None }
-  let s0 = 1321 * input[0]
-  let s1 = 2482 * input[0]
-  let s2 = 3344 * input[1]
-  let s3 = 3803 * input[2]
-  let s4 = 1321 * input[2]
-  let s5 = 2482 * input[3]
-  let s6 = 3803 * input[3]
-  let b7 = input[0] - input[2] + input[3]
-  let a0 = s0 + s3 + s5
-  let a1 = s1 - s4 - s6
-  let a2 = 3344 * b7
-  let a3 = s2
-  Some([
-    av1_round2(a0 + a3, 12),
-    av1_round2(a1 + a3, 12),
-    av1_round2(a2, 12),
-    av1_round2(a0 + a1 - a3, 12),
-  ])
-}
-
-fn av1_inverse_adst_1d(input : Array[Int], n : Int) -> Array[Int]? {
+///|
+/// Spec inverse ADST8/ADST16 (7.13.2.7-8): input permutation, B/H butterflies
+/// with Round2(x, 12), output permutation with sign flips. Scale-preserving.
+fn av1_inverse_adst_1d(input : Array[Int], n : Int, clamp_bits : Int) -> Array[Int]? {
   let count = 1 << n
   if (n != 3 && n != 4) || input.length() != count { return None }
   let t = input.copy()
@@ -79,20 +78,20 @@ fn av1_inverse_adst_1d(input : Array[Int], n : Int) -> Array[Int]? {
   }
   if n == 3 {
     for i in 0..<4 { av1_bfly(t, 2 * i, 2 * i + 1, 60 - 16 * i, 1) }
-    for i in 0..<4 { av1_had(t, i, 4 + i, 0, 30) }
+    for i in 0..<4 { av1_had(t, i, 4 + i, 0, clamp_bits) }
     for i in 0..<2 { av1_bfly(t, 4 + 3 * i, 5 + i, 48 - 32 * i, 1) }
-    for i in 0..<2 { for j in 0..<2 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, 30) } }
+    for i in 0..<2 { for j in 0..<2 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, clamp_bits) } }
     for i in 0..<2 { av1_bfly(t, 2 + 4 * i, 3 + 4 * i, 32, 1) }
   } else {
     for i in 0..<8 { av1_bfly(t, 2 * i, 2 * i + 1, 62 - 8 * i, 1) }
-    for i in 0..<8 { av1_had(t, i, 8 + i, 0, 30) }
+    for i in 0..<8 { av1_had(t, i, 8 + i, 0, clamp_bits) }
     for i in 0..<2 {
       av1_bfly(t, 8 + 2 * i, 9 + 2 * i, 56 - 32 * i, 1)
       av1_bfly(t, 13 + 2 * i, 12 + 2 * i, 8 + 32 * i, 1)
     }
-    for i in 0..<4 { for j in 0..<2 { av1_had(t, 8 * j + i, 4 + 8 * j + i, 0, 30) } }
+    for i in 0..<4 { for j in 0..<2 { av1_had(t, 8 * j + i, 4 + 8 * j + i, 0, clamp_bits) } }
     for i in 0..<2 { for j in 0..<2 { av1_bfly(t, 4 + 8 * j + 3 * i, 5 + 8 * j + i, 48 - 32 * i, 1) } }
-    for i in 0..<2 { for j in 0..<4 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, 30) } }
+    for i in 0..<2 { for j in 0..<4 { av1_had(t, 4 * j + i, 2 + 4 * j + i, 0, clamp_bits) } }
     for i in 0..<4 { av1_bfly(t, 2 + 4 * i, 3 + 4 * i, 32, 1) }
   }
   let out = t.copy()
@@ -108,32 +107,264 @@ fn av1_inverse_adst_1d(input : Array[Int], n : Int) -> Array[Int]? {
   Some(out)
 }
 
-fn av1_inverse_adst_2d(input : Array[Int], width : Int, height : Int, row_adst : Bool, col_adst : Bool) -> Array[Int]? {
-  if (width != 4 && width != 8 && width != 16) ||
-    (height != 4 && height != 8 && height != 16) ||
-    input.length() != width * height { return None }
-  let row_n = if width == 4 { 2 } else if width == 8 { 3 } else { 4 }
-  let col_n = if height == 4 { 2 } else if height == 8 { 3 } else { 4 }
+///|
+/// FLIPADST variant: the ADST output written in reverse order.
+fn av1_inverse_flipadst_1d(input : Array[Int], n : Int, clamp_bits : Int) -> Array[Int]? {
+  let count = 1 << n
+  if (n < 2 || n > 4) || input.length() != count { return None }
+  let out = if n == 2 {
+    av1_inv_adst4_1d(input[0], input[1], input[2], input[3])
+  } else {
+    match av1_inverse_adst_1d(input, n, clamp_bits) {
+      Some(v) => v
+      None => return None
+    }
+  }
+  let flipped : Array[Int] = []
+  for i in 0..<count {
+    flipped.push(out[count - 1 - i])
+  }
+  Some(flipped)
+}
+
+///|
+/// Row shift from the spec Transform_Row_Shift table (square transforms).
+fn av1_adst_row_shift(side : Int) -> Int {
+  if side == 4 {
+    0
+  } else if side == 8 {
+    1
+  } else {
+    2
+  }
+}
+
+///|
+/// 2D inverse transform assembly for the ADST family (AV1 spec 7.13.3):
+/// rows scaled by Round2(T, rowShift) and clamped, then columns scaled by
+/// Round2(T, 4). The 1D passes are scale-preserving; this assembly provides
+/// the size normalisation that the 1D functions intentionally omit.
+fn av1_inverse_adst_2d(
+  input : Array[Int],
+  width : Int,
+  height : Int,
+  row_adst : Bool,
+  col_adst : Bool,
+  row_flip : Bool,
+  col_flip : Bool,
+  bit_depth? : Int = 8,
+) -> Array[Int]? {
+  if (width != 4 && width != 8 && width != 16 && width != 32) ||
+    (height != 4 && height != 8 && height != 16 && height != 32) ||
+    input.length() != width * height || bit_depth < 8 || bit_depth > 16 {
+    return None
+  }
+  let row_n = if width == 4 {
+    2
+  } else if width == 8 {
+    3
+  } else if width == 16 {
+    4
+  } else {
+    5
+  }
+  let col_n = if height == 4 {
+    2
+  } else if height == 8 {
+    3
+  } else if height == 16 {
+    4
+  } else {
+    5
+  }
+  let row_shift = av1_adst_row_shift(width)
+  let row_clamp = bit_depth + 8
+  let col_clamp = if bit_depth + 6 > 16 { bit_depth + 6 } else { 16 }
+  let col_shift = 4
+  let clamp_lo : Int64 = -(1L << (col_clamp - 1))
+  let clamp_hi : Int64 = (1L << (col_clamp - 1)) - 1L
   let temp : Array[Int] = Array::make(width * height, 0)
   for y in 0..<height {
     let row : Array[Int] = []
-    for x in 0..<width { row.push(input[y * width + x]) }
+    for x in 0..<width {
+      row.push(input[y * width + x])
+    }
     let v = if row_adst {
-      if row_n == 2 { av1_inverse_adst4(row) } else { av1_inverse_adst_1d(row, row_n) }
-    } else { av1_inverse_dct(row, row_n, 30) }
-    let values = match v { Some(x) => x; None => return None }
-    for x in 0..<width { temp[y * width + x] = values[x] }
+      if row_flip {
+        av1_inverse_flipadst_1d(row, row_n, row_clamp)
+      } else if row_n == 2 {
+        Some(av1_inv_adst4_1d(row[0], row[1], row[2], row[3]))
+      } else {
+        av1_inverse_adst_1d(row, row_n, row_clamp)
+      }
+    } else {
+      av1_inverse_dct(row, row_n, row_clamp)
+    }
+    let values = match v {
+      Some(x) => x
+      None => return None
+    }
+    for x in 0..<width {
+      temp[y * width + x] = av1_round2(values[x], row_shift)
+    }
+  }
+  for i in 0..<(width * height) {
+    let v = temp[i].to_int64()
+    temp[i] = if v < clamp_lo {
+      clamp_lo.to_int()
+    } else if v > clamp_hi {
+      clamp_hi.to_int()
+    } else {
+      temp[i]
+    }
   }
   let out : Array[Int] = Array::make(width * height, 0)
   for x in 0..<width {
     let col : Array[Int] = []
-    for y in 0..<height { col.push(temp[y * width + x]) }
+    for y in 0..<height {
+      col.push(temp[y * width + x])
+    }
     let v = if col_adst {
-      if col_n == 2 { av1_inverse_adst4(col) } else { av1_inverse_adst_1d(col, col_n) }
-    } else { av1_inverse_dct(col, col_n, 30) }
-    let values = match v { Some(x) => x; None => return None }
-    for y in 0..<height { out[y * width + x] = values[y] }
+      if col_flip {
+        av1_inverse_flipadst_1d(col, col_n, col_clamp)
+      } else if col_n == 2 {
+        Some(av1_inv_adst4_1d(col[0], col[1], col[2], col[3]))
+      } else {
+        av1_inverse_adst_1d(col, col_n, col_clamp)
+      }
+    } else {
+      av1_inverse_dct(col, col_n, col_clamp)
+    }
+    let values = match v {
+      Some(x) => x
+      None => return None
+    }
+    for y in 0..<height {
+      out[y * width + x] = av1_round2(values[y], col_shift)
+    }
   }
+  Some(out)
+}
+
+///|
+/// Spec inverse identity 1D scaling (7.13.2.11 through 7.13.2.14): the
+/// identity transform is NOT a passthrough; it carries the size-dependent
+/// sqrt2/2/2sqrt2/4 normalisation.
+fn av1_inverse_identity_1d(input : Array[Int], n : Int) -> Array[Int]? {
+  let count = 1 << n
+  if input.length() != count { return None }
+  let out : Array[Int] = []
+  if n == 2 {
+    for i in 0..<count {
+      out.push(av1_round2(input[i] * 5793, 12))
+    }
+  } else if n == 3 {
+    for i in 0..<count {
+      out.push(input[i] * 2)
+    }
+  } else if n == 4 {
+    for i in 0..<count {
+      out.push(av1_round2(input[i] * 11586, 12))
+    }
+  } else if n == 5 {
+    for i in 0..<count {
+      out.push(input[i] * 4)
+    }
+  } else {
+    return None
+  }
+  Some(out)
+}
+
+///|
+/// 2D assembly for V_DCT / H_DCT (AV1 spec 7.13.3): one axis is the identity
+/// transform, the other the DCT, with the same row/column shift chain as the
+/// ADST family. `cols_dct` selects the axis carrying the DCT.
+fn av1_inverse_identity_dct_2d(
+  input : Array[Int],
+  width : Int,
+  height : Int,
+  cols_dct : Bool,
+  bit_depth? : Int = 8,
+  row_identity? : Bool = false,
+  col_identity? : Bool = false,
+) -> Array[Int]? {
+  if (width != 4 && width != 8 && width != 16 && width != 32) ||
+    (height != 4 && height != 8 && height != 16 && height != 32) ||
+    input.length() != width * height || bit_depth < 8 || bit_depth > 16 {
+    return None
+  }
+  let log = fn(size : Int) -> Int {
+    if size == 4 {
+      2
+    } else if size == 8 {
+      3
+    } else if size == 16 {
+      4
+    } else {
+      5
+    }
+  }
+  let row_n = log(width)
+  let col_n = log(height)
+  let row_shift = av1_adst_row_shift(width)
+  let row_clamp = bit_depth + 8
+  let col_clamp = if bit_depth + 6 > 16 { bit_depth + 6 } else { 16 }
+  let col_shift = 4
+  let clamp_lo : Int64 = -(1L << (col_clamp - 1))
+  let clamp_hi : Int64 = (1L << (col_clamp - 1)) - 1L
+  let temp : Array[Int] = Array::make(width * height, 0)
+      for y in 0..<height {
+        let row : Array[Int] = []
+    for x in 0..<width {
+      row.push(input[y * width + x])
+    }
+    let row_is_identity = if row_identity { true } else { cols_dct }
+    let v = if row_is_identity {
+      // V_DCT and IdentityIdentity: rows are the identity transform.
+      av1_inverse_identity_1d(row, row_n)
+    } else {
+      av1_inverse_dct(row, row_n, row_clamp)
+    }
+    let values = match v {
+      Some(x) => x
+      None => return None
+    }
+    for x in 0..<width {
+      temp[y * width + x] = av1_round2(values[x], row_shift)
+    }
+  }
+  for i in 0..<(width * height) {
+    let v = temp[i].to_int64()
+    temp[i] = if v < clamp_lo {
+      clamp_lo.to_int()
+    } else if v > clamp_hi {
+      clamp_hi.to_int()
+    } else {
+      temp[i]
+      }
+    }
+      let out : Array[Int] = Array::make(width * height, 0)
+      for x in 0..<width {
+        let col : Array[Int] = []
+    for y in 0..<height {
+      col.push(temp[y * width + x])
+      }
+    let col_is_dct = if col_identity { false } else { cols_dct }
+    let v = if col_is_dct {
+      av1_inverse_dct(col, col_n, col_clamp)
+    } else {
+      // H_DCT: columns are the identity transform.
+      av1_inverse_identity_1d(col, col_n)
+    }
+    let values = match v {
+      Some(x) => x
+      None => return None
+    }
+    for y in 0..<height {
+      out[y * width + x] = av1_round2(values[y], col_shift)
+    }
+    }
   Some(out)
 }
 
@@ -149,62 +380,23 @@ pub fn av1_inverse_transform_2d(
 ) -> Array[Int]? {
   match tx_type {
     Av1TxDctDct => av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~)
-    Av1TxAdstDct => av1_inverse_adst_2d(dequant, width, height, true, false)
-    Av1TxDctAdst => av1_inverse_adst_2d(dequant, width, height, false, true)
-    Av1TxAdstAdst => av1_inverse_adst_2d(dequant, width, height, true, true)
-    Av1TxFlipadstDct => match av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~) {
-      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
-      None => None
-    }
-    Av1TxDctFlipadst => match av1_inverse_dct_2d(dequant, width, height, bit_depth, lossless~) {
-      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
-      None => None
-    }
-    Av1TxFlipadstFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
-      Some(value) => Some(av1_flip_transform(value, width, height, true, true))
-      None => None
-    }
-    Av1TxAdstFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
-      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
-      None => None
-    }
-    Av1TxFlipadstAdst => match av1_inverse_adst_2d(dequant, width, height, true, true) {
-      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
-      None => None
-    }
-    Av1TxIdentityIdentity => av1_inverse_identity_2d(dequant, width, height)
-    Av1TxIdentityDct => {
-      let out : Array[Int] = Array::make(width * height, 0)
-      for y in 0..<height {
-        let row : Array[Int] = []
-        for x in 0..<width { row.push(dequant[y * width + x]) }
-        let values = match av1_inverse_dct(row, if width == 4 { 2 } else if width == 8 { 3 } else if width == 16 { 4 } else { return None }, 30) { Some(v) => v; None => return None }
-        for x in 0..<width { out[y * width + x] = values[x] }
-      }
-      Some(out)
-    }
-    Av1TxDctIdentity => {
-      let out : Array[Int] = Array::make(width * height, 0)
-      for x in 0..<width {
-        let col : Array[Int] = []
-        for y in 0..<height { col.push(dequant[y * width + x]) }
-        let values = match av1_inverse_dct(col, if height == 4 { 2 } else if height == 8 { 3 } else if height == 16 { 4 } else { return None }, 30) { Some(v) => v; None => return None }
-        for y in 0..<height { out[y * width + x] = values[y] }
-      }
-      Some(out)
-    }
-    Av1TxVerticalDct => av1_inverse_transform_2d(Av1TxIdentityDct, dequant, width, height, bit_depth, lossless~)
-    Av1TxHorizontalDct => av1_inverse_transform_2d(Av1TxDctIdentity, dequant, width, height, bit_depth, lossless~)
-    Av1TxVerticalAdst => av1_inverse_adst_2d(dequant, width, height, false, true)
-    Av1TxHorizontalAdst => av1_inverse_adst_2d(dequant, width, height, true, false)
-    Av1TxVerticalFlipadst => match av1_inverse_adst_2d(dequant, width, height, false, true) {
-      Some(value) => Some(av1_flip_transform(value, width, height, false, true))
-      None => None
-    }
-    Av1TxHorizontalFlipadst => match av1_inverse_adst_2d(dequant, width, height, true, false) {
-      Some(value) => Some(av1_flip_transform(value, width, height, true, false))
-      None => None
-    }
+    Av1TxAdstDct => av1_inverse_adst_2d(dequant, width, height, true, false, false, false, bit_depth~)
+    Av1TxDctAdst => av1_inverse_adst_2d(dequant, width, height, false, true, false, false, bit_depth~)
+    Av1TxAdstAdst => av1_inverse_adst_2d(dequant, width, height, true, true, false, false, bit_depth~)
+    Av1TxFlipadstDct => av1_inverse_adst_2d(dequant, width, height, true, false, true, false, bit_depth~)
+    Av1TxDctFlipadst => av1_inverse_adst_2d(dequant, width, height, false, true, false, true, bit_depth~)
+    Av1TxFlipadstFlipadst => av1_inverse_adst_2d(dequant, width, height, true, true, true, true, bit_depth~)
+    Av1TxAdstFlipadst => av1_inverse_adst_2d(dequant, width, height, true, true, false, true, bit_depth~)
+    Av1TxFlipadstAdst => av1_inverse_adst_2d(dequant, width, height, true, true, true, false, bit_depth~)
+    Av1TxIdentityIdentity => av1_inverse_identity_identity_2d(dequant, width, height, bit_depth)
+    Av1TxIdentityDct => av1_inverse_identity_dct_2d(dequant, width, height, false, bit_depth~)
+    Av1TxDctIdentity => av1_inverse_identity_dct_2d(dequant, width, height, true, bit_depth~)
+    Av1TxVerticalDct => av1_inverse_identity_dct_2d(dequant, width, height, true, bit_depth~)
+    Av1TxHorizontalDct => av1_inverse_identity_dct_2d(dequant, width, height, false, bit_depth~)
+    Av1TxVerticalAdst => av1_inverse_adst_2d(dequant, width, height, false, true, false, false, bit_depth~)
+    Av1TxHorizontalAdst => av1_inverse_adst_2d(dequant, width, height, true, false, false, false, bit_depth~)
+    Av1TxVerticalFlipadst => av1_inverse_adst_2d(dequant, width, height, false, true, false, true, bit_depth~)
+    Av1TxHorizontalFlipadst => av1_inverse_adst_2d(dequant, width, height, true, false, true, false, bit_depth~)
   }
 }
 
@@ -220,6 +412,40 @@ test "transform dispatch preserves DCT_DCT and rejects unimplemented ADST" {
   assert_true(av1_inverse_transform_2d(Av1TxAdstDct, Array::make(32, 0), 8, 4, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxVerticalDct, Array::make(32, 0), 4, 8, 8) is Some(_))
   assert_true(av1_inverse_transform_2d(Av1TxHorizontalAdst, Array::make(32, 0), 8, 4, 8) is Some(_))
+}
+
+/// Nonzero regression coverage for axis-specific FLIPADST dispatch.  A
+/// flip must be applied inside the corresponding 1D transform axis; flipping
+/// a completed 2D DCT image produces a different result for non-symmetric
+/// coefficients.
+test "flipadst dispatch applies the flip on the selected axis" {
+  let input : Array[Int] = [3, -2, 1, 0, 4, 5, -1, 2, 0, 1, 2, -3, 6, 0, -2, 1]
+  let expected_row = av1_inverse_adst_2d(input, 4, 4, true, false, true, false, bit_depth=8).unwrap()
+  let actual_row = av1_inverse_transform_2d(Av1TxFlipadstDct, input, 4, 4, 8).unwrap()
+  for i in 0..<16 { assert_eq(actual_row[i], expected_row[i]) }
+  let expected_col = av1_inverse_adst_2d(input, 4, 4, false, true, false, true, bit_depth=8).unwrap()
+  let actual_col = av1_inverse_transform_2d(Av1TxDctFlipadst, input, 4, 4, 8).unwrap()
+  for i in 0..<16 { assert_eq(actual_col[i], expected_col[i]) }
+  let expected_vertical = av1_inverse_adst_2d(input, 4, 4, false, true, false, true, bit_depth=8).unwrap()
+  let actual_vertical = av1_inverse_transform_2d(Av1TxVerticalFlipadst, input, 4, 4, 8).unwrap()
+  for i in 0..<16 { assert_eq(actual_vertical[i], expected_vertical[i]) }
+  let expected_horizontal = av1_inverse_adst_2d(input, 4, 4, true, false, true, false, bit_depth=8).unwrap()
+  let actual_horizontal = av1_inverse_transform_2d(Av1TxHorizontalFlipadst, input, 4, 4, 8).unwrap()
+  for i in 0..<16 { assert_eq(actual_horizontal[i], expected_horizontal[i]) }
+}
+
+test "identity transform applies normative 1D scaling and validates shapes" {
+  let scaled = av1_inverse_identity_1d([2, 0, 0, 0], 2).unwrap()
+  assert_eq(scaled[0], 3)
+  let input : Array[Int] = Array::make(16, 0)
+  input[0] = 4096
+  let out = av1_inverse_transform_2d(Av1TxIdentityIdentity, input, 4, 4, 8).unwrap()
+  assert_true(out[0] != input[0])
+  assert_true(av1_inverse_transform_2d(Av1TxIdentityDct, Array::make(8, 0), 4, 4, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxDctIdentity, Array::make(8, 0), 4, 4, 8) is None)
+  assert_true(av1_inverse_transform_2d(Av1TxIdentityDct, Array::make(1024, 0), 32, 32, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxDctIdentity, Array::make(1024, 0), 32, 32, 8) is Some(_))
+  assert_true(av1_inverse_transform_2d(Av1TxIdentityIdentity, Array::make(16, 0), 4, 4, 7) is None)
 }
 
 ///|
