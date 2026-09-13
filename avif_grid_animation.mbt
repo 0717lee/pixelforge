@@ -206,6 +206,36 @@ test "animation decoder rejects noncontiguous timing tables" {
   assert_true(avif_decode_animation_frames(descriptor, [sample, sample]) is None)
 }
 
+/// Unknown iloc construction methods must fail closed.  In particular, method
+/// 2 must not be interpreted as a file-relative extent (method 0).
+test "iloc rejects unsupported construction method" {
+  let data : Array[Byte] = [
+    b'\x01', b'\x00', b'\x00', b'\x00', // version 1 + flags
+    b'\x44', b'\x00',                   // 4-byte offset/length, no base
+    b'\x00', b'\x01',                   // one item
+    b'\x00', b'\x01',                   // item id
+    b'\x20', b'\x00',                   // construction method 2
+    b'\x00', b'\x00',                   // data reference index
+    b'\x00', b'\x00',                   // zero extents
+  ]
+  let box : GaBox = { typ: ga_iloc, start: 0, payload: 0, end: data.length(), parent: -1 }
+  let items : Array[GaItem] = [{
+    id: 1,
+    typ: ga_grid,
+    method_id: 0,
+    base: 0,
+    offs: [],
+    lens: [],
+  }]
+  let rejected = try {
+    ga_parse_iloc(data, box, items)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(rejected)
+}
+
 ///|
 priv suberror GridAnimError {
   Invalid
@@ -466,6 +496,12 @@ fn ga_parse_iloc(
     let id = if v < 2 { ga_u16(d, q, b.end) } else { ga_u32(d, q, b.end) }
     q = q + (if v < 2 { 2 } else { 4 })
     let method_id = if v >= 1 { (ga_u16(d, q, b.end) >> 12) & 15 } else { 0 }
+    // ISO BMFF iloc defines construction_method 0 (file) and 1 (idat).
+    // Treat all other values as unsupported instead of accidentally treating
+    // them as method 0 and reading bytes from the wrong base.
+    if method_id != 0 && method_id != 1 {
+      raise GridAnimError::Unsupported
+    }
     if v >= 1 {
       q = q + 2
     }
