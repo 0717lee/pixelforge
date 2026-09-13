@@ -105,3 +105,56 @@ test "animation descriptor returns ordered sample extents" {
   assert_eq(extracted.1.length(), 2)
   assert_eq(extracted.1[0].length(), 3)
 }
+
+test "animation decoder reads BMFF samples and returns pixels" {
+  let sample : Array[Byte] = [
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
+    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
+    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
+    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+  ]
+  let mdhd_payload : Array[Byte] = [0, 0, 0, 0]
+  for _ in 0..<8 { mdhd_payload.push(0) }
+  for b in ga_test_u32(1000) { mdhd_payload.push(b) }
+  for b in ga_test_u32(20) { mdhd_payload.push(b) }
+  for _ in 0..<4 { mdhd_payload.push(0) }
+  let mdhd = ga_test_box(ga_test_fourcc(0x6D, 0x64, 0x68, 0x64), mdhd_payload)
+  let stts = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x74, 0x73), [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 10])
+  let stsz_payload : Array[Byte] = [0, 0, 0, 0]
+  for b in ga_test_u32(sample.length()) { stsz_payload.push(b) }
+  stsz_payload.push(0); stsz_payload.push(0); stsz_payload.push(0); stsz_payload.push(2)
+  let stsz = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x73, 0x7A), stsz_payload)
+  let stco_placeholder = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x63, 0x6F), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+  let stbl_payload : Array[Byte] = []
+  for b in stts { stbl_payload.push(b) }
+  for b in stsz { stbl_payload.push(b) }
+  for b in stco_placeholder { stbl_payload.push(b) }
+  let minf = ga_test_box(ga_test_fourcc(0x6D, 0x69, 0x6E, 0x66), ga_test_box(ga_test_fourcc(0x73, 0x74, 0x62, 0x6C), stbl_payload))
+  let mdia_payload : Array[Byte] = []
+  for b in mdhd { mdia_payload.push(b) }
+  for b in minf { mdia_payload.push(b) }
+  let moov = ga_test_box(ga_test_fourcc(0x6D, 0x6F, 0x6F, 0x76), ga_test_box(ga_test_fourcc(0x74, 0x72, 0x61, 0x6B), ga_test_box(ga_test_fourcc(0x6D, 0x64, 0x69, 0x61), mdia_payload)))
+  let sample_offset = moov.length() + 8
+  // Rebuild stco with the absolute mdat payload offset.
+  let stco = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x63, 0x6F), [0, 0, 0, 0, 0, 0, 0, 1, (sample_offset >> 24).to_byte(), (sample_offset >> 16).to_byte(), (sample_offset >> 8).to_byte(), sample_offset.to_byte()])
+  let stbl2_payload : Array[Byte] = []
+  for b in stts { stbl2_payload.push(b) }
+  for b in stsz { stbl2_payload.push(b) }
+  for b in stco { stbl2_payload.push(b) }
+  let minf2 = ga_test_box(ga_test_fourcc(0x6D, 0x69, 0x6E, 0x66), ga_test_box(ga_test_fourcc(0x73, 0x74, 0x62, 0x6C), stbl2_payload))
+  let mdia2_payload : Array[Byte] = []
+  for b in mdhd { mdia2_payload.push(b) }
+  for b in minf2 { mdia2_payload.push(b) }
+  let moov2 = ga_test_box(ga_test_fourcc(0x6D, 0x6F, 0x6F, 0x76), ga_test_box(ga_test_fourcc(0x74, 0x72, 0x61, 0x6B), ga_test_box(ga_test_fourcc(0x6D, 0x64, 0x69, 0x61), mdia2_payload)))
+  let data : Array[Byte] = []
+  for b in moov2 { data.push(b) }
+  let mdat_payload : Array[Byte] = []
+  for b in sample { mdat_payload.push(b) }
+  for b in sample { mdat_payload.push(b) }
+  let mdat = ga_test_box(ga_test_fourcc(0x6D, 0x64, 0x61, 0x74), mdat_payload)
+  for b in mdat { data.push(b) }
+  assert_true(avif_animation_descriptor(data) is Some(_))
+  let animation = avif_decode_animation(data).unwrap()
+  assert_eq(animation.frames.length(), 2)
+  assert_eq((animation.frames[0].image.width, animation.frames[1].image.height), (64, 64))
+}
