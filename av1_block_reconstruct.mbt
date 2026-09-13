@@ -84,6 +84,70 @@ fn av1_reconstruct_child_with_type(
   true
 }
 
+/// Reconstruct a rectangular transform leaf in raster order.
+///
+/// Superblock partition children are always square, but AV1 transform sizes
+/// may be rectangular (4x8, 8x4, ...). Keep this path separate so the
+/// square partition helper retains its simple `size` invariant while typed
+/// transform assembly can consume the full rectangular coefficient plane.
+fn av1_reconstruct_rect_leaf_with_type(
+  plane : Array[Int],
+  frame_width : Int,
+  frame_height : Int,
+  leaf : Av1TxLeaf,
+  mode : Int,
+  coeffs : Array[Int],
+  tx_type : Av1TxType,
+  bit_depth : Int,
+) -> Bool {
+  let row = leaf.node.row
+  let col = leaf.node.col
+  let width = leaf.node.width
+  let height = leaf.node.height
+  if row < 0 || col < 0 || width <= 0 || height <= 0 ||
+    row + height > frame_height || col + width > frame_width ||
+    coeffs.length() != width * height {
+    return false
+  }
+  let above : Array[Int] = []
+  let left : Array[Int] = []
+  let have_above = row > 0
+  let have_left = col > 0
+  if have_above {
+    for x in 0..<width { above.push(plane[(row - 1) * frame_width + col + x]) }
+  }
+  if have_left {
+    for y in 0..<height { left.push(plane[(row + y) * frame_width + col - 1]) }
+  }
+  let top_left = if have_above && have_left {
+    plane[(row - 1) * frame_width + col - 1]
+  } else {
+    1 << (bit_depth - 1)
+  }
+  let prediction = match av1_intra_predict(
+    mode, width, height, above, left, top_left, bit_depth,
+    have_above~, have_left~,
+  ) {
+    Some(value) => value
+    None => return false
+  }
+  let residual = match av1_reconstruct_block_with_type(
+    coeffs, width, height, tx_type, bit_depth,
+  ) {
+    Some(value) => value
+    None => return false
+  }
+  let hi = (1 << bit_depth) - 1
+  for y in 0..<height {
+    for x in 0..<width {
+      let idx = (row + y) * frame_width + col + x
+      let value = prediction[y * width + x] + residual[y * width + x]
+      plane[idx] = if value < 0 { 0 } else if value > hi { hi } else { value }
+    }
+  }
+  true
+}
+
 /// Reconstruct luma from raster-ordered transform leaves.
 pub fn av1_reconstruct_tx_luma(
   width : Int,
@@ -101,13 +165,16 @@ pub fn av1_reconstruct_tx_luma(
   let plane : Array[Int] = Array::make(width * height, 1 << (bit_depth - 1))
   for i in 0..<leaves.length() {
     let leaf = leaves[i].node
-    if leaf.row + leaf.height > height || leaf.col + leaf.width > width ||
-      leaf.width != leaf.height {
+    if leaf.row + leaf.height > height || leaf.col + leaf.width > width {
       return None
     }
-    let child = av1_partition_node(leaf.row, leaf.col, leaf.width, width, height)
-    if !av1_reconstruct_child_with_type(
-      plane, width, height, child, mode, coefficients[i], leaf.width, types[i], bit_depth=bit_depth,
+    if leaf.width == leaf.height {
+      let child = av1_partition_node(leaf.row, leaf.col, leaf.width, width, height)
+      if !av1_reconstruct_child_with_type(
+        plane, width, height, child, mode, coefficients[i], leaf.width, types[i], bit_depth=bit_depth,
+      ) { return None }
+    } else if !av1_reconstruct_rect_leaf_with_type(
+      plane, width, height, leaves[i], mode, coefficients[i], types[i], bit_depth,
     ) { return None }
   }
   Some(plane)
@@ -395,6 +462,17 @@ test "tx luma assembler places raster leaves" {
     AV1_INTRA_DC, [Av1TxDctDct, Av1TxDctDct, Av1TxDctDct, Av1TxDctDct],
   ).unwrap()
   assert_eq(plane.length(), 1024)
+  assert_eq(plane[0], 128)
+}
+
+///|
+test "tx luma assembler accepts rectangular transform leaves" {
+  let leaf : Av1TxLeaf = { node: { row: 0, col: 0, width: 8, height: 4 }, depth: 0 }
+  let coeff = Array::make(8 * 4, 0)
+  let plane = av1_reconstruct_tx_luma(
+    8, 4, [leaf], [coeff], AV1_INTRA_DC, [Av1TxDctDct],
+  ).unwrap()
+  assert_eq(plane.length(), 32)
   assert_eq(plane[0], 128)
 }
 
