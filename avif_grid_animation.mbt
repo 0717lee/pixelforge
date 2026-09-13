@@ -732,8 +732,14 @@ pub fn avif_animation_descriptor(
     }
     let cp = co.payload + 4
     let nc = ga_u32(data, cp, co.end)
-    if nc != count {
-      raise GridAnimError::Invalid
+    // A chunk may contain more than one sample.  The common one-sample-per-
+    // chunk layout has `nc == count`; for the compact layout emitted by a
+    // number of AVIF writers a single chunk carries the complete sequence.
+    // We can resolve that case from the sample sizes without requiring the
+    // optional stsc table.  Reject other ambiguous mappings instead of
+    // attaching pixels to guessed offsets.
+    if nc <= 0 || (nc != count && nc != 1) {
+      raise GridAnimError::Unsupported
     }
     let stts = match ga_find(bs, si, ga_stts) {
       Some(x) => x
@@ -755,11 +761,26 @@ pub fn avif_animation_descriptor(
     let frames : Array[AvifAnimationFrame] = []
     let mut t = 0
     for i in 0..<count {
-      let op = cp + 4 + i * (if co.typ == ga_stco { 4 } else { 8 })
-      let o = if co.typ == ga_stco {
-        ga_u32(data, op, co.end)
+      let o = if nc == count {
+        let op = cp + 4 + i * (if co.typ == ga_stco { 4 } else { 8 })
+        if co.typ == ga_stco {
+          ga_u32(data, op, co.end)
+        } else {
+          ga_u64(data, op, co.end)
+        }
       } else {
-        ga_u64(data, op, co.end)
+        // One chunk containing all samples; offsets are contiguous in sample
+        // order and are derived from the preceding sample sizes.
+        let base = if co.typ == ga_stco {
+          ga_u32(data, cp + 4, co.end)
+        } else {
+          ga_u64(data, cp + 4, co.end)
+        }
+        let mut delta = 0
+        for j in 0..<i {
+          delta = delta + sizes[j]
+        }
+        base + delta
       }
       let l = sizes[i]
       if o < 0 || l < 0 || o > data.length() - l {

@@ -52,11 +52,10 @@ test "animation descriptor returns ordered sample extents" {
   let stts = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x74, 0x73), stts_payload)
   let stsz_payload : Array[Byte] = [0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 2]
   let stsz = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x73, 0x7A), stsz_payload)
-  let stco_payload : Array[Byte] = [0, 0, 0, 0, 0, 0, 0, 2]
+  // One chunk carries both samples; the parser derives the second offset
+  // from the preceding sample size (the valid compact AVIF layout).
+  let stco_payload : Array[Byte] = [0, 0, 0, 0, 0, 0, 0, 1]
   for b in ga_test_u32(100) {
-    stco_payload.push(b)
-  }
-  for b in ga_test_u32(103) {
     stco_payload.push(b)
   }
   let stco = ga_test_box(ga_test_fourcc(0x73, 0x74, 0x63, 0x6F), stco_payload)
@@ -100,6 +99,7 @@ test "animation descriptor returns ordered sample extents" {
     ),
     (100, 3, 0),
   )
+  assert_eq(parsed.frames[1].offset, 103)
   assert_eq(parsed.frames[1].timestamp, 10)
   let extracted = avif_animation_sample_payloads(data).unwrap()
   assert_eq(extracted.1.length(), 2)
