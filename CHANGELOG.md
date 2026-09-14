@@ -26,8 +26,16 @@
   probes remain separate from the complete tile syntax.
 - Corrected the standalone CDEF kernel's direction offsets, damping, signed
   rounding, clipping and 4:2:0 chroma grid. Its 8/10/12-bit output is checked
-  against 58,632 libaom reference samples. Frame-level CDEF direction search,
-  strength selection and decoder integration are still pending.
+  against 58,632 libaom reference samples.
+- Integrated frame CDEF parameters, per-64x64 entropy indices, direction and
+  variance search, and native-depth strength adjustment. Complete padded YUV
+  planes are assembled before filtering across tile edges and converting to RGB.
+- Added eight original CDEF-on libaom/dav1d cases at 8/10/12 bits, with exact
+  YUV, raw OBU RGBA and remuxed AVIF RGBA comparisons. Same-stream CDEF-disabled
+  references confirm actual filter changes, including both tile seam directions
+  and an odd-sized frame. The legacy alpha path rejects active CDEF syntax.
+- Corrected monochrome quantizer and restoration field counts, preserving
+  frame-header alignment and independently verified zero-CDEF alpha streams.
 - Corrected frame-OBU alignment and little-endian multi-byte tile lengths.
   Added nine unmodified libaom/dav1d fixtures covering 2x1, 1x2 and 2x2 tile
   grids at 8/10/12-bit, with every decoded pixel compared.

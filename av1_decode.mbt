@@ -55,6 +55,7 @@ pub(all) struct Av1Stage1Input {
   allow_screen_content_tools : Bool
   tx_mode_select : Bool
   reduced_tx_set : Bool
+  cdef : Av1CdefConfig?
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
@@ -621,6 +622,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             allow_screen_content_tools: frame.allow_screen_content_tools,
             tx_mode_select: frame.tx_mode_select,
             reduced_tx_set: frame.reduced_tx_set,
+            cdef: frame.cdef,
             tile_cols: frame.tile_cols,
             tile_rows: frame.tile_rows,
             tile_cols_log2: frame.tile_cols_log2,

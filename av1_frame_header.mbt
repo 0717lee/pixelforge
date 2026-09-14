@@ -23,6 +23,7 @@ pub(all) struct Av1FrameHeaderInfo {
   tx_mode_select : Bool
   reduced_tx_set : Bool
   coded_lossless : Bool
+  cdef : Av1CdefConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
@@ -59,6 +60,52 @@ fn Av1FrameBits::signed(self : Av1FrameBits, count : Int) -> Int? {
   } else {
     Some(value)
   }
+}
+
+///|
+/// Parse cdef_params after the caller has handled its frame/sequence gates.
+/// NumPlanes==1 omits both UV syntax fields from every table entry.
+fn av1_parse_cdef_config(
+  reader : Av1FrameBits,
+  monochrome : Bool,
+) -> Av1CdefConfig? {
+  let damping = match reader.take(2) {
+    Some(value) => value + 3
+    None => return None
+  }
+  let bits = match reader.take(2) {
+    Some(value) => value
+    None => return None
+  }
+  let y_primary : Array[Int] = []
+  let y_secondary : Array[Int] = []
+  let uv_primary : Array[Int] = []
+  let uv_secondary : Array[Int] = []
+  for _ in 0..<(1 << bits) {
+    let primary = match reader.take(4) {
+      Some(value) => value
+      None => return None
+    }
+    let secondary = match reader.take(2) {
+      Some(value) => value
+      None => return None
+    }
+    y_primary.push(primary)
+    y_secondary.push(if secondary == 3 { 4 } else { secondary })
+    if !monochrome {
+      let primary = match reader.take(4) {
+        Some(value) => value
+        None => return None
+      }
+      let secondary = match reader.take(2) {
+        Some(value) => value
+        None => return None
+      }
+      uv_primary.push(primary)
+      uv_secondary.push(if secondary == 3 { 4 } else { secondary })
+    }
+  }
+  Some({ bits, damping, y_primary, y_secondary, uv_primary, uv_secondary })
 }
 
 ///|
@@ -393,22 +440,24 @@ pub fn av1_parse_stage1_frame(
       None => return None
     }
   }
-  if (match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }) {
-    delta_u = match r.signed(7) {
-      Some(v) => v
-      None => return None
+  if !sequence.monochrome {
+    if (match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }) {
+      delta_u = match r.signed(7) {
+        Some(v) => v
+        None => return None
+      }
     }
-  }
-  if (match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }) {
-    delta_ua = match r.signed(7) {
-      Some(v) => v
-      None => return None
+    if (match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }) {
+      delta_ua = match r.signed(7) {
+        Some(v) => v
+        None => return None
+      }
     }
   }
   if delta_y != 0 || delta_u != 0 || delta_ua != 0 {
@@ -419,7 +468,11 @@ pub fn av1_parse_stage1_frame(
     None => return None
   }
   if using_qmatrix {
-    if r.take(4) is None || r.take(4) is None || r.take(4) is None {
+    // qm_y and qm_u are present even for monochrome; qm_v is conditional.
+    if r.take(4) is None || r.take(4) is None {
+      return None
+    }
+    if sequence.separate_uv_delta_q && r.take(4) is None {
       return None
     }
     return None
@@ -481,41 +534,15 @@ pub fn av1_parse_stage1_frame(
         return None
       }
     }
-    if sequence.enable_cdef {
-      if r.take(2) is None {
-        return None
-      }
-      let cdef_bits = match r.take(2) {
-        Some(v) => v
+    let cdef = if sequence.enable_cdef {
+      match av1_parse_cdef_config(r, sequence.monochrome) {
+        Some(config) => Some(config)
         None => return None
       }
-      if cdef_bits != 0 {
-        return None
-      } // requires per-block cdef_idx literals
-      for _ in 0..<(1 << cdef_bits) {
-        let yp = match r.take(4) {
-          Some(v) => v
-          None => return None
-        }
-        let ys = match r.take(2) {
-          Some(v) => v
-          None => return None
-        }
-        let up = match r.take(4) {
-          Some(v) => v
-          None => return None
-        }
-        let us = match r.take(2) {
-          Some(v) => v
-          None => return None
-        }
-        if yp != 0 || ys != 0 || up != 0 || us != 0 {
-          return None
-        }
-      }
-    }
+    } else { None }
     if sequence.enable_restoration {
-      for _ in 0..<3 {
+      let num_planes = if sequence.monochrome { 1 } else { 3 }
+      for _ in 0..<num_planes {
         let lr_type = match r.take(2) {
           Some(v) => v
           None => return None
@@ -557,6 +584,7 @@ pub fn av1_parse_stage1_frame(
       tx_mode_select,
       reduced_tx_set,
       coded_lossless,
+      cdef,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,
     })
@@ -587,6 +615,7 @@ pub fn av1_parse_stage1_frame(
       tx_mode_select: false,
       reduced_tx_set: false,
       coded_lossless,
+      cdef: None,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,
     })

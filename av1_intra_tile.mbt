@@ -32,6 +32,8 @@ priv struct Av1IntraState {
   cols : Int
   rows : Int
   skips : Array[Int]
+  cdef : Av1CdefConfig?
+  cdef_indices : Array[Int]
   skip_cdfs : Array[Array[Int]]
   y_modes : Array[Int]
   y_mode : Array[Array[Array[Int]]]
@@ -65,6 +67,7 @@ fn av1_intra_state(
   allow_screen_content_tools : Bool,
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
+  cdef? : Av1CdefConfig? = None,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -82,6 +85,8 @@ fn av1_intra_state(
     cols: width / 4,
     rows: height / 4,
     skips: Array::make(width / 4 * (height / 4), 0),
+    cdef,
+    cdef_indices: Array::make((width + 63) / 64 * ((height + 63) / 64), -1),
     skip_cdfs: [[31671, 32768, 0], [16515, 32768, 0], [4576, 32768, 0]],
     y_modes: Array::make(width / 4 * (height / 4), 0),
     y_mode: av1_intra_y_mode_cdfs(),
@@ -410,6 +415,70 @@ fn av1_intra_read_mode_angle(
 }
 
 ///|
+/// The first non-skipped coding block in a 64x64 CDEF region selects that
+/// region's strength. A 128-pixel coding block shares one index across its
+/// whole footprint; skipped blocks leave the region available for a later
+/// non-skipped block without consuming entropy.
+fn av1_intra_cdef_index(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  block : Av1SbBlock,
+  skip : Int,
+) -> Bool {
+  if skip == 1 {
+    return true
+  }
+  if skip != 0 {
+    return false
+  }
+  let config = match state.cdef {
+    Some(value) => value
+    None => return true
+  }
+  let width = state.cols * 4
+  let height = state.rows * 4
+  if block.col < 0 ||
+    block.row < 0 ||
+    block.col >= width ||
+    block.row >= height ||
+    block.width <= 0 ||
+    block.height <= 0 ||
+    block.width > 128 ||
+    block.height > 128 {
+    return false
+  }
+  let region_cols = (width + 63) / 64
+  let region_rows = (height + 63) / 64
+  let x0 = block.col / 64
+  let y0 = block.row / 64
+  let first = y0 * region_cols + x0
+  let mut index = state.cdef_indices[first]
+  if index < 0 {
+    index = 0
+    for _ in 0..<config.bits {
+      index = (index << 1) | decoder.bool()
+    }
+    if decoder.symbol_max_bits < -14 {
+      return false
+    }
+  }
+  let x1 = (block.col + block.width - 1) / 64
+  let y1 = (block.row + block.height - 1) / 64
+  for row in y0..<(y1 + 1) {
+    if row >= region_rows {
+      break
+    }
+    for col in x0..<(x1 + 1) {
+      if col >= region_cols {
+        break
+      }
+      state.cdef_indices[row * region_cols + col] = index
+    }
+  }
+  true
+}
+
+///|
 fn av1_intra_block(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
@@ -430,6 +499,9 @@ fn av1_intra_block(
   }
   let skip = decoder.symbol(state.skip_cdfs[skip_context])
   if skip != 0 && skip != 1 {
+    return false
+  }
+  if !av1_intra_cdef_index(decoder, state, block, skip) {
     return false
   }
   let above_mode = if y4 > 0 {
@@ -618,6 +690,7 @@ fn av1_decode_intra_tile_state(
   reduced_tx_set : Bool,
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
+  cdef? : Av1CdefConfig? = None,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -629,14 +702,28 @@ fn av1_decode_intra_tile_state(
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
   }
+  match cdef {
+    Some(config) =>
+      if base_q_idx == 0 || !av1_cdef_config_valid(config) {
+        return None
+      }
+    None => ()
+  }
   let coded_width = av1_partition_coded_extent(width)
   let coded_height = av1_partition_coded_extent(height)
   if coded_width > MAX_IMAGE_PIXELS / coded_height {
     return None
   }
   let state = av1_intra_state(
-    coded_width, coded_height, base_q_idx, bit_depth, reduced_tx_set, allow_screen_content_tools,
-    enable_filter_intra, tx_mode_select,
+    coded_width,
+    coded_height,
+    base_q_idx,
+    bit_depth,
+    reduced_tx_set,
+    allow_screen_content_tools,
+    enable_filter_intra,
+    tx_mode_select,
+    cdef~,
   )
   let neighbors = match
     av1_partition_neighbor_state(
@@ -686,14 +773,52 @@ fn av1_decode_intra_tile(
   reduced_tx_set : Bool,
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
+  cdef? : Av1CdefConfig? = None,
 ) -> Image? {
   let state = match
     av1_decode_intra_tile_state(
-      width, height, payload, base_q_idx, disable_cdf_update, allow_screen_content_tools,
-      use_128x128_superblock, bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select,
+      width,
+      height,
+      payload,
+      base_q_idx,
+      disable_cdf_update,
+      allow_screen_content_tools,
+      use_128x128_superblock,
+      bit_depth,
+      reduced_tx_set,
+      enable_filter_intra,
+      tx_mode_select,
+      cdef~,
     ) {
     Some(value) => value
     None => return None
+  }
+  match cdef {
+    Some(config) => {
+      let filtered = match
+        av1_cdef_filter_frame(
+          state.planes[0].width,
+          state.planes[0].height,
+          [
+            state.planes[0].pixels,
+            state.planes[1].pixels,
+            state.planes[2].pixels,
+          ],
+          state.skips,
+          state.cdef_indices,
+          config,
+          bit_depth,
+        ) {
+        Some(value) => value
+        None => return None
+      }
+      for plane in 0..<3 {
+        for i in 0..<filtered[plane].length() {
+          state.planes[plane].pixels[i] = filtered[plane][i]
+        }
+      }
+    }
+    None => ()
   }
   av1_yuv420_highbd_to_rgba(
     width,

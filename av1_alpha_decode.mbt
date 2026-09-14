@@ -93,6 +93,22 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     Some(value) => value
     None => return None
   }
+  // The legacy alpha tile reader has no cdef_idx or filtering stage. A
+  // single all-zero strength entry consumes no index bits and has no effect.
+  match frame.cdef {
+    Some(config) => {
+      if !av1_cdef_config_valid(config, monochrome=true) || config.bits != 0 {
+        return None
+      }
+      for strength in config.y_primary {
+        if strength != 0 { return None }
+      }
+      for strength in config.y_secondary {
+        if strength != 0 { return None }
+      }
+    }
+    None => ()
+  }
   av1_decode_alpha_tile(
     sequence.width,
     sequence.height,

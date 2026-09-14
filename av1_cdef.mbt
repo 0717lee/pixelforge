@@ -15,6 +15,16 @@ pub(all) struct Av1CdefParams {
 }
 
 ///|
+/// Native sample units preserve fractional 8-bit-unit luma strengths after
+/// variance adjustment. Damping includes bit-depth and chroma adjustments.
+priv struct Av1CdefNativeParams {
+  primary_strength : Int
+  secondary_strength : Int
+  damping : Int
+  direction : Int
+}
+
+///|
 fn av1_cdef_offset(direction : Int, distance : Int) -> (Int, Int) {
   match direction {
     0 => (distance, -distance)
@@ -107,17 +117,46 @@ fn av1_cdef_filter_blocks(
       return None
     }
   }
+  let shift = bit_depth - 8
+  let native : Array[Av1CdefNativeParams] = []
+  for p in params {
+    native.push({
+      primary_strength: p.primary_strength << shift,
+      secondary_strength: p.secondary_strength << shift,
+      damping: p.damping + shift + damping_offset,
+      direction: p.direction,
+    })
+  }
+  Some(
+    av1_cdef_filter_native_blocks(
+      width, height, plane, native, bit_depth, block_size,
+    ),
+  )
+}
+
+///|
+/// Internal kernel; callers validate geometry, samples and parameter counts.
+/// All taps read the immutable source plane, including across 64x64 regions.
+fn av1_cdef_filter_native_blocks(
+  width : Int,
+  height : Int,
+  plane : Array[Int],
+  params : Array[Av1CdefNativeParams],
+  bit_depth : Int,
+  block_size : Int,
+) -> Array[Int] {
+  let blocks_x = (width + block_size - 1) / block_size
   let out = plane.copy()
   let shift = bit_depth - 8
   for y in 0..<height {
     for x in 0..<width {
       let p = params[y / block_size * blocks_x + x / block_size]
-      let pri = p.primary_strength << shift
-      let sec = p.secondary_strength << shift
+      let pri = p.primary_strength
+      let sec = p.secondary_strength
       if pri == 0 && sec == 0 {
         continue
       }
-      let damping = p.damping + shift + damping_offset
+      let damping = p.damping
       let center = plane[y * width + x]
       let mut sum = 0
       let mut minimum = center
@@ -134,7 +173,7 @@ fn av1_cdef_filter_blocks(
           let (dx, dy) = av1_cdef_offset(direction, distance)
           let strength = if branch == 0 { pri } else { sec }
           let weight = if branch == 0 {
-            if (p.primary_strength & 1) != 0 {
+            if ((p.primary_strength >> shift) & 1) != 0 {
               3
             } else if distance == 1 {
               4
@@ -175,7 +214,7 @@ fn av1_cdef_filter_blocks(
       }
     }
   }
-  Some(out)
+  out
 }
 
 ///|

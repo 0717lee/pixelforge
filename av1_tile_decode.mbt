@@ -188,19 +188,30 @@ pub fn av1_decode_dc_tile(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  cdef? : Av1CdefConfig? = None,
 ) -> Image? {
   av1_decode_intra_tile(
-    width, height, tile_payload, base_q_idx, disable_cdf_update,
-    allow_screen_content_tools, full_range, matrix_coefficients,
-    use_128x128_superblock, bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select,
+    width,
+    height,
+    tile_payload,
+    base_q_idx,
+    disable_cdf_update,
+    allow_screen_content_tools,
+    full_range,
+    matrix_coefficients,
+    use_128x128_superblock,
+    bit_depth,
+    reduced_tx_set,
+    enable_filter_intra,
+    tx_mode_select,
+    cdef~,
   )
 }
-
 ///|
 /// Decode a complete tile group into a raster image when every tile is a
 /// bounded intra tile supported by the current pixel path. Tile-local MSAC
-/// state is reset for each payload, then the decoded images are stitched in
-/// row-major order.
+/// state is reset for each payload. When CDEF is present, complete native-depth
+/// planes are assembled before filtering across tile boundaries.
 pub fn av1_decode_tile_group(
   width : Int,
   height : Int,
@@ -218,9 +229,17 @@ pub fn av1_decode_tile_group(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  cdef? : Av1CdefConfig? = None,
 ) -> Image? {
-  if width <= 0 || height <= 0 || tile_cols <= 0 || tile_rows <= 0 ||
-    width % tile_cols != 0 || height % tile_rows != 0 {
+  if width <= 0 ||
+    height <= 0 ||
+    width > MAX_IMAGE_PIXELS / height ||
+    tile_cols <= 0 ||
+    tile_cols > 1024 ||
+    tile_rows <= 0 ||
+    tile_rows > 1024 ||
+    width % tile_cols != 0 ||
+    height % tile_rows != 0 {
     return None
   }
   let tile_width = width / tile_cols
@@ -228,47 +247,68 @@ pub fn av1_decode_tile_group(
   if tile_width < 16 || tile_width > 64 || tile_height < 16 || tile_height > 64 {
     return None
   }
-  let tiles = match av1_extract_tile_payloads(
-    tile_payload, tile_cols, tile_rows, tile_size_bytes,
-  ) {
+  if cdef is Some(_) {
+    let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
+    let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
+    let frame = match
+      av1_decode_tile_planes(
+        width, height, cols, rows, tile_payload, tile_size_bytes, base_q_idx, disable_cdf_update,
+        allow_screen_content_tools, full_range, matrix_coefficients, use_128x128_superblock,
+        bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select, cdef,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    return av1_frame_to_rgba(frame)
+  }
+  let tiles = match
+    av1_extract_tile_payloads(
+      tile_payload, tile_cols, tile_rows, tile_size_bytes,
+    ) {
     Some(value) => value
     None => return None
   }
   let output = Image::new(width, height)
   for tile in tiles {
-    let image = match av1_decode_dc_tile(
-      tile_width,
-      tile_height,
-      tile.bytes,
-      base_q_idx,
-      disable_cdf_update~,
-      full_range~,
-      matrix_coefficients~,
-      use_128x128_superblock~,
-      bit_depth~,
-      allow_screen_content_tools~,
-      tx_mode_select~,
-      reduced_tx_set~,
-      enable_filter_intra~,
-    ) {
+    let image = match
+      av1_decode_dc_tile(
+        tile_width,
+        tile_height,
+        tile.bytes,
+        base_q_idx,
+        disable_cdf_update~,
+        full_range~,
+        matrix_coefficients~,
+        use_128x128_superblock~,
+        bit_depth~,
+        allow_screen_content_tools~,
+        tx_mode_select~,
+        reduced_tx_set~,
+        enable_filter_intra~,
+      ) {
       Some(value) => value
       None => return None
     }
     for y in 0..<tile_height {
       for x in 0..<tile_width {
         let p = image.get_pixel(x, y)
-        output.set_pixel(tile.col * tile_width + x, tile.row * tile_height + y, p.0, p.1, p.2, p.3,
+        output.set_pixel(
+          tile.col * tile_width + x,
+          tile.row * tile_height + y,
+          p.0,
+          p.1,
+          p.2,
+          p.3,
         )
       }
     }
   }
   Some(output)
 }
-
 ///|
-/// Decode and stitch tiles whose superblock boundaries are explicitly known.
-/// This is the pixel entry used for non-uniform tile_info() layouts. Each
-/// tile keeps one entropy state across all of its superblocks.
+/// Decode tiles whose superblock boundaries are explicitly known, including
+/// non-uniform tile_info() layouts. Each tile keeps one entropy state across
+/// its superblocks; frame filters run on the assembled native-depth planes.
 pub fn av1_decode_tile_group_with_boundaries(
   width : Int,
   height : Int,
@@ -287,121 +327,44 @@ pub fn av1_decode_tile_group_with_boundaries(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  cdef? : Av1CdefConfig? = None,
 ) -> Image? {
-  if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height ||
-    (superblock_pixels != 64 && superblock_pixels != 128) ||
-    tile_col_starts_sb.length() < 2 || tile_row_starts_sb.length() < 2 ||
-    tile_col_starts_sb[0] != 0 || tile_row_starts_sb[0] != 0 {
+  if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
     return None
   }
-  let tile_cols = tile_col_starts_sb.length() - 1
-  let tile_rows = tile_row_starts_sb.length() - 1
-  let last_col = tile_col_starts_sb[tile_cols] * superblock_pixels
-  let last_row = tile_row_starts_sb[tile_rows] * superblock_pixels
-  if last_col < width || last_row < height {
-    return None
-  }
-  let tiles = match av1_extract_tile_payloads(
-    tile_payload, tile_cols, tile_rows, tile_size_bytes,
-  ) {
+  let cols = match
+    av1_frame_tile_starts(tile_col_starts_sb, superblock_pixels, width) {
     Some(value) => value
     None => return None
   }
-  let output = Image::new(width, height)
-  for tile in tiles {
-    let left = tile_col_starts_sb[tile.col] * superblock_pixels
-    let top = tile_row_starts_sb[tile.row] * superblock_pixels
-    let right = if tile_col_starts_sb[tile.col + 1] * superblock_pixels < width {
-      tile_col_starts_sb[tile.col + 1] * superblock_pixels
-    } else { width }
-    let bottom = if tile_row_starts_sb[tile.row + 1] * superblock_pixels < height {
-      tile_row_starts_sb[tile.row + 1] * superblock_pixels
-    } else { height }
-    let tile_width = right - left
-    let tile_height = bottom - top
-    if tile_width <= 0 || tile_height <= 0 {
-      return None
-    }
-    let image = match av1_decode_dc_tile(
-      tile_width,
-      tile_height,
-      tile.bytes,
-      base_q_idx,
-      disable_cdf_update~,
-      full_range~,
-      matrix_coefficients~,
-      use_128x128_superblock~,
-      bit_depth~,
-      allow_screen_content_tools~,
-      tx_mode_select~,
-      reduced_tx_set~,
-      enable_filter_intra~,
+  let rows = match
+    av1_frame_tile_starts(tile_row_starts_sb, superblock_pixels, height) {
+    Some(value) => value
+    None => return None
+  }
+  let frame = match
+    av1_decode_tile_planes(
+      width, height, cols, rows, tile_payload, tile_size_bytes, base_q_idx, disable_cdf_update,
+      allow_screen_content_tools, full_range, matrix_coefficients, use_128x128_superblock,
+      bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select, cdef,
     ) {
-      Some(value) => value
-      None => return None
-    }
-    for y in 0..<tile_height {
-      for x in 0..<tile_width {
-        let p = image.get_pixel(x, y)
-        output.set_pixel(left + x, top + y, p.0, p.1, p.2, p.3)
-      }
-    }
-  }
-  Some(output)
-}
-
-///|
-/// Decodes a reduced-still AV1 OBU stream when it matches the first tile
-/// milestone. The input is the AV1 item payload extracted from AVIF.
-pub fn av1_decode(data : Array[Byte]) -> Image? {
-  let sequence = av1_sequence_info(data)
-  let seq = match sequence {
-    None => return None
     Some(value) => value
+    None => return None
   }
-  let frames = av1_obu_payloads(data, 6)
-  if seq.matrix_coefficients != 1 &&
-    seq.matrix_coefficients != 2 &&
-    seq.matrix_coefficients != 5 &&
-    seq.matrix_coefficients != 6 {
-    return None
-  }
-  if frames.length() == 0 {
-    return None
-  }
-  let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
-  match header {
+  av1_frame_to_rgba(frame)
+}
+///|
+/// Decode a reduced-still AV1 OBU stream through the supported intra syntax,
+/// native-depth frame filters and final color conversion.
+pub fn av1_decode(data : Array[Byte]) -> Image? {
+  match av1_decode_frame_planes(data) {
+    Some(frame) => av1_frame_to_rgba(frame)
     None => None
-    Some(frame) =>
-      av1_decode_tile_group_with_boundaries(
-        seq.width,
-        seq.height,
-        frame.tile_col_starts_sb,
-        frame.tile_row_starts_sb,
-        if seq.use_128x128_superblock {
-          128
-        } else {
-          64
-        },
-        frame.tile_payload,
-        frame.tile_size_bytes,
-        frame.base_q_idx,
-        disable_cdf_update=frame.disable_cdf_update,
-        allow_screen_content_tools=frame.allow_screen_content_tools,
-        full_range=seq.full_range,
-        matrix_coefficients=seq.matrix_coefficients,
-        use_128x128_superblock=seq.use_128x128_superblock,
-        bit_depth=seq.bit_depth,
-        tx_mode_select=frame.tx_mode_select,
-        reduced_tx_set=frame.reduced_tx_set,
-        enable_filter_intra=seq.enable_filter_intra,
-      )
   }
 }
-
 ///|
-/// Decodes an AVIF container through the same pure MoonBit stage-one tile
-/// path. Unsupported profiles and non-DC tiles return None; a validated
+/// Decode an AVIF container through the same pure MoonBit intra frame
+/// path. Unsupported syntax returns None; a validated
 /// auxiliary alpha item is composed by `avif_decode_rgba` after this primary
 /// image decode succeeds.
 pub fn avif_decode(data : Array[Byte]) -> Image? {
@@ -431,10 +394,10 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         tx_mode_select=value.tx_mode_select,
         reduced_tx_set=value.reduced_tx_set,
         enable_filter_intra=value.enable_filter_intra,
+        cdef=value.cdef,
       )
   }
 }
-
 ///|
 test "single DC helper decodes a chroma coefficient" {
   let decoder = av1_msac_new([b'\x00', b'\x00'], false)
