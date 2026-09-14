@@ -36,6 +36,7 @@ priv struct Av1IntraState {
   cdef_indices : Array[Int]
   skip_cdfs : Array[Array[Int]]
   y_modes : Array[Int]
+  uv_modes : Array[Int]
   y_mode : Array[Array[Array[Int]]]
   uv_cfl : Array[Array[Int]]
   uv_no_cfl : Array[Array[Int]]
@@ -54,6 +55,12 @@ priv struct Av1IntraState {
   reduced_tx_set : Bool
   allow_screen_content_tools : Bool
   enable_filter_intra : Bool
+  enable_intra_edge_filter : Bool
+  superblock_size : Int
+  mut prediction_block : Av1SbBlock?
+  mut prediction_partition : Av1SbPartition
+  mut y_angle_delta : Int
+  mut uv_angle_delta : Int
   tx_mode_select : Bool
   tx_depth : Av1TxDepthState
   tx_neighbors : Av1TxTraversalState
@@ -71,6 +78,8 @@ fn av1_intra_state(
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
   monochrome? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
+  superblock_size? : Int = 64,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -97,6 +106,7 @@ fn av1_intra_state(
     cdef_indices: Array::make((width + 63) / 64 * ((height + 63) / 64), -1),
     skip_cdfs: [[31671, 32768, 0], [16515, 32768, 0], [4576, 32768, 0]],
     y_modes: Array::make(width / 4 * (height / 4), 0),
+    uv_modes: Array::make(width / 4 * (height / 4), 0),
     y_mode: av1_intra_y_mode_cdfs(),
     uv_cfl: av1_intra_uv_mode_cdfs(true),
     uv_no_cfl: av1_intra_uv_mode_cdfs(false),
@@ -115,6 +125,12 @@ fn av1_intra_state(
     reduced_tx_set,
     allow_screen_content_tools,
     enable_filter_intra,
+    enable_intra_edge_filter,
+    superblock_size,
+    prediction_block: None,
+    prediction_partition: Av1SbPartitionNone,
+    y_angle_delta: 0,
+    uv_angle_delta: 0,
     tx_mode_select,
     tx_depth: av1_tx_depth_state(),
     tx_neighbors: av1_tx_traversal_state(width, height),
@@ -364,43 +380,123 @@ fn av1_intra_transform(
   if decoder.symbol_max_bits < -14 {
     return false
   }
-  let above : Array[Int] = []
-  let left : Array[Int] = []
-  if y > 0 {
-    for i in 0..<tx_width {
-      let col = if x + i < plane.width { x + i } else { plane.width - 1 }
-      above.push(plane.pixels[(y - 1) * plane.width + col])
+  let prediction = if mode >= 1 && mode <= 8 {
+    let block = match state.prediction_block {
+      Some(value) => value
+      None => return false
     }
-  }
-  if x > 0 {
-    for i in 0..<tx_height {
-      let row = if y + i < plane.height { y + i } else { plane.height - 1 }
-      left.push(plane.pixels[row * plane.width + x - 1])
+    let tile : Av1SbBlock = {
+      row: 0,
+      col: 0,
+      width: state.cols * 4,
+      height: state.rows * 4,
     }
-  }
-  let corner = if x > 0 && y > 0 {
-    plane.pixels[(y - 1) * plane.width + x - 1]
+    let counts = match
+      av1_intra_edge_counts(
+        tile,
+        tile.width,
+        tile.height,
+        block,
+        state.prediction_partition,
+        { row: y, col: x, width: tx_width, height: tx_height, },
+        plane_index,
+        state.superblock_size,
+      ) {
+      Some(value) => value
+      None => return false
+    }
+    let delta = if plane_index == 0 {
+      state.y_angle_delta
+    } else {
+      state.uv_angle_delta
+    }
+    let base_angles = [90, 180, 45, 135, 113, 157, 203, 67]
+    let angle = base_angles[mode - 1] + 3 * delta
+    let n_right = if angle < 90 { counts.n_topright } else { -1 }
+    let n_bottom = if angle > 180 { counts.n_bottomleft } else { -1 }
+    let above : Array[Int] = []
+    for i in 0..<(counts.n_top + (if n_right > 0 { n_right } else { 0 })) {
+      above.push(plane.pixels[(y - 1) * plane.width + x + i])
+    }
+    let left : Array[Int] = []
+    for i in 0..<(counts.n_left + (if n_bottom > 0 { n_bottom } else { 0 })) {
+      left.push(plane.pixels[(y + i) * plane.width + x - 1])
+    }
+    let corner = if counts.n_top > 0 && counts.n_left > 0 {
+      plane.pixels[(y - 1) * plane.width + x - 1]
+    } else {
+      1 << (state.bit_depth - 1)
+    }
+    let neighbor_smooth = match
+      av1_intra_edge_neighbor_smooth(
+        tile,
+        block,
+        plane_index,
+        state.y_modes,
+        state.uv_modes,
+      ) {
+      Some(value) => value
+      None => return false
+    }
+    match
+      av1_directional_predict(
+        mode,
+        delta,
+        tx_width,
+        tx_height,
+        above,
+        left,
+        corner,
+        state.bit_depth,
+        counts.n_top,
+        counts.n_left,
+        n_right,
+        n_bottom,
+        state.enable_intra_edge_filter,
+        neighbor_smooth,
+      ) {
+      Some(value) => value
+      None => return false
+    }
   } else {
-    1 << (state.bit_depth - 1)
-  }
-  let prediction = match
-    av1_intra_predict(
-      if plane_index != 0 && mode == AV1_INTRA_CFL {
-        AV1_INTRA_DC
-      } else {
-        mode
-      },
-      tx_width,
-      tx_height,
-      above,
-      left,
-      corner,
-      state.bit_depth,
-      have_above=y > 0,
-      have_left=x > 0,
-    ) {
-    Some(value) => value
-    None => return false
+    let above : Array[Int] = []
+    let left : Array[Int] = []
+    if y > 0 {
+      for i in 0..<tx_width {
+        let col = if x + i < plane.width { x + i } else { plane.width - 1 }
+        above.push(plane.pixels[(y - 1) * plane.width + col])
+      }
+    }
+    if x > 0 {
+      for i in 0..<tx_height {
+        let row = if y + i < plane.height { y + i } else { plane.height - 1 }
+        left.push(plane.pixels[row * plane.width + x - 1])
+      }
+    }
+    let corner = if x > 0 && y > 0 {
+      plane.pixels[(y - 1) * plane.width + x - 1]
+    } else {
+      1 << (state.bit_depth - 1)
+    }
+    match
+      av1_intra_predict(
+        if plane_index != 0 && mode == AV1_INTRA_CFL {
+          AV1_INTRA_DC
+        } else {
+          mode
+        },
+        tx_width,
+        tx_height,
+        above,
+        left,
+        corner,
+        state.bit_depth,
+        have_above=y > 0,
+        have_left=x > 0,
+      ) {
+      Some(value) => value
+      None => return false
+    }
   }
   if plane_index != 0 && mode == AV1_INTRA_CFL {
     if !av1_cfl_predict(
@@ -465,25 +561,34 @@ fn av1_intra_transform(
 }
 
 ///|
-/// V/H signal angle_delta for BLOCK indices >= BLOCK_8X8, including the
-/// extended 4x16/16x4 geometries. The three smaller BLOCK indices imply zero.
-/// The other
-/// supported modes have no angle syntax; diagonal modes and CfL need their
-/// own prediction paths before their residuals can be reconstructed.
+/// All eight directional modes signal angle_delta for BLOCK indices >=
+/// BLOCK_8X8, including 4x16/16x4. Smaller indices and nondirectional modes
+/// imply zero. Store the result for the selected plane; CfL alpha syntax is
+/// decoded separately.
 fn av1_intra_read_mode_angle(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
   mode : Int,
   block_index : Int,
+  plane? : Int = 0,
 ) -> Bool {
-  if mode == AV1_INTRA_V || mode == AV1_INTRA_H {
-    return block_index < 3 || decoder.symbol(state.angle_delta[mode - 1]) == 3
+  if mode < 0 || mode > 12 {
+    return false
   }
-  mode == AV1_INTRA_DC ||
-  mode == AV1_INTRA_SMOOTH ||
-  mode == AV1_INTRA_SMOOTH_V ||
-  mode == AV1_INTRA_SMOOTH_H ||
-  mode == AV1_INTRA_PAETH
+  let delta = if mode >= 1 && mode <= 8 && block_index >= 3 {
+    decoder.symbol(state.angle_delta[mode - 1]) - 3
+  } else {
+    0
+  }
+  if delta < -3 || delta > 3 || decoder.symbol_max_bits < -14 {
+    return false
+  }
+  if plane == 0 {
+    state.y_angle_delta = delta
+  } else {
+    state.uv_angle_delta = delta
+  }
+  true
 }
 
 ///|
@@ -564,6 +669,7 @@ fn av1_intra_residuals(
   luma_tx_height : Int,
   skip : Int,
 ) -> Bool {
+  state.prediction_block = Some(block)
   let has_chroma = av1_intra_has_chroma(state, block)
   let plane_count = if has_chroma { 3 } else { 1 }
   av1_cfl_begin_block(
@@ -645,7 +751,11 @@ fn av1_intra_block(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
   block : Av1SbBlock,
+  partition? : Av1SbPartition = Av1SbPartitionNone,
 ) -> Bool {
+  state.prediction_partition = partition
+  state.y_angle_delta = 0
+  state.uv_angle_delta = 0
   let block_index = match av1_intra_block_index(block.width, block.height) {
     Some(value) => value
     None => return false
@@ -708,7 +818,13 @@ fn av1_intra_block(
       if !cfl_allowed || !av1_cfl_read_alphas(decoder, state.cfl) {
         return false
       }
-    } else if !av1_intra_read_mode_angle(decoder, state, mode, block_index) {
+    } else if !av1_intra_read_mode_angle(
+        decoder,
+        state,
+        mode,
+        block_index,
+        plane=1,
+      ) {
       return false
     }
     mode
@@ -779,6 +895,9 @@ fn av1_intra_block(
       }
       state.skips[row * state.cols + col] = skip
       state.y_modes[row * state.cols + col] = y_mode
+      if has_chroma {
+        state.uv_modes[row * state.cols + col] = uv_mode
+      }
     }
   }
   if !av1_intra_residuals(
@@ -831,6 +950,7 @@ fn av1_decode_intra_tile_state(
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
   monochrome? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -865,6 +985,8 @@ fn av1_decode_intra_tile_state(
     tx_mode_select,
     cdef~,
     monochrome~,
+    enable_intra_edge_filter~,
+    superblock_size=if use_128x128_superblock { 128 } else { 64 },
   )
   let neighbors = match
     av1_partition_neighbor_state(
@@ -882,12 +1004,14 @@ fn av1_decode_intra_tile_state(
   while row < coded_height {
     let mut col = 0
     while col < coded_width {
-      if !av1_walk_partition_tree(
+      if !av1_walk_partition_tree_context(
           decoder,
           cdfs,
           neighbors,
           av1_partition_node(row, col, sb_size, width, height),
-          fn(reader, block) { av1_intra_block(reader, state, block) },
+          fn(reader, block, partition) {
+            av1_intra_block(reader, state, block, partition~)
+          },
         ) {
         return None
       }
@@ -915,6 +1039,7 @@ fn av1_decode_intra_tile(
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
+  enable_intra_edge_filter? : Bool = false,
 ) -> Image? {
   let state = match
     av1_decode_intra_tile_state(
@@ -930,6 +1055,7 @@ fn av1_decode_intra_tile(
       enable_filter_intra,
       tx_mode_select,
       cdef~,
+      enable_intra_edge_filter~,
     ) {
     Some(value) => value
     None => return None

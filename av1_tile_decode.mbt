@@ -188,6 +188,7 @@ pub fn av1_decode_dc_tile(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
 ) -> Image? {
   av1_decode_intra_tile(
@@ -205,6 +206,7 @@ pub fn av1_decode_dc_tile(
     enable_filter_intra,
     tx_mode_select,
     cdef~,
+    enable_intra_edge_filter~,
   )
 }
 ///|
@@ -229,6 +231,7 @@ pub fn av1_decode_tile_group(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
 ) -> Image? {
   if width <= 0 ||
@@ -255,6 +258,7 @@ pub fn av1_decode_tile_group(
         width, height, cols, rows, tile_payload, tile_size_bytes, base_q_idx, disable_cdf_update,
         allow_screen_content_tools, full_range, matrix_coefficients, use_128x128_superblock,
         bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select, cdef,
+        enable_intra_edge_filter~,
       ) {
       Some(value) => value
       None => return None
@@ -285,6 +289,7 @@ pub fn av1_decode_tile_group(
         tx_mode_select~,
         reduced_tx_set~,
         enable_filter_intra~,
+        enable_intra_edge_filter~,
       ) {
       Some(value) => value
       None => return None
@@ -327,6 +332,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   monochrome? : Bool = false,
 ) -> Image? {
@@ -363,6 +369,7 @@ pub fn av1_decode_tile_group_with_boundaries(
       tx_mode_select,
       cdef,
       monochrome~,
+      enable_intra_edge_filter~,
     ) {
     Some(value) => value
     None => return None
@@ -410,6 +417,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         tx_mode_select=value.tx_mode_select,
         reduced_tx_set=value.reduced_tx_set,
         enable_filter_intra=value.enable_filter_intra,
+        enable_intra_edge_filter=value.enable_intra_edge_filter,
         cdef=value.cdef,
         monochrome=value.monochrome,
       )

@@ -66,6 +66,7 @@ pub(all) struct Av1Stage1Input {
   tile_row_starts_sb : Array[Int]
   tile_size_bytes : Int
   enable_filter_intra : Bool
+  enable_intra_edge_filter : Bool
   full_range : Bool
   matrix_coefficients : Int
   use_128x128_superblock : Bool
@@ -635,6 +636,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             tile_row_starts_sb: frame.tile_row_starts_sb,
             tile_size_bytes: frame.tile_size_bytes,
             enable_filter_intra: seq.enable_filter_intra,
+            enable_intra_edge_filter: seq.enable_intra_edge_filter,
             full_range: seq.full_range,
             matrix_coefficients: seq.matrix_coefficients,
             use_128x128_superblock: seq.use_128x128_superblock,

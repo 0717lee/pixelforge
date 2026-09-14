@@ -1,0 +1,711 @@
+{
+  "scope": "all square16/8/4 coding blocks and complete per-plane coefficient syntax; entropy only",
+  "headers": {
+    "seq_profile": 0,
+    "high_bitdepth": 1,
+    "mono_chrome": 0,
+    "max_frame_width_minus_1": 31,
+    "max_frame_height_minus_1": 31,
+    "base_q_idx": 120,
+    "tx_mode": 1,
+    "reduced_tx_set": 0,
+    "allow_screen_content_tools": 0,
+    "disable_cdf_update": 0,
+    "enable_filter_intra": 0,
+    "enable_cdef": 0,
+    "enable_restoration": 0,
+    "segmentation_enabled": 0,
+    "delta_q_present": 0,
+    "tile_cols_log2": 0,
+    "tile_rows_log2": 0,
+    "twelve_bit": 0,
+    "subsampling_x": 1,
+    "subsampling_y": 1,
+    "allow_intrabc": 0,
+    "frame_type": 0,
+    "bit_depth": 10
+  },
+  "frame_header_bytes": 5,
+  "tile_payload_bytes": 137,
+  "partitions": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "size": 32,
+      "context": 0,
+      "symbol": 3
+    },
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        16,
+        0
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        0,
+        16
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 3
+    },
+    {
+      "origin": [
+        0,
+        16
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        8,
+        16
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        0,
+        24
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        8,
+        24
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        16,
+        16
+      ],
+      "size": 16,
+      "context": 2,
+      "symbol": 0
+    }
+  ],
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "coding_size": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        0,
+        0
+      ],
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "tx_sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 45,
+          "eob_pt": 7,
+          "dc_sign_context": 0,
+          "dc_category": 2,
+          "level_context": 63,
+          "coeff_br_symbols": 16,
+          "golomb_coefficients": 2
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 7,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 18,
+          "eob_pt": 6,
+          "dc_sign_context": 0,
+          "dc_category": 2,
+          "level_context": 48,
+          "coeff_br_symbols": 9,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 7,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 26,
+          "eob_pt": 6,
+          "dc_sign_context": 0,
+          "dc_category": 1,
+          "level_context": 48,
+          "coeff_br_symbols": 10,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        16,
+        0
+      ],
+      "coding_size": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        0,
+        0
+      ],
+      "y_mode": 12,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "tx_sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 2,
+          "tx_type": 3,
+          "eob": 137,
+          "eob_pt": 9,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 63,
+          "coeff_br_symbols": 51,
+          "golomb_coefficients": 4
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 27,
+          "eob_pt": 6,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 63,
+          "coeff_br_symbols": 14,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 26,
+          "eob_pt": 6,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 53,
+          "coeff_br_symbols": 13,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        16
+      ],
+      "coding_size": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        0,
+        0
+      ],
+      "y_mode": 5,
+      "y_delta": 0,
+      "uv_mode": 9,
+      "uv_delta": 0,
+      "tx_sizes": [
+        [
+          8,
+          8
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 5,
+          "tx_type": 1,
+          "eob": 15,
+          "eob_pt": 5,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 18,
+          "coeff_br_symbols": 3,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 3,
+          "eob": 3,
+          "eob_pt": 3,
+          "dc_sign_context": 2,
+          "dc_category": 0,
+          "level_context": 7,
+          "coeff_br_symbols": 2,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 3,
+          "eob": 7,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 1,
+          "level_context": 10,
+          "coeff_br_symbols": 2,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        8,
+        16
+      ],
+      "coding_size": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        0,
+        4
+      ],
+      "y_mode": 5,
+      "y_delta": -1,
+      "uv_mode": 5,
+      "uv_delta": 0,
+      "tx_sizes": [
+        [
+          8,
+          8
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 1,
+          "eob": 1,
+          "eob_pt": 1,
+          "dc_sign_context": 1,
+          "dc_category": 1,
+          "level_context": 1,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        24
+      ],
+      "coding_size": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        4,
+        0
+      ],
+      "y_mode": 5,
+      "y_delta": -2,
+      "uv_mode": 5,
+      "uv_delta": -2,
+      "tx_sizes": [
+        [
+          8,
+          8
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 5,
+          "tx_type": 1,
+          "eob": 27,
+          "eob_pt": 6,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 21,
+          "coeff_br_symbols": 4,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 1,
+          "eob": 7,
+          "eob_pt": 4,
+          "dc_sign_context": 0,
+          "dc_category": 2,
+          "level_context": 8,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 1,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 1,
+          "level_context": 7,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        8,
+        24
+      ],
+      "coding_size": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        4,
+        4
+      ],
+      "y_mode": 5,
+      "y_delta": -1,
+      "uv_mode": 5,
+      "uv_delta": -1,
+      "tx_sizes": [
+        [
+          8,
+          8
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 8,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        16,
+        16
+      ],
+      "coding_size": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "skip_context": 0,
+      "y_mode_contexts": [
+        0,
+        4
+      ],
+      "y_mode": 5,
+      "y_delta": -1,
+      "uv_mode": 5,
+      "uv_delta": -1,
+      "tx_sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 3,
+          "tx_type": 1,
+          "eob": 15,
+          "eob_pt": 5,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 6,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 1,
+          "eob": 0,
+          "tx_type": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 1,
+          "eob": 17,
+          "eob_pt": 6,
+          "dc_sign_context": 2,
+          "dc_category": 0,
+          "level_context": 3,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        }
+      ]
+    }
+  ],
+  "entropy_end": {
+    "symbols": 846,
+    "physical_bit_position": 1096,
+    "symbol_max_bits": -8,
+    "trailing_bit_position": 1089,
+    "tile_bits": 1096
+  },
+  "directional_y_blocks": 5,
+  "directional_uv_blocks": 4,
+  "nonzero_y_delta_blocks": 4,
+  "nonzero_uv_delta_blocks": 3
+}

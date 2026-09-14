@@ -249,7 +249,22 @@ fn av1_walk_partition_geometry(
   read_partition : (Av1SbPartitionNode) -> Av1SbPartition?,
   decode_leaf : (Av1SbBlock) -> Bool,
 ) -> Bool {
-  if !av1_partition_node_valid(node) { return false }
+  av1_walk_partition_geometry_context(node, read_partition, fn(block, _) {
+    decode_leaf(block)
+  })
+}
+
+///|
+/// Preserve each terminal block's original partition for reference-availability
+/// tables. The public geometry and block APIs keep their existing signatures.
+fn av1_walk_partition_geometry_context(
+  node : Av1SbPartitionNode,
+  read_partition : (Av1SbPartitionNode) -> Av1SbPartition?,
+  decode_leaf : (Av1SbBlock, Av1SbPartition) -> Bool,
+) -> Bool {
+  if !av1_partition_node_valid(node) {
+    return false
+  }
   if node.row >= av1_partition_coded_extent(node.frame_height) ||
     node.col >= av1_partition_coded_extent(node.frame_width) {
     return true
@@ -265,14 +280,24 @@ fn av1_walk_partition_geometry(
     }
   }
   let blocks = av1_partition_children(node, partition)
-  if blocks.length() == 0 { return false }
+  if blocks.length() == 0 {
+    return false
+  }
   for block in blocks {
     if partition is Av1SbPartitionSplit {
       let child = av1_partition_node(
-        block.row, block.col, block.width, node.frame_width, node.frame_height,
+        block.row,
+        block.col,
+        block.width,
+        node.frame_width,
+        node.frame_height,
       )
-      if !av1_walk_partition_geometry(child, read_partition, decode_leaf) { return false }
-    } else if !decode_leaf(block) {
+      if !av1_walk_partition_geometry_context(
+          child, read_partition, decode_leaf,
+        ) {
+        return false
+      }
+    } else if !decode_leaf(block, partition) {
       return false
     }
   }
@@ -551,14 +576,37 @@ fn av1_walk_partition_tree(
   root : Av1SbPartitionNode,
   decode_leaf : (Av1SymbolDecoder, Av1SbBlock) -> Bool,
 ) -> Bool {
-  if !av1_partition_node_in_tile(neighbors, root) { return false }
-  av1_walk_partition_geometry(
+  av1_walk_partition_tree_context(decoder, cdfs, neighbors, root, fn(
+    reader,
+    block,
+    _,
+  ) {
+    decode_leaf(reader, block)
+  })
+}
+
+///|
+/// Contextual tile entry; VERT_A/B terminal blocks must retain their parent
+/// partition even when the emitted coding geometry is square.
+fn av1_walk_partition_tree_context(
+  decoder : Av1SymbolDecoder,
+  cdfs : Av1PartitionCdfState,
+  neighbors : Av1PartitionNeighbors,
+  root : Av1SbPartitionNode,
+  decode_leaf : (Av1SymbolDecoder, Av1SbBlock, Av1SbPartition) -> Bool,
+) -> Bool {
+  if !av1_partition_node_in_tile(neighbors, root) {
+    return false
+  }
+  av1_walk_partition_geometry_context(
     root,
     fn(node) { av1_decode_partition_symbol(decoder, cdfs, node, neighbors) },
-    fn(block) {
-      decode_leaf(decoder, block) && av1_partition_record_block(neighbors, block)
+    fn(block, partition) {
+      decode_leaf(decoder, block, partition) &&
+      av1_partition_record_block(neighbors, block)
     },
-  ) && decoder.symbol_max_bits >= -14
+  ) &&
+  decoder.symbol_max_bits >= -14
 }
 
 /// Decode an isolated partition-only probe, with fresh CDFs and unavailable

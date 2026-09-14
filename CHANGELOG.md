@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added all eight directional intra predictors, independent Y/UV angle deltas,
+  integer interpolation, edge filtering and edge upsampling at 8/10/12 bits.
+  The sequence's edge-filter flag now reaches every raw AV1/AVIF/tile entry.
+- Preserved terminal partition context for top-right/bottom-left availability,
+  including VERT_A/B, sub-eight-pixel chroma owners, tile boundaries and the
+  64-pixel processing units inside 128-pixel blocks. Smooth-neighbor context
+  uses each plane's coding modes rather than the current transform's mode.
+- Checked the directional kernel against 672 original libaom C cases and
+  complete tile decoding against 20 dual-dav1d references. Constructed cases
+  prove visible effects of mixed partitions and independent Y/UV smooth context.
+
 - Added CfL chroma prediction with shared adaptive sign/alpha probabilities,
   full reconstructed luma TX storage in Q3, sub-eight-pixel ownership, padded
   chroma footprints, signed rounding and prediction clipping before residuals.

@@ -142,6 +142,7 @@ fn av1_decode_tile_planes(
   tx_mode_select : Bool,
   cdef : Av1CdefConfig?,
   monochrome? : Bool = false,
+  enable_intra_edge_filter? : Bool = false,
 ) -> Av1FramePlanes? {
   if width <= 0 ||
     height <= 0 ||
@@ -200,6 +201,7 @@ fn av1_decode_tile_planes(
         tx_mode_select,
         cdef~,
         monochrome~,
+        enable_intra_edge_filter~,
       ) {
       Some(value) => value
       None => return None
@@ -308,5 +310,6 @@ fn av1_decode_frame_planes(
     frame.tx_mode_select,
     frame.cdef,
     monochrome=seq.monochrome,
+    enable_intra_edge_filter=seq.enable_intra_edge_filter,
   )
 }
