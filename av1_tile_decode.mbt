@@ -876,14 +876,87 @@ pub fn av1_decode_tile_group(
   Some(output)
 }
 
-fn av1_tile_boundaries_uniform(starts : Array[Int]) -> Bool {
-  if starts.length() <= 2 { return true }
-  let step = starts[1] - starts[0]
-  if step <= 0 { return false }
-  for i in 2..<(starts.length() - 1) {
-    if starts[i] - starts[i - 1] != step { return false }
+/// Decode and stitch tiles whose superblock boundaries are explicitly known.
+/// This is the pixel entry used for non-uniform tile_info() layouts; tiles
+/// wider than the bounded intra decoder are rejected safely.
+pub fn av1_decode_tile_group_with_boundaries(
+  width : Int,
+  height : Int,
+  tile_col_starts_sb : Array[Int],
+  tile_row_starts_sb : Array[Int],
+  superblock_pixels : Int,
+  tile_payload : Array[Byte],
+  tile_size_bytes : Int,
+  base_q_idx : Int,
+  disable_cdf_update? : Bool = false,
+  full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
+  use_128x128_superblock? : Bool = false,
+  bit_depth? : Int = 8,
+  allow_screen_content_tools? : Bool = false,
+  tx_mode_select? : Bool = false,
+  reduced_tx_set? : Bool = false,
+  enable_filter_intra? : Bool = false,
+) -> Image? {
+  if width <= 0 || height <= 0 || superblock_pixels <= 0 ||
+    tile_col_starts_sb.length() < 2 || tile_row_starts_sb.length() < 2 ||
+    tile_col_starts_sb[0] != 0 || tile_row_starts_sb[0] != 0 {
+    return None
   }
-  true
+  let tile_cols = tile_col_starts_sb.length() - 1
+  let tile_rows = tile_row_starts_sb.length() - 1
+  let last_col = tile_col_starts_sb[tile_cols] * superblock_pixels
+  let last_row = tile_row_starts_sb[tile_rows] * superblock_pixels
+  if last_col < width || last_row < height {
+    return None
+  }
+  let tiles = match av1_extract_tile_payloads(
+    tile_payload, tile_cols, tile_rows, tile_size_bytes,
+  ) {
+    Some(value) => value
+    None => return None
+  }
+  let output = Image::new(width, height)
+  for tile in tiles {
+    let left = tile_col_starts_sb[tile.col] * superblock_pixels
+    let top = tile_row_starts_sb[tile.row] * superblock_pixels
+    let right = if tile_col_starts_sb[tile.col + 1] * superblock_pixels < width {
+      tile_col_starts_sb[tile.col + 1] * superblock_pixels
+    } else { width }
+    let bottom = if tile_row_starts_sb[tile.row + 1] * superblock_pixels < height {
+      tile_row_starts_sb[tile.row + 1] * superblock_pixels
+    } else { height }
+    let tile_width = right - left
+    let tile_height = bottom - top
+    if tile_width < 16 || tile_height < 16 || tile_width > 64 || tile_height > 64 {
+      return None
+    }
+    let image = match av1_decode_dc_tile(
+      tile_width,
+      tile_height,
+      tile.bytes,
+      base_q_idx,
+      disable_cdf_update~,
+      full_range~,
+      matrix_coefficients~,
+      use_128x128_superblock~,
+      bit_depth~,
+      allow_screen_content_tools~,
+      tx_mode_select~,
+      reduced_tx_set~,
+      enable_filter_intra~,
+    ) {
+      Some(value) => value
+      None => return None
+    }
+    for y in 0..<tile_height {
+      for x in 0..<tile_width {
+        let p = image.get_pixel(x, y)
+        output.set_pixel(left + x, top + y, p.0, p.1, p.2, p.3)
+      }
+    }
+  }
+  Some(output)
 }
 
 ///|
@@ -909,16 +982,12 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   match header {
     None => None
     Some(frame) => {
-      if !av1_tile_boundaries_uniform(frame.tile_col_starts_sb) ||
-        !av1_tile_boundaries_uniform(frame.tile_row_starts_sb) {
-        return None
-      }
-      // Keep tile-group size prefixes out of the single-tile entropy path.
-      av1_decode_tile_group(
+      av1_decode_tile_group_with_boundaries(
         seq.width,
         seq.height,
-        frame.tile_cols,
-        frame.tile_rows,
+        frame.tile_col_starts_sb,
+        frame.tile_row_starts_sb,
+        if seq.use_128x128_superblock { 128 } else { 64 },
         frame.tile_payload,
         frame.tile_size_bytes,
         frame.base_q_idx,
@@ -946,15 +1015,12 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   match input {
     None => None
     Some(value) => {
-      if !av1_tile_boundaries_uniform(value.tile_col_starts_sb) ||
-        !av1_tile_boundaries_uniform(value.tile_row_starts_sb) {
-        return None
-      }
-      av1_decode_tile_group(
+      av1_decode_tile_group_with_boundaries(
         value.width,
         value.height,
-        value.tile_cols,
-        value.tile_rows,
+        value.tile_col_starts_sb,
+        value.tile_row_starts_sb,
+        if value.use_128x128_superblock { 128 } else { 64 },
         value.tile_payload,
         value.tile_size_bytes,
         value.base_q_idx,
