@@ -1,5 +1,5 @@
 ///|
-/// Bounded coefficient decoder for square AV1 transform blocks.
+/// AV1 coefficient decoder for square and 32x16/16x32 transform blocks.
 ///
 /// AV1 addresses 32x32 and 64x64 coefficients in the adjusted 32x32 domain.
 /// This module keeps the entropy walk stateful (the caller may pass an

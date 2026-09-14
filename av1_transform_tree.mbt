@@ -1,4 +1,4 @@
-/// Bounded AV1 transform-tree geometry.
+/// AV1 transform-tree geometry for square and supported rectangular leaves.
 ///
 /// This stage models transform partition geometry independently from entropy
 /// symbols. Leaves are emitted in raster order and are later consumed by the
