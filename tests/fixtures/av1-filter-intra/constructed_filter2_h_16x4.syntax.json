@@ -1,0 +1,631 @@
+{
+  "provenance": "complete constructed q32 filter-intra syntax, not encoder output or patched entropy",
+  "plan": {
+    "name": "constructed_filter2_h_16x4",
+    "mode": 2,
+    "size": 16,
+    "shape": [
+      16,
+      4
+    ],
+    "partition": "horz4",
+    "select": false
+  },
+  "bit_depth": 10,
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "block_enum": 17,
+      "skip": false,
+      "has_chroma": false,
+      "y_mode": 0,
+      "uv_mode": null,
+      "use_filter_intra": true,
+      "filter_mode": 2,
+      "luma_tx_cdf_direction": 2,
+      "tx_depth": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            16,
+            4
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 64,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            16,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              16,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 16,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        4
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "block_enum": 17,
+      "skip": false,
+      "has_chroma": true,
+      "y_mode": 0,
+      "uv_mode": 0,
+      "use_filter_intra": true,
+      "filter_mode": 2,
+      "luma_tx_cdf_direction": 2,
+      "tx_depth": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            4
+          ],
+          "size": [
+            16,
+            4
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 64,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            16,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              16,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 16,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 0
+        },
+        {
+          "plane": 1,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            8,
+            4
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 1,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            8,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              8,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 8,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 7
+        },
+        {
+          "plane": 2,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            8,
+            4
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 1,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            8,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              8,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 8,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 7
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        8
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "block_enum": 17,
+      "skip": false,
+      "has_chroma": false,
+      "y_mode": 0,
+      "uv_mode": null,
+      "use_filter_intra": true,
+      "filter_mode": 2,
+      "luma_tx_cdf_direction": 2,
+      "tx_depth": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            8
+          ],
+          "size": [
+            16,
+            4
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 64,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            16,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              16,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 16,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        12
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "block_enum": 17,
+      "skip": false,
+      "has_chroma": true,
+      "y_mode": 0,
+      "uv_mode": 0,
+      "use_filter_intra": true,
+      "filter_mode": 2,
+      "luma_tx_cdf_direction": 2,
+      "tx_depth": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            12
+          ],
+          "size": [
+            16,
+            4
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 64,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            16,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              16,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 16,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 0
+        },
+        {
+          "plane": 1,
+          "origin": [
+            0,
+            4
+          ],
+          "size": [
+            8,
+            4
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 1,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            8,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              8,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 8,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 8
+        },
+        {
+          "plane": 2,
+          "origin": [
+            0,
+            4
+          ],
+          "size": [
+            8,
+            4
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 1,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            8,
+            1
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              8,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 1,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 8,
+              "eob": false,
+              "context": 16,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 8
+        }
+      ]
+    }
+  ],
+  "entropy_symbols_checked": 95,
+  "raw_y_mode_remains_dc": true,
+  "transform_cdf_filter_mode_mapping": [
+    0,
+    1,
+    2,
+    6,
+    0
+  ],
+  "uv_filter_intra_syntax": false
+}

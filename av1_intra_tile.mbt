@@ -56,6 +56,8 @@ priv struct Av1IntraState {
   palette_y : Array[Array[Int]]
   palette_uv : Array[Int]
   filter_intra : Array[Array[Int]]
+  filter_intra_mode_cdf : Array[Int]
+  mut filter_intra_mode : Int
   tables : Av1TxEntTables
   y_coeff : Av1CoeffContext
   uv_coeff : Av1CoeffContext
@@ -107,8 +109,12 @@ fn av1_intra_state(
   }
   let planes = [av1_intra_plane(width, height, bit_depth, track_loop_filter~)]
   if !monochrome {
-    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~))
-    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~))
+    planes.push(
+      av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~),
+    )
+    planes.push(
+      av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~),
+    )
   }
   {
     cols: width / 4,
@@ -127,6 +133,8 @@ fn av1_intra_state(
     palette_y,
     palette_uv: [32461, 32768, 0],
     filter_intra,
+    filter_intra_mode_cdf: [8949, 12776, 17211, 29558, 32768, 0],
+    filter_intra_mode: -1,
     tables: av1_tx_ent_tables(base_q_idx),
     y_coeff: av1_coeff_context(base_q_idx, 0, 0),
     uv_coeff: av1_coeff_context(base_q_idx, 0, 1),
@@ -225,6 +233,14 @@ fn av1_intra_tx_type(
   if state.base_q_idx == 0 || width >= 32 || height >= 32 {
     return Some(Av1TxDctDct)
   }
+  let direction = if state.filter_intra_mode >= 0 {
+    match av1_filter_intra_mode_to_intra_dir(state.filter_intra_mode) {
+      Some(value) => value
+      None => return None
+    }
+  } else {
+    mode
+  }
   av1_decode_intra_tx_type(
     decoder,
     state.tables,
@@ -233,7 +249,7 @@ fn av1_intra_tx_type(
     } else {
       height
     },
-    mode,
+    direction,
     state.reduced_tx_set,
     state.base_q_idx,
   )
@@ -392,7 +408,48 @@ fn av1_intra_transform(
   if decoder.symbol_max_bits < -14 {
     return false
   }
-  let prediction = if mode >= 1 && mode <= 8 {
+  let prediction = if plane_index == 0 && state.filter_intra_mode >= 0 {
+    let n_top = if y == 0 {
+      0
+    } else if tx_width < plane.width - x {
+      tx_width
+    } else {
+      plane.width - x
+    }
+    let n_left = if x == 0 {
+      0
+    } else if tx_height < plane.height - y {
+      tx_height
+    } else {
+      plane.height - y
+    }
+    let above = Array::makei(n_top, i => {
+      plane.pixels[(y - 1) * plane.width + x + i]
+    })
+    let left = Array::makei(n_left, i => {
+      plane.pixels[(y + i) * plane.width + x - 1]
+    })
+    let corner = if x > 0 && y > 0 {
+      plane.pixels[(y - 1) * plane.width + x - 1]
+    } else {
+      1 << (state.bit_depth - 1)
+    }
+    match
+      av1_filter_intra_predict(
+        state.filter_intra_mode,
+        tx_width,
+        tx_height,
+        above,
+        left,
+        corner,
+        state.bit_depth,
+        n_top,
+        n_left,
+      ) {
+      Some(value) => value
+      None => return false
+    }
+  } else if mode >= 1 && mode <= 8 {
     let block = match state.prediction_block {
       Some(value) => value
       None => return false
@@ -776,6 +833,7 @@ fn av1_intra_block(
   state.prediction_partition = partition
   state.y_angle_delta = 0
   state.uv_angle_delta = 0
+  state.filter_intra_mode = -1
   let block_index = match av1_intra_block_index(block.width, block.height) {
     Some(value) => value
     None => return false
@@ -870,8 +928,16 @@ fn av1_intra_block(
     y_mode == AV1_INTRA_DC &&
     block.width <= 32 &&
     block.height <= 32 {
-    if decoder.symbol(state.filter_intra[block_index]) != 0 {
-      return false
+    match decoder.symbol(state.filter_intra[block_index]) {
+      0 => ()
+      1 => {
+        let mode = decoder.symbol(state.filter_intra_mode_cdf)
+        if mode < 0 || mode >= 5 {
+          return false
+        }
+        state.filter_intra_mode = mode
+      }
+      _ => return false
     }
   }
   let root : Av1TxNode = {

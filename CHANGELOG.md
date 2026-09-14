@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added all five filter-intra modes at native 8/10/12-bit precision, with shared
+  mode probabilities, per-transform prediction and ordinary residual/CfL
+  reconstruction. Skipped and lossless blocks retain their filter syntax;
+  transform-type probabilities use the selected filter's normative direction.
+- Verified 2,520 original-C predictor cases (601,920 native samples), plus
+  seventeen complete dual-dav1d streams covering every mode, nonzero AC,
+  transform-size selection, sub-eight-pixel ownership and cropped edges.
+
 - Added native-depth frame deblocking before CDEF, including cross-tile edges,
   per-plane transform-size maps, full four-sample lanes at cropped edges and
   the 4/6/8/14-tap scalar kernels. Transform maps are allocated only when an
