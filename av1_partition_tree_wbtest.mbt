@@ -62,3 +62,18 @@ test "partition leaf walker preserves raster order across extended nodes" {
   assert_eq((leaves[1].row, leaves[1].col), (32, 0))
   assert_true(av1_partition_leaves(root, [Av1SbPartitionHorz]) is None)
 }
+
+test "MSAC partition fixture decodes NONE and recursive SPLIT" {
+  let none = av1_decode_partition_leaves([b'\x40'], 64, 64).unwrap()
+  assert_eq(none.length(), 1)
+  assert_eq((none[0].row, none[0].col, none[0].size), (0, 0, 64))
+  // Crafted with scripts/craft_av1_fixture.py's od_ec encoder: W64 SPLIT
+  // followed by four W32 NONE symbols.  The walker must consume the same
+  // adaptive CDF rows and return four raster-ordered 32x32 leaves.
+  let split = av1_decode_partition_leaves([b'\xB6'], 64, 64).unwrap()
+  assert_eq(split.length(), 4)
+  assert_eq((split[0].row, split[0].col, split[0].size), (0, 0, 32))
+  assert_eq((split[1].row, split[1].col, split[1].size), (0, 32, 32))
+  assert_eq((split[2].row, split[2].col, split[2].size), (32, 0, 32))
+  assert_eq((split[3].row, split[3].col, split[3].size), (32, 32, 32))
+}
