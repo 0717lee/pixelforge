@@ -38,7 +38,7 @@ fn av1_intra_plane(
 
 ///|
 /// Tile-local mode and residual state. Each mode CDF row persists across all
-/// coding blocks. Palette flags remain zero for every accepted block.
+/// coding blocks, including palette mode, color-cache and index probabilities.
 priv struct Av1IntraState {
   cols : Int
   rows : Int
@@ -53,8 +53,9 @@ priv struct Av1IntraState {
   uv_no_cfl : Array[Array[Int]]
   cfl : Av1CflState
   angle_delta : Array[Array[Int]]
-  palette_y : Array[Array[Int]]
-  palette_uv : Array[Int]
+  palette : Av1PaletteState
+  mut palette_y_map : Array[Int]
+  mut palette_uv_map : Array[Int]
   filter_intra : Array[Array[Int]]
   filter_intra_mode_cdf : Array[Int]
   mut filter_intra_mode : Int
@@ -78,7 +79,6 @@ priv struct Av1IntraState {
   tx_depth : Av1TxDepthState
   tx_neighbors : Av1TxTraversalState
 }
-
 ///|
 fn av1_intra_state(
   width : Int,
@@ -103,10 +103,6 @@ fn av1_intra_state(
     ] {
     filter_intra.push([probability, 32768, 0])
   }
-  let palette_y : Array[Array[Int]] = []
-  for probability in [31676, 31912, 31823, 32030, 32309, 32265, 32450] {
-    palette_y.push([probability, 32768, 0])
-  }
   let planes = [av1_intra_plane(width, height, bit_depth, track_loop_filter~)]
   if !monochrome {
     planes.push(
@@ -130,8 +126,9 @@ fn av1_intra_state(
     uv_no_cfl: av1_intra_uv_mode_cdfs(false),
     cfl: av1_cfl_state(),
     angle_delta: av1_intra_angle_cdfs(),
-    palette_y,
-    palette_uv: [32461, 32768, 0],
+    palette: av1_palette_state(width / 4, height / 4),
+    palette_y_map: [],
+    palette_uv_map: [],
     filter_intra,
     filter_intra_mode_cdf: [8949, 12776, 17211, 29558, 32768, 0],
     filter_intra_mode: -1,
@@ -156,7 +153,6 @@ fn av1_intra_state(
     tx_neighbors: av1_tx_traversal_state(width, height),
   }
 }
-
 ///|
 /// AV1 BLOCK_* indices for every legal coding-block geometry.
 fn av1_intra_block_index(width : Int, height : Int) -> Int? {
@@ -408,7 +404,39 @@ fn av1_intra_transform(
   if decoder.symbol_max_bits < -14 {
     return false
   }
-  let prediction = if plane_index == 0 && state.filter_intra_mode >= 0 {
+  let colors = if plane_index == 0 {
+    state.palette.y_colors
+  } else if plane_index == 1 {
+    state.palette.u_colors
+  } else {
+    state.palette.v_colors
+  }
+  let prediction = if !colors.is_empty() {
+    let block = match state.prediction_block {
+      Some(value) => value
+      None => return false
+    }
+    let origin_x = if plane_index == 0 { block.col } else { block.col / 8 * 4 }
+    let origin_y = if plane_index == 0 { block.row } else { block.row / 8 * 4 }
+    let indices = if plane_index == 0 {
+      state.palette_y_map
+    } else {
+      state.palette_uv_map
+    }
+    if indices.length() != block_width * block_height ||
+      x < origin_x ||
+      y < origin_y ||
+      x - origin_x + tx_width > block_width ||
+      y - origin_y + tx_height > block_height {
+      return false
+    }
+    Array::makei(tx_width * tx_height, i => {
+      colors[indices[(y - origin_y + i / tx_width) * block_width +
+      x -
+      origin_x +
+      i % tx_width]]
+    })
+  } else if plane_index == 0 && state.filter_intra_mode >= 0 {
     let n_top = if y == 0 {
       0
     } else if tx_width < plane.width - x {
@@ -636,7 +664,6 @@ fn av1_intra_transform(
   }
   true
 }
-
 ///|
 /// All eight directional modes signal angle_delta for BLOCK indices >=
 /// BLOCK_8X8, including 4x16/16x4. Smaller indices and nondirectional modes
@@ -824,6 +851,65 @@ fn av1_intra_residuals(
 }
 
 ///|
+/// Palette maps precede transform-size and coefficient syntax, even for
+/// skipped transforms. Entropy covers the coded MI rectangle; map padding
+/// extends the final decoded column/row without reading additional symbols.
+fn av1_intra_palette_maps(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  block : Av1SbBlock,
+) -> Bool {
+  state.palette_y_map = []
+  state.palette_uv_map = []
+  let luma_cols = if block.width < state.cols * 4 - block.col {
+    block.width
+  } else {
+    state.cols * 4 - block.col
+  }
+  let luma_rows = if block.height < state.rows * 4 - block.row {
+    block.height
+  } else {
+    state.rows * 4 - block.row
+  }
+  for plane in 0..<2 {
+    let colors = if plane == 0 {
+      state.palette.y_colors
+    } else {
+      state.palette.u_colors
+    }
+    if colors.is_empty() {
+      continue
+    }
+    let divisor = if plane == 0 { 1 } else { 2 }
+    // A chroma-owning four-pixel axis includes the paired luma block.
+    let extra_cols = if plane != 0 && block.width < 8 { 2 } else { 0 }
+    let extra_rows = if plane != 0 && block.height < 8 { 2 } else { 0 }
+    let indices = match
+      av1_palette_decode_index_map(
+        decoder,
+        colors.length(),
+        block.width / divisor + extra_cols,
+        block.height / divisor + extra_rows,
+        luma_rows / divisor + extra_rows,
+        luma_cols / divisor + extra_cols,
+        if plane == 0 {
+          state.palette.y_index[colors.length() - 2]
+        } else {
+          state.palette.uv_index[colors.length() - 2]
+        },
+      ) {
+      Some(value) => value
+      None => return false
+    }
+    if plane == 0 {
+      state.palette_y_map = indices
+    } else {
+      state.palette_uv_map = indices
+    }
+  }
+  true
+}
+///|
 fn av1_intra_block(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
@@ -907,25 +993,21 @@ fn av1_intra_block(
     }
     mode
   }
-  if state.allow_screen_content_tools &&
-    block_index >= 3 &&
-    block.width <= 64 &&
-    block.height <= 64 {
-    let palette_context = av1_msac_floor_log2(block.width / 4) +
-      av1_msac_floor_log2(block.height / 4) -
-      2
-    if y_mode == AV1_INTRA_DC &&
-      decoder.symbol(state.palette_y[palette_context]) != 0 {
-      return false
-    }
-    if has_chroma &&
-      uv_mode == AV1_INTRA_DC &&
-      decoder.symbol(state.palette_uv) != 0 {
-      return false
-    }
+  if !av1_palette_read_colors(
+      decoder,
+      state.palette,
+      block,
+      state.bit_depth,
+      y_mode,
+      uv_mode,
+      has_chroma,
+      state.allow_screen_content_tools,
+    ) {
+    return false
   }
   if state.enable_filter_intra &&
     y_mode == AV1_INTRA_DC &&
+    state.palette.y_colors.is_empty() &&
     block.width <= 32 &&
     block.height <= 32 {
     match decoder.symbol(state.filter_intra[block_index]) {
@@ -939,6 +1021,9 @@ fn av1_intra_block(
       }
       _ => return false
     }
+  }
+  if !av1_intra_palette_maps(decoder, state, block) {
+    return false
   }
   let root : Av1TxNode = {
     row: block.row,
@@ -999,7 +1084,6 @@ fn av1_intra_block(
   )
   decoder.symbol_max_bits >= -14
 }
-
 ///|
 fn av1_intra_crop(
   plane : Av1IntraPlane,

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added native 8/10/12-bit AV1 palette decoding, including all 2–8-color
+  probabilities, direct-MI neighbor caches, signed V deltas, diagonal index
+  traversal and coded-edge padding. Palette predictions retain ordinary
+  transform residuals, CfL and filter-intra syntax gates.
+- Verified palette colors with 21 entropy transcripts and indices with 1,365
+  original-C contexts and 112 complete maps. Twenty-one independently decoded
+  full streams cover cache resets inside 128-pixel superblocks, chroma owners,
+  palette/FI/CfL combinations and transform selection with nonzero AC.
+
 - Added all five filter-intra modes at native 8/10/12-bit precision, with shared
   mode probabilities, per-transform prediction and ordinary residual/CfL
   reconstruction. Skipped and lossless blocks retain their filter syntax;

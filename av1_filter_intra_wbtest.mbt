@@ -79,7 +79,7 @@ test "filter intra use syntax follows sequence mode size and lossless gates" {
 }
 
 ///|
-test "filter intra is not read after an unsupported luma palette" {
+test "filter intra syntax is absent for a decoded luma palette" {
   let state = av1_intra_state(
     8,
     8,
@@ -92,20 +92,37 @@ test "filter intra is not read after an unsupported luma palette" {
     monochrome=true,
   )
   state.filter_intra_mode = 4
-  // skip1, DC, palette1, then 101. Palette rejection happens before FI syntax.
+  // skip1, DC, palette2 [24,224], full 8x8 map, then 101.
+  // Generated and replayed using PaletteConstruction.block/PaletteTrace.block
+  // from scripts/generate-av1-palette-reference.py; no FI use bit is present.
   let decoder = av1_msac_new(
-    av1_filter_intra_test_payload([b'\xfb', b'\x7e']),
+    av1_filter_intra_test_payload([
+      b'\xfb', b'\x68', b'\x30', b'\xf2', b'\xa4', b'\xef', b'\xff', b'\xf9', b'\xa6',
+      b'\x29', b'\x8c', b'\xff', b'\xd6',
+    ]),
     true,
   )
-  assert_false(
+  assert_true(
     av1_intra_block(decoder, state, { row: 0, col: 0, width: 8, height: 8, }),
+  )
+  assert_eq(state.palette.y_colors, [24, 224])
+  assert_eq(
+    state.planes[0].pixels,
+    Array::makei(64, i => {
+      let x = i % 8
+      let y = i / 8
+      if (x * 3 + y * 5 + x / 3 * (y / 2)) % 2 == 0 {
+        24
+      } else {
+        224
+      }
+    }),
   )
   assert_eq(state.filter_intra_mode, -1)
   assert_eq(state.filter_intra_mode_cdf[5], 0)
   assert_eq(state.filter_intra[3][2], 0)
   assert_eq([decoder.bool(), decoder.bool(), decoder.bool()], [1, 0, 1])
 }
-
 ///|
 test "filter intra remaps only luma transform CDF context" {
   let encoded = [b'\x4c', b'\x34', b'\x2a', b'\x1e', b'\x4c']

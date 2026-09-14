@@ -182,8 +182,8 @@ test "four-axis owner mode syntax retains filter palette lossless and SELECT gat
         av1_intra_block(decoder, state, { row: y, col: x, width, height, }),
       )
       assert_eq(state.filter_intra[index][2], 1)
-      assert_eq(state.palette_y[0][2], if index >= 3 { 1 } else { 0 })
-      assert_eq(state.palette_uv[2], if index >= 3 { 1 } else { 0 })
+      assert_eq(state.palette.y_mode[0][0][2], if index >= 3 { 1 } else { 0 })
+      assert_eq(state.palette.uv_mode[0][2], if index >= 3 { 1 } else { 0 })
       let cfl_allowed = q != 0 || (width <= 8 && height <= 8)
       let cfl = state.uv_cfl[0]
       let no_cfl = state.uv_no_cfl[0]

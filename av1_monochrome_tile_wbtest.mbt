@@ -87,9 +87,9 @@ test "monochrome skipped blocks omit UV syntax and retain luma syntax" {
     assert_eq(state.y_modes, Array::make(side / 4 * (side / 4), AV1_INTRA_DC))
     assert_eq(state.uv_cfl, av1_intra_uv_mode_cdfs(true))
     assert_eq(state.uv_no_cfl, av1_intra_uv_mode_cdfs(false))
-    assert_eq(state.palette_uv, [32461, 32768, 0])
+    assert_eq(state.palette.uv_mode, [[32461, 32768, 0], [21488, 32768, 0]])
     let palette_context = 2 * av1_msac_floor_log2(side / 4) - 2
-    assert_eq(state.palette_y[palette_context][2], 1)
+    assert_eq(state.palette.y_mode[palette_context][0][2], 1)
     if side <= 32 {
       let block_index = av1_intra_block_index(side, side).unwrap()
       assert_eq(state.filter_intra[block_index][2], 1)
@@ -97,7 +97,6 @@ test "monochrome skipped blocks omit UV syntax and retain luma syntax" {
     assert_eq([decoder.bool(), decoder.bool(), decoder.bool()], [1, 0, 1])
   }
 }
-
 ///|
 fn av1_monochrome_test_tile(
   cdef : Av1CdefConfig?,

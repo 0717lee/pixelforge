@@ -54,9 +54,9 @@ test "128-axis blocks cap transforms and omit palette syntax with screen tools" 
           select,
           monochrome~,
         )
-        let palette_before : Array[Array[Int]] = []
-        for row in state.palette_y {
-          palette_before.push(row.copy())
+        let palette_before : Array[Array[Array[Int]]] = []
+        for row in state.palette.y_mode {
+          palette_before.push(row.map(cdf => cdf.copy()))
         }
         let filter_before : Array[Array[Int]] = []
         for row in state.filter_intra {
@@ -78,8 +78,8 @@ test "128-axis blocks cap transforms and omit palette syntax with screen tools" 
         for plane in state.planes {
           assert_eq(plane.pixels, Array::make(plane.width * plane.height, 128))
         }
-        assert_eq(state.palette_y, palette_before)
-        assert_eq(state.palette_uv, [32461, 32768, 0])
+        assert_eq(state.palette.y_mode, palette_before)
+        assert_eq(state.palette.uv_mode, [[32461, 32768, 0], [21488, 32768, 0]])
         assert_eq(state.filter_intra, filter_before)
         assert_eq(state.tx_depth.cdf64[0][3], if select { 1 } else { 0 })
         assert_eq([decoder.bool(), decoder.bool(), decoder.bool()], [1, 0, 1])
@@ -87,7 +87,6 @@ test "128-axis blocks cap transforms and omit palette syntax with screen tools" 
     }
   }
 }
-
 ///|
 test "128-axis residual chunks retain full coding-plane skip contexts" {
   // Per chunk: Y64 all_zero(ctx1)=1, U32/V32 all_zero(ctx10)=1.

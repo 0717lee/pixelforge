@@ -1,0 +1,517 @@
+{
+  "scope": "exactly two palette/CfL and palette/filter-intra interlocks with SELECT depth1 and six nonzero-AC transforms each",
+  "dav1d_cli_version": "1.2.1",
+  "scalar_libavif_version": "0.11.1",
+  "candidate_limit": 2,
+  "candidate_count": 2,
+  "fixtures": [
+    {
+      "name": "interlock_10bit_select_y_palette_uv_cfl",
+      "dimensions": [
+        16,
+        16
+      ],
+      "bit_depth": 10,
+      "sequence_color": {
+        "full_range": true,
+        "matrix_coefficients": 2
+      },
+      "native_pixel_format": "yuv420p10le",
+      "native_cli_matches_ffmpeg": true,
+      "avif_native_matches_obu": true,
+      "ffmpeg_libdav1d": "1.5.4-0-g54706fc6",
+      "native_plane_ranges": [
+        [
+          63,
+          962
+        ],
+        [
+          271,
+          783
+        ],
+        [
+          277,
+          778
+        ]
+      ],
+      "rgba_assertion_contract": "existing av1_yuv420_highbd_to_rgba from exact native planes and decoded range/matrix; nearest420 entry propagation",
+      "vendor_rgb_parity_asserted": false,
+      "scalar_rgba_conversion": "actual avifImageYUVToRGB depth8 avoidLibYUV=1",
+      "raw_ffmpeg_vs_scalar_differing_bytes": 664,
+      "commands": {
+        "decode_native": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.obu",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "yuv420p10le",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.reference.yuv"
+        ],
+        "dav1d_cli": [
+          "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE",
+          "--quiet",
+          "--input",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.obu",
+          "--demuxer",
+          "section5",
+          "--muxer",
+          "yuv",
+          "--output",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.cli.yuv",
+          "--limit",
+          "1"
+        ],
+        "wrap_avif": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.obu",
+          "-c",
+          "copy",
+          "-frames:v",
+          "1",
+          "-f",
+          "avif",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.avif"
+        ],
+        "decode_avif_native": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.avif",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "yuv420p10le",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.avif.native.yuv"
+        ],
+        "decode_raw_rgba": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.obu",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "rgba",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.raw_ffmpeg.rgba"
+        ],
+        "trace_headers": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_y_palette_uv_cfl.obu",
+          "-c",
+          "copy",
+          "-bsf:v",
+          "trace_headers",
+          "-f",
+          "null",
+          "-"
+        ]
+      },
+      "obu_file": "interlock_10bit_select_y_palette_uv_cfl.obu",
+      "obu_sha256": "2aafff75b0977ec57fb1a721c9b7205e12a9548cfea34925122aed6959b30e1c",
+      "avif_file": "interlock_10bit_select_y_palette_uv_cfl.avif",
+      "avif_sha256": "f8ed9d655e219d408e431e3fd8550f282cfe506f84449aa83fed2e3167f94476",
+      "reference_file": "interlock_10bit_select_y_palette_uv_cfl.reference.yuv",
+      "reference_sha256": "ec9183efc730b87b7e2512cd62d39cc3ccd9c8ff2bec1084a1989ad6197d2f54",
+      "rgba_reference_file": "interlock_10bit_select_y_palette_uv_cfl.scalar_libavif.rgba",
+      "rgba_reference_sha256": "3c42ec125d8b7f122057bc71afb510c8fe07b2da2149d779072fc64428b7abe8",
+      "raw_rgba_file": "interlock_10bit_select_y_palette_uv_cfl.raw_ffmpeg.rgba",
+      "raw_rgba_sha256": "3eddaed3243b28ccf210738e3fd9abd941c31a990f78836642f53ca5c8593872",
+      "monochrome": false,
+      "kind": "y_palette_uv_cfl",
+      "provenance": "complete deterministic normative header and entropy construction, not encoder output or a payload patch",
+      "header": {
+        "base_q_idx": 120,
+        "enable_filter_intra": 1,
+        "allow_screen_content_tools": 1,
+        "tx_mode": 2,
+        "mono_chrome": 0,
+        "color_range": 1,
+        "disable_cdf_update": 0,
+        "allow_intrabc": 0,
+        "enable_cdef": 0,
+        "enable_restoration": 0
+      },
+      "trace_complete": true,
+      "syntax_summary": {
+        "uv_mode": 13,
+        "cfl_alphas": [
+          8,
+          -8
+        ],
+        "filter_intra_mode": null,
+        "luma_tx_cdf_mode": 0,
+        "tx_depth": 1,
+        "symbols_before_tx_depth": 297,
+        "entropy_end": {
+          "symbols": 356,
+          "physical_bit_position": 432,
+          "symbol_max_bits": -11,
+          "trailing_bit_position": 428,
+          "tile_bits": 432
+        }
+      },
+      "palette_sizes": [
+        3,
+        0
+      ],
+      "all_six_transforms_eob": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "native_residual_evidence": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 50,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            0
+          ],
+          "unique_native_samples": 49,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        },
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            8
+          ],
+          "unique_native_samples": 53,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            8
+          ],
+          "unique_native_samples": 55,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        },
+        {
+          "plane": 1,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 50
+        },
+        {
+          "plane": 2,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 50
+        }
+      ],
+      "arithmetic_roundtrip_symbols": 356,
+      "header_file": "interlock_10bit_select_y_palette_uv_cfl.header.txt",
+      "header_sha256": "b700454445496dd17617d944c4c5fd046aa9ffb3ffa2e03b27f6a9e403428e73",
+      "entropy_file": "interlock_10bit_select_y_palette_uv_cfl.entropy.json",
+      "entropy_sha256": "6be04ad75eb9cafa59f83367962d974dde208750853b42352b8366d02dac6ed0"
+    },
+    {
+      "name": "interlock_10bit_select_uv_palette_y_filter_intra",
+      "dimensions": [
+        16,
+        16
+      ],
+      "bit_depth": 10,
+      "sequence_color": {
+        "full_range": true,
+        "matrix_coefficients": 2
+      },
+      "native_pixel_format": "yuv420p10le",
+      "native_cli_matches_ffmpeg": true,
+      "avif_native_matches_obu": true,
+      "ffmpeg_libdav1d": "1.5.4-0-g54706fc6",
+      "native_plane_ranges": [
+        [
+          460,
+          596
+        ],
+        [
+          95,
+          914
+        ],
+        [
+          59,
+          966
+        ]
+      ],
+      "rgba_assertion_contract": "existing av1_yuv420_highbd_to_rgba from exact native planes and decoded range/matrix; nearest420 entry propagation",
+      "vendor_rgb_parity_asserted": false,
+      "scalar_rgba_conversion": "actual avifImageYUVToRGB depth8 avoidLibYUV=1",
+      "raw_ffmpeg_vs_scalar_differing_bytes": 657,
+      "commands": {
+        "decode_native": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.obu",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "yuv420p10le",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.reference.yuv"
+        ],
+        "dav1d_cli": [
+          "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE",
+          "--quiet",
+          "--input",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.obu",
+          "--demuxer",
+          "section5",
+          "--muxer",
+          "yuv",
+          "--output",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.cli.yuv",
+          "--limit",
+          "1"
+        ],
+        "wrap_avif": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.obu",
+          "-c",
+          "copy",
+          "-frames:v",
+          "1",
+          "-f",
+          "avif",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.avif"
+        ],
+        "decode_avif_native": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.avif",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "yuv420p10le",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.avif.native.yuv"
+        ],
+        "decode_raw_rgba": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-loglevel",
+          "verbose",
+          "-xerror",
+          "-y",
+          "-c:v",
+          "libdav1d",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.obu",
+          "-frames:v",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "rgba",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.raw_ffmpeg.rgba"
+        ],
+        "trace_headers": [
+          "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.EXE",
+          "-hide_banner",
+          "-i",
+          "tests\\fixtures\\av1-palette\\interlock_10bit_select_uv_palette_y_filter_intra.obu",
+          "-c",
+          "copy",
+          "-bsf:v",
+          "trace_headers",
+          "-f",
+          "null",
+          "-"
+        ]
+      },
+      "obu_file": "interlock_10bit_select_uv_palette_y_filter_intra.obu",
+      "obu_sha256": "b7315f995e2dc3250d62f2818a94302ff3f4cb4d24c955ce813bd3f46bbc85d8",
+      "avif_file": "interlock_10bit_select_uv_palette_y_filter_intra.avif",
+      "avif_sha256": "a5ac315d92421755862580db654f901011a26be8f9e61ac1e2f4e8c2b63adda8",
+      "reference_file": "interlock_10bit_select_uv_palette_y_filter_intra.reference.yuv",
+      "reference_sha256": "5c3a2459acfcae36b4b94f426cade3c70ecaacda2b9dac41aa2363a674ec3dab",
+      "rgba_reference_file": "interlock_10bit_select_uv_palette_y_filter_intra.scalar_libavif.rgba",
+      "rgba_reference_sha256": "f62c3ca40b949c78e9d775209c4237698e590ee407552bbd6957d5613a94f4a5",
+      "raw_rgba_file": "interlock_10bit_select_uv_palette_y_filter_intra.raw_ffmpeg.rgba",
+      "raw_rgba_sha256": "ea094c4a6f6d25b601253c4d2ff8abb557ebda9ee0c367ee2f94bd719e331619",
+      "monochrome": false,
+      "kind": "uv_palette_y_filter_intra",
+      "provenance": "complete deterministic normative header and entropy construction, not encoder output or a payload patch",
+      "header": {
+        "base_q_idx": 120,
+        "enable_filter_intra": 1,
+        "allow_screen_content_tools": 1,
+        "tx_mode": 2,
+        "mono_chrome": 0,
+        "color_range": 1,
+        "disable_cdf_update": 0,
+        "allow_intrabc": 0,
+        "enable_cdef": 0,
+        "enable_restoration": 0
+      },
+      "trace_complete": true,
+      "syntax_summary": {
+        "uv_mode": 0,
+        "cfl_alphas": [],
+        "filter_intra_mode": 3,
+        "luma_tx_cdf_mode": 6,
+        "tx_depth": 1,
+        "symbols_before_tx_depth": 136,
+        "entropy_end": {
+          "symbols": 195,
+          "physical_bit_position": 280,
+          "symbol_max_bits": -10,
+          "trailing_bit_position": 275,
+          "tile_bits": 280
+        }
+      },
+      "palette_sizes": [
+        0,
+        3
+      ],
+      "all_six_transforms_eob": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "native_residual_evidence": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 51
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            0
+          ],
+          "unique_native_samples": 46
+        },
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            8
+          ],
+          "unique_native_samples": 50
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            8
+          ],
+          "unique_native_samples": 56
+        },
+        {
+          "plane": 1,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 50,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        },
+        {
+          "plane": 2,
+          "origin": [
+            0,
+            0
+          ],
+          "unique_native_samples": 50,
+          "unique_palette_residual_values": 33,
+          "nonzero_palette_residual_samples": 64
+        }
+      ],
+      "arithmetic_roundtrip_symbols": 195,
+      "header_file": "interlock_10bit_select_uv_palette_y_filter_intra.header.txt",
+      "header_sha256": "b8915cd536268d5ff89fb7fecd7cb6ac9ee06c90612951d41497fe39dfa962b5",
+      "entropy_file": "interlock_10bit_select_uv_palette_y_filter_intra.entropy.json",
+      "entropy_sha256": "105e4b8ab5951b46409a4b741271c9385d9f67722a4cc6108eb4677c9f245da7"
+    }
+  ],
+  "syntax_order": "Y/UV modes and CfL alpha, palette colors, eligible filter-intra flag/mode, complete Y/UV palette maps, SELECT tx_depth, transform coefficients",
+  "gate_evidence": "Y palette suppresses FI syntax even with enable_filter_intra=1; UV palette does not suppress Y FI mode3; palette does not suppress luma tx_type syntax",
+  "oracle": "full independently derived semantic syntax trace reaches legal trailing bits; unmodified two dav1d builds and AVIF remux supply canonical native pixels",
+  "generated_test": "_refs\\av1_palette_interlock_reference_wbtest.mbt",
+  "generated_test_sha256": "f3881b1501eb9344b96f46ba2fd57aaced7a26c4caa2dfe399275ca3e0e064fc"
+}

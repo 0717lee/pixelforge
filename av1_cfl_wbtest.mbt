@@ -241,8 +241,8 @@ test "CfL UV mode reads alphas before luma palette and skips UV palette angle" {
       assert_eq(state.cfl.sign[8], 1)
       assert_eq(state.cfl.alpha[2][16], 1)
       assert_eq(state.cfl.alpha[4][16], 1)
-      assert_eq(state.palette_y[0][2], 1)
-      assert_eq(state.palette_uv[2], 0)
+      assert_eq(state.palette.y_mode[0][0][2], 1)
+      assert_eq(state.palette.uv_mode[0][2], 0)
       assert_eq(state.angle_delta, av1_intra_angle_cdfs())
       assert_eq(state.filter_intra[3][2], 1)
       for plane in state.planes {

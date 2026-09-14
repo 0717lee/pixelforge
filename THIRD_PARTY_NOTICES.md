@@ -6,7 +6,8 @@ The AV1 CfL prediction and probability defaults in `av1_cfl.mbt`, directional
 prediction in `av1_directional_predict.mbt`, and reference-availability tables
 and rules in `av1_intra_edges.mbt`, and the deblocking kernels and traversal in
 `av1_loop_filter.mbt` and `av1_loop_filter_frame.mbt`, and filter-intra prediction
-in `av1_filter_intra.mbt` are transcribed from libaom at revision
+in `av1_filter_intra.mbt`, and palette syntax and probability tables in
+`av1_palette.mbt` and `av1_palette_index.mbt` are transcribed from libaom at revision
 `8e7b6a567df174d795479b92b4ac766d271add73`. The original source is available
 at <https://aomedia.googlesource.com/aom/>. It uses the following BSD 2-Clause
 License and the [Alliance for Open Media Patent License 1.0](https://www.aomedia.org/license/patent).
