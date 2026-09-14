@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Shared the native-depth intra traversal and CDEF path with monochrome images
+  and auxiliary alpha, including AC, lossless WHT, multiple tiles and supported
+  predictors. Removed the old size-limited single-DC alpha probes.
+- Added nine original monochrome libaom/dav1d cases and three real-item alpha
+  containers. Native Y is compared before conversion; grayscale and alpha use
+  actual scalar libavif references, including full-depth lossless ramps.
+- Converted high-bit-depth alpha with rounded UNORM scaling, preserving small
+  coverage values and both endpoints. Monochrome RGB also respects full and
+  limited sample ranges.
+- Required AVIF configuration bit depth and monochrome flags to agree with the
+  AV1 sequence header before accepting the stage input.
+- Routed CLI AVIF conversion through alpha composition. Native AVIF-to-PNG
+  checks at 8/10/12 bits preserve every alpha sample and the primary RGB pixels.
+
 - Replaced speculative single-block tile probes with a shared MSAC traversal
   that decodes modes and residuals in partition order across superblocks.
   Supported coding blocks span 8..64 pixels per axis, including rectangles.
@@ -33,7 +47,7 @@
 - Added eight original CDEF-on libaom/dav1d cases at 8/10/12 bits, with exact
   YUV, raw OBU RGBA and remuxed AVIF RGBA comparisons. Same-stream CDEF-disabled
   references confirm actual filter changes, including both tile seam directions
-  and an odd-sized frame. The legacy alpha path rejects active CDEF syntax.
+  and an odd-sized frame.
 - Corrected monochrome quantizer and restoration field counts, preserving
   frame-header alignment and independently verified zero-CDEF alpha streams.
 - Corrected frame-OBU alignment and little-endian multi-byte tile lengths.

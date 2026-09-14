@@ -49,6 +49,7 @@ priv struct Av1IntraState {
   planes : Array[Av1IntraPlane]
   base_q_idx : Int
   bit_depth : Int
+  monochrome : Bool
   reduced_tx_set : Bool
   allow_screen_content_tools : Bool
   enable_filter_intra : Bool
@@ -68,6 +69,7 @@ fn av1_intra_state(
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
+  monochrome? : Bool = false,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -80,6 +82,11 @@ fn av1_intra_state(
   let palette_y : Array[Array[Int]] = []
   for probability in [31676, 31912, 31823, 32030, 32309, 32265, 32450] {
     palette_y.push([probability, 32768, 0])
+  }
+  let planes = [av1_intra_plane(width, height, bit_depth)]
+  if !monochrome {
+    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth))
+    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth))
   }
   {
     cols: width / 4,
@@ -99,13 +106,10 @@ fn av1_intra_state(
     tables: av1_tx_ent_tables(base_q_idx),
     y_coeff: av1_coeff_context(base_q_idx, 0, 0),
     uv_coeff: av1_coeff_context(base_q_idx, 0, 1),
-    planes: [
-      av1_intra_plane(width, height, bit_depth),
-      av1_intra_plane(width / 2, height / 2, bit_depth),
-      av1_intra_plane(width / 2, height / 2, bit_depth),
-    ],
+    planes,
     base_q_idx,
     bit_depth,
+    monochrome,
     reduced_tx_set,
     allow_screen_content_tools,
     enable_filter_intra,
@@ -522,22 +526,29 @@ fn av1_intra_block(
   if !av1_intra_read_mode_angle(decoder, state, y_mode) {
     return false
   }
-  // is_cfl_allowed differs for lossless: only a 4x4 chroma residual block
-  // may use CfL, even when the luma coding block is below 32 pixels.
-  let cfl_allowed = if state.base_q_idx == 0 {
-    block.width == 8 && block.height == 8
+  // Monochrome streams contain no UV mode, angle or palette syntax. The
+  // placeholder mode is never consumed because there is only a luma plane.
+  let uv_mode = if state.monochrome {
+    AV1_INTRA_DC
   } else {
-    block.width <= 32 && block.height <= 32
-  }
-  let uv_mode = decoder.symbol(
-    if cfl_allowed {
-      state.uv_cfl[y_mode]
+    // is_cfl_allowed differs for lossless: only a 4x4 chroma residual block
+    // may use CfL, even when the luma coding block is below 32 pixels.
+    let cfl_allowed = if state.base_q_idx == 0 {
+      block.width == 8 && block.height == 8
     } else {
-      state.uv_no_cfl[y_mode]
-    },
-  )
-  if !av1_intra_read_mode_angle(decoder, state, uv_mode) {
-    return false
+      block.width <= 32 && block.height <= 32
+    }
+    let mode = decoder.symbol(
+      if cfl_allowed {
+        state.uv_cfl[y_mode]
+      } else {
+        state.uv_no_cfl[y_mode]
+      },
+    )
+    if !av1_intra_read_mode_angle(decoder, state, mode) {
+      return false
+    }
+    mode
   }
   if state.allow_screen_content_tools {
     let palette_context = av1_msac_floor_log2(block.width / 4) +
@@ -547,7 +558,9 @@ fn av1_intra_block(
       decoder.symbol(state.palette_y[palette_context]) != 0 {
       return false
     }
-    if uv_mode == AV1_INTRA_DC && decoder.symbol(state.palette_uv) != 0 {
+    if !state.monochrome &&
+      uv_mode == AV1_INTRA_DC &&
+      decoder.symbol(state.palette_uv) != 0 {
       return false
     }
   }
@@ -601,7 +614,7 @@ fn av1_intra_block(
   }
   // Chroma's maximum transform is independent of the luma tx_depth.
   // Lossless uses 4x4 transforms on every plane.
-  for plane in 0..<3 {
+  for plane in 0..<state.planes.length() {
     let divisor = if plane == 0 { 1 } else { 2 }
     let width = block.width / divisor
     let height = block.height / divisor
@@ -691,6 +704,7 @@ fn av1_decode_intra_tile_state(
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
+  monochrome? : Bool = false,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -704,7 +718,7 @@ fn av1_decode_intra_tile_state(
   }
   match cdef {
     Some(config) =>
-      if base_q_idx == 0 || !av1_cdef_config_valid(config) {
+      if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
         return None
       }
     None => ()
@@ -724,6 +738,7 @@ fn av1_decode_intra_tile_state(
     enable_filter_intra,
     tx_mode_select,
     cdef~,
+    monochrome~,
   )
   let neighbors = match
     av1_partition_neighbor_state(

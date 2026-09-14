@@ -61,7 +61,7 @@ fn av1_cdef_alpha_test_header(stream : Array[Byte]) -> Av1FrameHeaderInfo {
 }
 
 ///|
-test "legacy alpha preserves CDEF disabled and zero-strength single-entry frames" {
+test "alpha preserves CDEF disabled and zero-strength single-entry frames" {
   let original : Array[Byte] = [
     b'\x12', b'\x00', b'\x0a', b'\x06', b'\x18', b'\x15', b'\x7f', b'\xfe', b'\x04',
     b'\x40', b'\x32', b'\x06', b'\x15', b'\x00', b'\x00', b'\x01', b'\x00', b'\x44',
@@ -103,7 +103,7 @@ test "legacy alpha preserves CDEF disabled and zero-strength single-entry frames
 }
 
 ///|
-test "legacy alpha rejects CDEF index syntax even with zero-strength tables" {
+test "alpha rejects missing CDEF index entropy even with zero-strength tables" {
   for bits in 1..<4 {
     let stream = av1_cdef_alpha_test_stream(bits, 0, 0, 3)
     let frame = av1_cdef_alpha_test_header(stream)
@@ -112,8 +112,8 @@ test "legacy alpha rejects CDEF index syntax even with zero-strength tables" {
     assert_eq(config.bits, bits)
     assert_eq(config.y_primary.length(), 1 << bits)
     assert_eq(frame.tile_payload, [b'\x44'])
-    // The unchanged entropy remains acceptable to the old tile reader. The
-    // complete frame must be rejected because it now requires cdef_idx bits.
+    // The isolated entropy is valid without CDEF index syntax. With index
+    // bits required it is truncated; libdav1d independently rejects all three.
     assert_eq(
       av1_decode_alpha_tile(64, 64, frame.tile_payload, frame.base_q_idx)
       .unwrap()
@@ -125,7 +125,7 @@ test "legacy alpha rejects CDEF index syntax even with zero-strength tables" {
 }
 
 ///|
-test "legacy alpha rejects primary or secondary CDEF filtering requests" {
+test "alpha decodes primary and secondary CDEF strengths on a constant plane" {
   for strengths in [(1, 0), (0, 1), (0, 2), (0, 3), (15, 3)] {
     let (primary, secondary_code) = strengths
     let stream = av1_cdef_alpha_test_stream(0, primary, secondary_code, 4)
@@ -141,6 +141,12 @@ test "legacy alpha rejects primary or secondary CDEF filtering requests" {
       },
     ])
     assert_eq(frame.tile_payload, [b'\x44'])
-    assert_true(av1_decode_alpha(stream) is None)
+    // These five streams were independently decoded by libdav1d: all
+    // 4096 samples remain 128 because every reconstructed neighbour agrees.
+    let alpha = av1_decode_alpha(stream).unwrap()
+    assert_eq(alpha.length(), 4096)
+    for value in alpha {
+      assert_eq(value, b'\x80')
+    }
   }
 }

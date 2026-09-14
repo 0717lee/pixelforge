@@ -328,6 +328,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
   cdef? : Av1CdefConfig? = None,
+  monochrome? : Bool = false,
 ) -> Image? {
   if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
     return None
@@ -344,9 +345,24 @@ pub fn av1_decode_tile_group_with_boundaries(
   }
   let frame = match
     av1_decode_tile_planes(
-      width, height, cols, rows, tile_payload, tile_size_bytes, base_q_idx, disable_cdf_update,
-      allow_screen_content_tools, full_range, matrix_coefficients, use_128x128_superblock,
-      bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select, cdef,
+      width,
+      height,
+      cols,
+      rows,
+      tile_payload,
+      tile_size_bytes,
+      base_q_idx,
+      disable_cdf_update,
+      allow_screen_content_tools,
+      full_range,
+      matrix_coefficients,
+      use_128x128_superblock,
+      bit_depth,
+      reduced_tx_set,
+      enable_filter_intra,
+      tx_mode_select,
+      cdef,
+      monochrome~,
     ) {
     Some(value) => value
     None => return None
@@ -357,7 +373,7 @@ pub fn av1_decode_tile_group_with_boundaries(
 /// Decode a reduced-still AV1 OBU stream through the supported intra syntax,
 /// native-depth frame filters and final color conversion.
 pub fn av1_decode(data : Array[Byte]) -> Image? {
-  match av1_decode_frame_planes(data) {
+  match av1_decode_frame_planes(data, allow_monochrome=true) {
     Some(frame) => av1_frame_to_rgba(frame)
     None => None
   }
@@ -395,6 +411,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         reduced_tx_set=value.reduced_tx_set,
         enable_filter_intra=value.enable_filter_intra,
         cdef=value.cdef,
+        monochrome=value.monochrome,
       )
   }
 }

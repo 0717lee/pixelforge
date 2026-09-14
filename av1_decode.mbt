@@ -49,6 +49,7 @@ pub(all) struct Av1Stage1Input {
   width : Int
   height : Int
   bit_depth : Int
+  monochrome : Bool
   header_bytes : Int
   base_q_idx : Int
   disable_cdf_update : Bool
@@ -590,13 +591,13 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         Some(value) => value
       }
       if (c.bit_depth != 8 && c.bit_depth != 10 && c.bit_depth != 12) ||
-        c.monochrome ||
-        !c.yuv420 {
+        c.bit_depth != seq.bit_depth || c.monochrome != seq.monochrome ||
+        (!c.monochrome && !c.yuv420) {
         return None
       }
       if c.width != seq.width ||
         c.height != seq.height ||
-        (
+        (!seq.monochrome &&
           seq.matrix_coefficients != 1 &&
           seq.matrix_coefficients != 2 &&
           seq.matrix_coefficients != 5 &&
@@ -608,7 +609,9 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       if frames.length() == 0 {
         return None
       }
-      let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
+      let header = av1_parse_stage1_frame(
+        frames[0], seq, allow_monochrome=true, allow_highbd=true,
+      )
       match header {
         None => None
         Some(frame) =>
@@ -616,6 +619,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             width: c.width,
             height: c.height,
             bit_depth: c.bit_depth,
+            monochrome: seq.monochrome,
             header_bytes: frame.header_bytes,
             base_q_idx: frame.base_q_idx,
             disable_cdf_update: frame.disable_cdf_update,

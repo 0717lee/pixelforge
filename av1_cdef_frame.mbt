@@ -90,7 +90,7 @@ fn av1_cdef_adjust_strength(strength : Int, variance : Int) -> Int {
 }
 
 ///|
-/// Filter reconstructed, MI-padded 4:2:0 planes before visible-frame cropping.
+/// Filter MI-padded monochrome or 4:2:0 planes before visible-frame cropping.
 /// Skip flags use the luma 4x4 grid; indices use the frame's 64x64 grid.
 fn av1_cdef_filter_frame(
   width : Int,
@@ -101,14 +101,15 @@ fn av1_cdef_filter_frame(
   config : Av1CdefConfig,
   bit_depth : Int,
 ) -> Array[Array[Int]]? {
+  let monochrome = planes.length() == 1
   if width <= 0 ||
     height <= 0 ||
     width % 8 != 0 ||
     height % 8 != 0 ||
     width > MAX_IMAGE_PIXELS / height ||
-    planes.length() != 3 ||
+    (!monochrome && planes.length() != 3) ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
-    !av1_cdef_config_valid(config) {
+    !av1_cdef_config_valid(config, monochrome~) {
     return None
   }
   let mi_cols = width / 4
@@ -130,7 +131,7 @@ fn av1_cdef_filter_frame(
     }
   }
   let maximum = (1 << bit_depth) - 1
-  for plane_index in 0..<3 {
+  for plane_index in 0..<planes.length() {
     let divisor = if plane_index == 0 { 1 } else { 2 }
     if planes[plane_index].length() != width / divisor * (height / divisor) {
       return None
@@ -162,7 +163,9 @@ fn av1_cdef_filter_frame(
         skips[mi + mi_cols + 1] == 1
       if index == -1 || all_skip {
         y_params.push(disabled)
-        uv_params.push(disabled)
+        if !monochrome {
+          uv_params.push(disabled)
+        }
         continue
       }
       let (direction, variance) = av1_cdef_find_direction(
@@ -173,7 +176,6 @@ fn av1_cdef_filter_frame(
         bit_depth,
       )
       let primary_y = config.y_primary[index] << shift
-      let primary_uv = config.uv_primary[index] << shift
       y_params.push({
         primary_strength: av1_cdef_adjust_strength(primary_y, variance),
         secondary_strength: config.y_secondary[index] << shift,
@@ -184,27 +186,34 @@ fn av1_cdef_filter_frame(
           direction
         },
       })
-      uv_params.push({
-        primary_strength: primary_uv,
-        secondary_strength: config.uv_secondary[index] << shift,
-        damping: config.damping + shift - 1,
-        direction: if primary_uv == 0 {
-          0
-        } else {
-          direction
-        },
-      })
+      if !monochrome {
+        let primary_uv = config.uv_primary[index] << shift
+        uv_params.push({
+          primary_strength: primary_uv,
+          secondary_strength: config.uv_secondary[index] << shift,
+          damping: config.damping + shift - 1,
+          direction: if primary_uv == 0 {
+            0
+          } else {
+            direction
+          },
+        })
+      }
     }
   }
+  let filtered_y = av1_cdef_filter_native_blocks(
+    width,
+    height,
+    planes[0],
+    y_params,
+    bit_depth,
+    8,
+  )
+  if monochrome {
+    return Some([filtered_y])
+  }
   Some([
-    av1_cdef_filter_native_blocks(
-      width,
-      height,
-      planes[0],
-      y_params,
-      bit_depth,
-      8,
-    ),
+    filtered_y,
     av1_cdef_filter_native_blocks(
       width / 2,
       height / 2,

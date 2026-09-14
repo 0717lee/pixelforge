@@ -24,6 +24,29 @@ fn av1_frame_crop(frame : Av1FramePlanes, plane : Int) -> Array[Int] {
 
 ///|
 fn av1_frame_to_rgba(frame : Av1FramePlanes) -> Image? {
+  if frame.planes.length() == 1 {
+    let samples = av1_frame_crop(frame, 0)
+    let image = Image::new(frame.width, frame.height)
+    let shift = frame.bit_depth - 8
+    let black = if frame.full_range { 0 } else { 16 << shift }
+    let range = if frame.full_range {
+      (1 << frame.bit_depth) - 1
+    } else {
+      219 << shift
+    }
+    for i in 0..<samples.length() {
+      let gray = clamp_byte(((samples[i] - black) * 255 + range / 2) / range)
+      image.set_pixel(
+        i % frame.width,
+        i / frame.width,
+        gray,
+        gray,
+        gray,
+        b'\xFF',
+      )
+    }
+    return Some(image)
+  }
   av1_yuv420_highbd_to_rgba(
     frame.width,
     frame.height,
@@ -35,7 +58,6 @@ fn av1_frame_to_rgba(frame : Av1FramePlanes) -> Image? {
     matrix_coefficients=frame.matrix_coefficients,
   )
 }
-
 ///|
 /// Validate superblock boundaries before multiplying untrusted coordinates.
 /// The final boundary covers exactly the frame's superblock count; only its
@@ -119,6 +141,7 @@ fn av1_decode_tile_planes(
   enable_filter_intra : Bool,
   tx_mode_select : Bool,
   cdef : Av1CdefConfig?,
+  monochrome? : Bool = false,
 ) -> Av1FramePlanes? {
   if width <= 0 ||
     height <= 0 ||
@@ -129,7 +152,7 @@ fn av1_decode_tile_planes(
     return None
   }
   if cdef is Some(config) {
-    if base_q_idx == 0 || !av1_cdef_config_valid(config) {
+    if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
       return None
     }
   }
@@ -148,11 +171,11 @@ fn av1_decode_tile_planes(
     Some(value) => value
     None => return None
   }
-  let planes : Array[Array[Int]] = [
-    Array::make(coded_width * coded_height, 0),
-    Array::make(coded_width / 2 * (coded_height / 2), 0),
-    Array::make(coded_width / 2 * (coded_height / 2), 0),
-  ]
+  let planes : Array[Array[Int]] = [Array::make(coded_width * coded_height, 0)]
+  if !monochrome {
+    planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
+    planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
+  }
   let mi_cols = coded_width / 4
   let skips = Array::make(mi_cols * (coded_height / 4), 0)
   let cdef_cols = (coded_width + 63) / 64
@@ -176,11 +199,12 @@ fn av1_decode_tile_planes(
         enable_filter_intra,
         tx_mode_select,
         cdef~,
+        monochrome~,
       ) {
       Some(value) => value
       None => return None
     }
-    for p in 0..<3 {
+    for p in 0..<planes.length() {
       let divisor = if p == 0 { 1 } else { 2 }
       let source = state.planes[p]
       let stride = coded_width / divisor
@@ -229,14 +253,17 @@ fn av1_decode_tile_planes(
     planes: filtered,
   })
 }
-
 ///|
-fn av1_decode_frame_planes(data : Array[Byte]) -> Av1FramePlanes? {
+fn av1_decode_frame_planes(
+  data : Array[Byte],
+  allow_monochrome? : Bool = false,
+) -> Av1FramePlanes? {
   let seq = match av1_sequence_info(data) {
     Some(value) => value
     None => return None
   }
-  if seq.matrix_coefficients != 1 &&
+  if !seq.monochrome &&
+    seq.matrix_coefficients != 1 &&
     seq.matrix_coefficients != 2 &&
     seq.matrix_coefficients != 5 &&
     seq.matrix_coefficients != 6 {
@@ -246,7 +273,8 @@ fn av1_decode_frame_planes(data : Array[Byte]) -> Av1FramePlanes? {
   if frames.length() == 0 {
     return None
   }
-  let frame = match av1_parse_stage1_frame(frames[0], seq, allow_highbd=true) {
+  let frame = match
+    av1_parse_stage1_frame(frames[0], seq, allow_highbd=true, allow_monochrome~) {
     Some(value) => value
     None => return None
   }
@@ -279,5 +307,6 @@ fn av1_decode_frame_planes(data : Array[Byte]) -> Av1FramePlanes? {
     seq.enable_filter_intra,
     frame.tx_mode_select,
     frame.cdef,
+    monochrome=seq.monochrome,
   )
 }
