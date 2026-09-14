@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Added CfL chroma prediction with shared adaptive sign/alpha probabilities,
+  full reconstructed luma TX storage in Q3, sub-eight-pixel ownership, padded
+  chroma footprints, signed rounding and prediction clipping before residuals.
+  Seventeen original libaom cases and seven constructed cases compare
+  complete native YUV and OBU/AVIF RGBA output at 8/10/12 bits.
+- Corrected HEIF grid payload syntax, primary-item selection, sized dimg
+  references and iloc/idat bounds. Automatic AVIF decoding now handles grids
+  with validated tile properties, chroma alignment, equal cells and crop bounds.
+  Fifteen actual libavif-decoded grids cover color/mono, all three depths,
+  ordered distinct tiles, wide fields and idat storage; malformed graph and
+  geometry regressions also exercise the public decode entry points.
+- Assembled grids in native Y/UV precision and enabled grid alpha auxiliaries,
+  including mixed av01/grid pairs. Grid metadata inherits validated cell
+  configuration, and alpha is normalized once after native plane composition.
+  Five actual libavif references cover three depths and both mixed layouts.
+- Added eight deterministic lossy small-rectangle streams with independently
+  decoded AC pixels in all four 4-axis rectangular transform geometries.
+
 - Added 4x4, 4x8, 8x4, 4x16 and 16x4 coding blocks, including normative
   sub-eight-pixel chroma ownership, mode syntax and transform traversal.
 - Added eight original libaom small-block cases and eight constructed lossless

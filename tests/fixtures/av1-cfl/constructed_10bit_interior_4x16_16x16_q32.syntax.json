@@ -1,0 +1,344 @@
+{
+  "provenance": "complete constructed q32 CfL rectangle syntax, not encoder output or patched entropy",
+  "dimensions": [
+    16,
+    16
+  ],
+  "bit_depth": 10,
+  "base_q_idx": 32,
+  "tx_mode": "LARGEST",
+  "target_coding_dimensions": [
+    4,
+    16
+  ],
+  "partition_node": 16,
+  "partition_symbol": 9,
+  "partition_name": "VERT_4",
+  "edge": false,
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "coding_dimensions": [
+        4,
+        16
+      ],
+      "has_chroma": false,
+      "uv_mode": null,
+      "alpha_numerators": null,
+      "luma_tx_size": [
+        4,
+        16
+      ],
+      "uv_tx_size": null,
+      "luma_tx_type": "DCT_DCT",
+      "luma_tx_type_symbol": 1,
+      "coefficients": {
+        "tx_size_context": 1,
+        "coefficient_q_context": 1,
+        "plane_type": 0,
+        "eob_table_area": 64,
+        "eob_pt": 3,
+        "eob_extra": 0,
+        "eob": 3,
+        "scan_prefix": [
+          0,
+          1,
+          4
+        ],
+        "positive_quantized_levels": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "base_contexts_in_decode_order": [
+          {
+            "scan_index": 2,
+            "position": 4,
+            "eob": true,
+            "context": 1,
+            "level": 2
+          },
+          {
+            "scan_index": 1,
+            "position": 1,
+            "eob": false,
+            "context": 11,
+            "level": 2
+          },
+          {
+            "scan_index": 0,
+            "position": 0,
+            "eob": false,
+            "context": 0,
+            "level": 2
+          }
+        ],
+        "dc_sign_context": 0
+      },
+      "uv_residuals_allzero": false,
+      "luma_tx_beyond_coded_mi": [
+        0,
+        0
+      ]
+    },
+    {
+      "origin": [
+        4,
+        0
+      ],
+      "coding_dimensions": [
+        4,
+        16
+      ],
+      "has_chroma": true,
+      "uv_mode": 13,
+      "alpha_numerators": [
+        16,
+        -16
+      ],
+      "luma_tx_size": [
+        4,
+        16
+      ],
+      "uv_tx_size": [
+        4,
+        8
+      ],
+      "luma_tx_type": "DCT_DCT",
+      "luma_tx_type_symbol": 1,
+      "coefficients": {
+        "tx_size_context": 1,
+        "coefficient_q_context": 1,
+        "plane_type": 0,
+        "eob_table_area": 64,
+        "eob_pt": 3,
+        "eob_extra": 0,
+        "eob": 3,
+        "scan_prefix": [
+          0,
+          1,
+          4
+        ],
+        "positive_quantized_levels": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "base_contexts_in_decode_order": [
+          {
+            "scan_index": 2,
+            "position": 4,
+            "eob": true,
+            "context": 1,
+            "level": 2
+          },
+          {
+            "scan_index": 1,
+            "position": 1,
+            "eob": false,
+            "context": 11,
+            "level": 2
+          },
+          {
+            "scan_index": 0,
+            "position": 0,
+            "eob": false,
+            "context": 0,
+            "level": 2
+          }
+        ],
+        "dc_sign_context": 2
+      },
+      "uv_residuals_allzero": true,
+      "luma_tx_beyond_coded_mi": [
+        0,
+        0
+      ]
+    },
+    {
+      "origin": [
+        8,
+        0
+      ],
+      "coding_dimensions": [
+        4,
+        16
+      ],
+      "has_chroma": false,
+      "uv_mode": null,
+      "alpha_numerators": null,
+      "luma_tx_size": [
+        4,
+        16
+      ],
+      "uv_tx_size": null,
+      "luma_tx_type": "DCT_DCT",
+      "luma_tx_type_symbol": 1,
+      "coefficients": {
+        "tx_size_context": 1,
+        "coefficient_q_context": 1,
+        "plane_type": 0,
+        "eob_table_area": 64,
+        "eob_pt": 3,
+        "eob_extra": 0,
+        "eob": 3,
+        "scan_prefix": [
+          0,
+          1,
+          4
+        ],
+        "positive_quantized_levels": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "base_contexts_in_decode_order": [
+          {
+            "scan_index": 2,
+            "position": 4,
+            "eob": true,
+            "context": 1,
+            "level": 2
+          },
+          {
+            "scan_index": 1,
+            "position": 1,
+            "eob": false,
+            "context": 11,
+            "level": 2
+          },
+          {
+            "scan_index": 0,
+            "position": 0,
+            "eob": false,
+            "context": 0,
+            "level": 2
+          }
+        ],
+        "dc_sign_context": 2
+      },
+      "uv_residuals_allzero": false,
+      "luma_tx_beyond_coded_mi": [
+        0,
+        0
+      ]
+    },
+    {
+      "origin": [
+        12,
+        0
+      ],
+      "coding_dimensions": [
+        4,
+        16
+      ],
+      "has_chroma": true,
+      "uv_mode": 13,
+      "alpha_numerators": [
+        16,
+        -16
+      ],
+      "luma_tx_size": [
+        4,
+        16
+      ],
+      "uv_tx_size": [
+        4,
+        8
+      ],
+      "luma_tx_type": "DCT_DCT",
+      "luma_tx_type_symbol": 1,
+      "coefficients": {
+        "tx_size_context": 1,
+        "coefficient_q_context": 1,
+        "plane_type": 0,
+        "eob_table_area": 64,
+        "eob_pt": 3,
+        "eob_extra": 0,
+        "eob": 3,
+        "scan_prefix": [
+          0,
+          1,
+          4
+        ],
+        "positive_quantized_levels": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "base_contexts_in_decode_order": [
+          {
+            "scan_index": 2,
+            "position": 4,
+            "eob": true,
+            "context": 1,
+            "level": 2
+          },
+          {
+            "scan_index": 1,
+            "position": 1,
+            "eob": false,
+            "context": 11,
+            "level": 2
+          },
+          {
+            "scan_index": 0,
+            "position": 0,
+            "eob": false,
+            "context": 0,
+            "level": 2
+          }
+        ],
+        "dc_sign_context": 2
+      },
+      "uv_residuals_allzero": true,
+      "luma_tx_beyond_coded_mi": [
+        0,
+        0
+      ]
+    }
+  ],
+  "entropy_symbols_checked": 61,
+  "all_cfl_owners": 2,
+  "edge_rule": null,
+  "evidence_boundary": "complete entropy construction/roundtrip, then unmodified dav1d semantics/native validation"
+}

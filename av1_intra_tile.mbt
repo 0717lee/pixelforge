@@ -39,6 +39,7 @@ priv struct Av1IntraState {
   y_mode : Array[Array[Array[Int]]]
   uv_cfl : Array[Array[Int]]
   uv_no_cfl : Array[Array[Int]]
+  cfl : Av1CflState
   angle_delta : Array[Array[Int]]
   palette_y : Array[Array[Int]]
   palette_uv : Array[Int]
@@ -99,6 +100,7 @@ fn av1_intra_state(
     y_mode: av1_intra_y_mode_cdfs(),
     uv_cfl: av1_intra_uv_mode_cdfs(true),
     uv_no_cfl: av1_intra_uv_mode_cdfs(false),
+    cfl: av1_cfl_state(),
     angle_delta: av1_intra_angle_cdfs(),
     palette_y,
     palette_uv: [32461, 32768, 0],
@@ -301,7 +303,11 @@ fn av1_intra_transform(
     } else {
       match
         av1_chroma_tx_type(
-          mode,
+          if mode == AV1_INTRA_CFL {
+            AV1_INTRA_DC
+          } else {
+            mode
+          },
           if tx_width < tx_height {
             tx_width
           } else {
@@ -379,7 +385,11 @@ fn av1_intra_transform(
   }
   let prediction = match
     av1_intra_predict(
-      mode,
+      if plane_index != 0 && mode == AV1_INTRA_CFL {
+        AV1_INTRA_DC
+      } else {
+        mode
+      },
       tx_width,
       tx_height,
       above,
@@ -392,6 +402,36 @@ fn av1_intra_transform(
     Some(value) => value
     None => return false
   }
+  if plane_index != 0 && mode == AV1_INTRA_CFL {
+    if !av1_cfl_predict(
+        state.cfl,
+        prediction,
+        tx_width,
+        tx_height,
+        if plane_index == 1 {
+          state.cfl.alpha_u
+        } else {
+          state.cfl.alpha_v
+        },
+        state.bit_depth,
+      ) {
+      return false
+    }
+  }
+  let store_luma = plane_index == 0 && state.cfl.store_y
+  if store_luma {
+    // CfL consumes the complete reconstructed TX, including samples that
+    // the visible/coded plane write below clips away at a frame edge.
+    for i in 0..<prediction.length() {
+      prediction[i] = av1_intra_clip(
+        prediction[i] + (if all_zero == 0 { residual[i] } else { 0 }),
+        state.bit_depth,
+      )
+    }
+    if !av1_cfl_store_tx(state.cfl, x, y, tx_width, tx_height, prediction) {
+      return false
+    }
+  }
   for row in 0..<tx_height {
     if y + row >= plane.height {
       break
@@ -402,7 +442,7 @@ fn av1_intra_transform(
       }
       let index = row * tx_width + col
       let value = prediction[index] +
-        (if all_zero == 0 { residual[index] } else { 0 })
+        (if all_zero == 0 && !store_luma { residual[index] } else { 0 })
       plane.pixels[(y + row) * plane.width + x + col] = av1_intra_clip(
         value,
         state.bit_depth,
@@ -524,7 +564,13 @@ fn av1_intra_residuals(
   luma_tx_height : Int,
   skip : Int,
 ) -> Bool {
-  let plane_count = if av1_intra_has_chroma(state, block) { 3 } else { 1 }
+  let has_chroma = av1_intra_has_chroma(state, block)
+  let plane_count = if has_chroma { 3 } else { 1 }
+  av1_cfl_begin_block(
+    state.cfl,
+    block,
+    !state.monochrome && (!has_chroma || uv_mode == AV1_INTRA_CFL),
+  )
   for chunk_y in 0..<((block.height + 63) / 64) {
     for chunk_x in 0..<((block.width + 63) / 64) {
       for plane in 0..<plane_count {
@@ -658,7 +704,11 @@ fn av1_intra_block(
         state.uv_no_cfl[y_mode]
       },
     )
-    if !av1_intra_read_mode_angle(decoder, state, mode, block_index) {
+    if mode == AV1_INTRA_CFL {
+      if !cfl_allowed || !av1_cfl_read_alphas(decoder, state.cfl) {
+        return false
+      }
+    } else if !av1_intra_read_mode_angle(decoder, state, mode, block_index) {
       return false
     }
     mode

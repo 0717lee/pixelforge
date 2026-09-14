@@ -2,9 +2,10 @@
 
 `cmd/cli` is a native codec utility. It supports `info` and `convert` for PNG,
 QOI, BMP, GIF, JPEG, WebP, AVIF, and TIFF signatures. JPEG/WebP outputs and
-lossless WebP/TIFF input are available on native; AVIF decoding and TIFF
-encoding remain unsupported by the native CLI. `convert` can apply an ordered
-filter pipeline before encoding.
+lossless WebP/TIFF input are available on native. AVIF input uses the pure
+MoonBit decoder, including supported 8/10/12-bit intra images, auxiliary alpha
+and grids. TIFF output is unavailable. `convert` can apply an ordered filter
+pipeline before encoding.
 
 The native executable reads and writes files directly:
 

@@ -12,13 +12,13 @@ pub struct AvifContainer {
   monochrome : Bool
   yuv420 : Bool
   has_alpha : Bool
+  // A grid inherits this configuration from its validated coded cells.
   av1c : Array[Byte]
   payload : Array[Byte]
   nclx_primaries : Int?
   nclx_transfer : Int?
   nclx_matrix : Int?
 }
-
 ///|
 priv struct Box {
   typ : Int
@@ -298,7 +298,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     parse_ipma(data, bs, iprp, items)
     let props = parse_props(data, bs, iprp)
     let pi = idx_item(items, primary)
-    if pi < 0 || items[pi].typ != t_av01 {
+    if pi < 0 || (items[pi].typ != t_av01 && items[pi].typ != 0x67726964) {
       raise AvifError::Invalid
     }
     let it = items[pi]
@@ -333,6 +333,35 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
         nm = Some(q.m)
       }
     }
+    if it.typ == 0x67726964 {
+      if av1 is Some(_) {
+        raise AvifError::Invalid
+      }
+      let grid = match avif_grid_descriptor_for_item(data, Some(it.id)) {
+        Some(value) => value
+        None => raise AvifError::Invalid
+      }
+      if !avif_grid_properties_match(data, grid) {
+        raise AvifError::Invalid
+      }
+      let first = idx_item(items, grid.tiles[0].item_id)
+      if first < 0 {
+        raise AvifError::Invalid
+      }
+      for ai in items[first].props {
+        if ai <= 0 || ai > props.length() {
+          raise AvifError::Invalid
+        }
+        let property = props[ai - 1]
+        if property.kind == t_av1c {
+          av1 = Some(property.data)
+          let parsed = parse_av1c(data, property)
+          depth = parsed.0
+          mono = parsed.1
+          yuv = parsed.2
+        }
+      }
+    }
     if w <= 0 || h <= 0 || av1 is None || it.offs.length() == 0 {
       raise AvifError::Invalid
     }
@@ -348,8 +377,11 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
         (0, data.length())
       }
       let len = it.lens[i]
-      if len < 0 || it.base < 0 || it.offs[i] < 0 ||
-        base > bound - len || it.base > bound - len - base ||
+      if len < 0 ||
+        it.base < 0 ||
+        it.offs[i] < 0 ||
+        base > bound - len ||
+        it.base > bound - len - base ||
         it.offs[i] > bound - len - base - it.base {
         raise AvifError::Invalid
       }
@@ -375,7 +407,6 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     _ => None
   }
 }
-
 ///|
 fn parse_iloc(
   d : Array[Byte],

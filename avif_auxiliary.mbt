@@ -1,8 +1,8 @@
 /// Bounded metadata for an AVIF auxiliary alpha item.
 ///
 /// This API only identifies the auxiliary item and validates its BMFF extents.
-/// It deliberately does not decode the alpha AV1 payload; alpha reconstruction
-/// remains a later decoder stage.
+/// Pixel reconstruction is performed by avif_decode_alpha, including grids;
+/// native alpha precision is retained until the assembled plane is normalized.
 pub struct AvifAlphaExtent {
   offset : Int
   length : Int
@@ -326,6 +326,35 @@ fn aux_image_info(
 }
 
 ///|
+/// A derived grid inherits coded configuration from its validated cells;
+/// av1C belongs to those av01 items, not to the grid item itself.
+fn aux_item_image_info(
+  data : Array[Byte],
+  item : AuxItem,
+  items : Array[AuxItem],
+  props : Array[AuxProp],
+) -> (Int, Int, Int, Bool) raise AuxParseError {
+  if item.typ == aux_t_av01 {
+    return aux_image_info(item, props)
+  }
+  if item.typ != 0x67726964 {
+    raise AuxParseError::Unsupported
+  }
+  let grid = match avif_grid_descriptor_for_item(data, Some(item.id)) {
+    Some(value) => value
+    None => raise AuxParseError::Invalid
+  }
+  if !avif_grid_properties_match(data, grid) {
+    raise AuxParseError::Invalid
+  }
+  let first = aux_item_index(items, grid.tiles[0].item_id)
+  if first < 0 {
+    raise AuxParseError::Invalid
+  }
+  let info = aux_image_info(items[first], props)
+  (grid.output_width, grid.output_height, info.2, info.3)
+}
+///|
 /// Internal three-way query: None means no alpha associated with pitm;
 /// a selected malformed/unsupported alpha raises instead of becoming opaque.
 /// This parser is independent of avif_container_parse, so both public container
@@ -345,7 +374,9 @@ fn avif_alpha_descriptor_checked(
     None => raise AuxParseError::Invalid
   }
   let pv = aux_u8(data, pitm.payload, pitm.end)
-  if pv > 1 { raise AuxParseError::Unsupported }
+  if pv > 1 {
+    raise AuxParseError::Unsupported
+  }
   let primary = if pv == 0 {
     aux_u16(data, pitm.payload + 4, pitm.end)
   } else {
@@ -356,11 +387,15 @@ fn avif_alpha_descriptor_checked(
     None => return None
   }
   let version = aux_u8(data, iref.payload, iref.end)
-  if version > 1 { raise AuxParseError::Unsupported }
+  if version > 1 {
+    raise AuxParseError::Unsupported
+  }
   let ri = aux_box_index(bs, iref.start)
   let linked_ids : Array[Int] = []
   for reference in bs {
-    if reference.parent != ri || reference.typ != aux_t_auxl { continue }
+    if reference.parent != ri || reference.typ != aux_t_auxl {
+      continue
+    }
     let mut p = reference.payload
     let from_id = if version == 0 {
       aux_u16(data, p, reference.end)
@@ -377,11 +412,17 @@ fn avif_alpha_descriptor_checked(
         aux_u32(data, p, reference.end)
       }
       p = p + (if version == 0 { 2 } else { 4 })
-      if to_id == primary && from_id != primary { linked_ids.push(from_id) }
+      if to_id == primary && from_id != primary {
+        linked_ids.push(from_id)
+      }
     }
-    if p != reference.end { raise AuxParseError::Invalid }
+    if p != reference.end {
+      raise AuxParseError::Invalid
+    }
   }
-  if linked_ids.length() == 0 { return None }
+  if linked_ids.length() == 0 {
+    return None
+  }
   let parsed = aux_parse_items(data, bs, meta)
   let items = parsed.0
   aux_parse_ipma(data, bs, parsed.2, items)
@@ -390,24 +431,42 @@ fn avif_alpha_descriptor_checked(
   // is selected. Unrelated auxiliaries and other aux_type values are ignored.
   for item in items {
     let mut linked = false
-    for id in linked_ids { if id == item.id { linked = true } }
-    if !linked { continue }
+    for id in linked_ids {
+      if id == item.id {
+        linked = true
+      }
+    }
+    if !linked {
+      continue
+    }
     let mut alpha = false
     for ai in item.props {
-      if ai == 0 { continue }
-      if ai < 0 || ai > props.length() { raise AuxParseError::Invalid }
+      if ai == 0 {
+        continue
+      }
+      if ai < 0 || ai > props.length() {
+        raise AuxParseError::Invalid
+      }
       let prop = props[ai - 1]
-      if prop.kind == aux_t_auxc && aux_is_alpha_type(prop.data) { alpha = true }
+      if prop.kind == aux_t_auxc && aux_is_alpha_type(prop.data) {
+        alpha = true
+      }
     }
-    if !alpha { continue }
+    if !alpha {
+      continue
+    }
     let pi = aux_item_index(items, primary)
-    if pi < 0 { raise AuxParseError::Invalid }
-    let color = aux_image_info(items[pi], props)
-    let auxiliary = aux_image_info(item, props)
+    if pi < 0 {
+      raise AuxParseError::Invalid
+    }
+    let color = aux_item_image_info(data, items[pi], items, props)
+    let auxiliary = aux_item_image_info(data, item, items, props)
     // AVIF 4.1 requires the same encoded bit depth as the master image.
     // Width and height must each match; equal pixel counts are insufficient.
-    if auxiliary.0 != color.0 || auxiliary.1 != color.1 ||
-      auxiliary.2 != color.2 || !auxiliary.3 {
+    if auxiliary.0 != color.0 ||
+      auxiliary.1 != color.1 ||
+      auxiliary.2 != color.2 ||
+      !auxiliary.3 {
       raise AuxParseError::Invalid
     }
     let iloc = match parsed.1 {
@@ -415,30 +474,45 @@ fn avif_alpha_descriptor_checked(
       None => raise AuxParseError::Invalid
     }
     aux_parse_iloc(data, iloc, items)
-    if item.offsets.length() == 0 { raise AuxParseError::Invalid }
+    if item.offsets.length() == 0 {
+      raise AuxParseError::Invalid
+    }
     let (base, bound) = if item.method_id == 1 {
       match aux_find(bs, mi, aux_t_idat) {
         Some(value) => (value.payload, value.end)
         None => raise AuxParseError::Invalid
       }
-    } else { (0, data.length()) }
+    } else {
+      (0, data.length())
+    }
     let extents : Array[AvifAlphaExtent] = []
     for i in 0..<item.offsets.length() {
       let len = item.lengths[i]
-      if len <= 0 || item.base < 0 || item.offsets[i] < 0 ||
-        base > bound - len || item.base > bound - len - base ||
+      if len <= 0 ||
+        item.base < 0 ||
+        item.offsets[i] < 0 ||
+        base > bound - len ||
+        item.base > bound - len - base ||
         item.offsets[i] > bound - len - base - item.base {
         raise AuxParseError::Invalid
       }
-      extents.push({ offset: base + item.base + item.offsets[i], length: len,
-        construction_method: item.method_id })
+      extents.push({
+        offset: base + item.base + item.offsets[i],
+        length: len,
+        construction_method: item.method_id,
+      })
     }
-    return Some({ item_id: item.id, width: auxiliary.0, height: auxiliary.1,
-      bit_depth: auxiliary.2, auxiliary_property: true, extents })
+    return Some({
+      item_id: item.id,
+      width: auxiliary.0,
+      height: auxiliary.1,
+      bit_depth: auxiliary.2,
+      auxiliary_property: true,
+      extents,
+    })
   }
   None
 }
-
 ///|
 /// Extract the first alpha item associated with the primary image through
 /// auxl and the alpha auxC URN. None also represents malformed input for this
@@ -466,4 +540,3 @@ pub fn avif_alpha_item_payload(data : Array[Byte]) -> Array[Byte]? {
   }
   Some(out)
 }
-

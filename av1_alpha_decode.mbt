@@ -76,6 +76,21 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     Some(value) => value
     None => return None
   }
+  if avif_grid_descriptor_for_item(data, Some(descriptor.item_id)) is Some(grid) {
+    let frame = match avif_decode_grid_frame(data, grid) {
+      Some(value) => value
+      None => return None
+    }
+    if frame.planes.length() != 1 ||
+      frame.width != descriptor.width ||
+      frame.height != descriptor.height ||
+      frame.bit_depth != descriptor.bit_depth {
+      return None
+    }
+    return Some(
+      av1_alpha_samples_to_bytes(av1_frame_crop(frame, 0), frame.bit_depth),
+    )
+  }
   let payload = match avif_alpha_item_payload(data) {
     Some(value) => value
     None => return None
@@ -88,8 +103,10 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     Some(value) => value
     None => return None
   }
-  if sequence.width != descriptor.width || sequence.height != descriptor.height ||
-    sequence.bit_depth != descriptor.bit_depth || !sequence.monochrome {
+  if sequence.width != descriptor.width ||
+    sequence.height != descriptor.height ||
+    sequence.bit_depth != descriptor.bit_depth ||
+    !sequence.monochrome {
     return None
   }
   let alpha = match av1_decode_alpha(payload) {
@@ -99,20 +116,20 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
   // The auxiliary item dimensions are authoritative at the container
   // boundary.  Reject a stream whose sequence header decodes to another
   // size instead of returning a plausible but misaligned plane.
-  if descriptor.width <= 0 || descriptor.height <= 0 ||
+  if descriptor.width <= 0 ||
+    descriptor.height <= 0 ||
     alpha.length() != descriptor.width * descriptor.height {
     return None
   }
   Some(alpha)
 }
 
+///|
 /// Decode a primary AVIF image and compose its validated auxiliary alpha item.
 /// A valid image without an alpha item keeps the existing opaque result; an
 /// alpha item that cannot be decoded is reported as `None` rather than dropped.
 pub fn avif_decode_rgba(data : Array[Byte]) -> Image? {
-  let alpha_descriptor = try {
-    avif_alpha_descriptor_checked(data)
-  } catch {
+  let alpha_descriptor = avif_alpha_descriptor_checked(data) catch {
     _ => return None
   }
   let image = match avif_decode(data) {
@@ -134,9 +151,12 @@ pub fn avif_decode_rgba(data : Array[Byte]) -> Image? {
   }
 }
 
+///|
 /// Compose a decoded alpha plane onto an RGBA image without changing RGB.
 pub fn av1_apply_alpha(image : Image, alpha : Array[Byte]) -> Image? {
-  if alpha.length() != image.width * image.height { return None }
+  if alpha.length() != image.width * image.height {
+    return None
+  }
   let out = Image::new(image.width, image.height)
   for y in 0..<image.height {
     for x in 0..<image.width {

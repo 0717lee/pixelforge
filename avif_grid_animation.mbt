@@ -209,42 +209,59 @@ pub fn avif_animation_frame_at(
 ///|
 test "animation decoder rejects noncontiguous timing tables" {
   let sample : Array[Byte] = [
-    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08',
-    b'\x32', b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00',
-    b'\x00', b'\x00', b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43',
-    b'\xD9', b'\x3A', b'\x46', b'\x02', b'\x28',
+    b'\x0A', b'\x06', b'\x18', b'\x15', b'\x7F', b'\xFD', b'\xB0', b'\x08', b'\x32',
+    b'\x13', b'\x18', b'\x00', b'\x00', b'\x00', b'\x50', b'\x00', b'\x00', b'\x00',
+    b'\x0A', b'\x05', b'\x79', b'\x52', b'\x6E', b'\x43', b'\xD9', b'\x3A', b'\x46',
+    b'\x02', b'\x28',
   ]
   let descriptor : AvifAnimationDescriptor = {
     timescale: 1000,
     frames: [
-      { index: 0, offset: 0, length: sample.length(), timestamp: 0, duration: 10, timescale: 1000 },
-      { index: 1, offset: 0, length: sample.length(), timestamp: 20, duration: 10, timescale: 1000 },
+      {
+        index: 0,
+        offset: 0,
+        length: sample.length(),
+        timestamp: 0,
+        duration: 10,
+        timescale: 1000,
+      },
+      {
+        index: 1,
+        offset: 0,
+        length: sample.length(),
+        timestamp: 20,
+        duration: 10,
+        timescale: 1000,
+      },
     ],
   }
-  assert_true(avif_decode_animation_frames(descriptor, [sample, sample]) is None)
+  assert_true(
+    avif_decode_animation_frames(descriptor, [sample, sample]) is None,
+  )
 }
-
+///|
 /// Unknown iloc construction methods must fail closed.  In particular, method
 /// 2 must not be interpreted as a file-relative extent (method 0).
 test "iloc rejects unsupported construction method" {
   let data : Array[Byte] = [
     b'\x01', b'\x00', b'\x00', b'\x00', // version 1 + flags
-    b'\x44', b'\x00',                   // 4-byte offset/length, no base
-    b'\x00', b'\x01',                   // one item
-    b'\x00', b'\x01',                   // item id
-    b'\x20', b'\x00',                   // construction method 2
-    b'\x00', b'\x00',                   // data reference index
-    b'\x00', b'\x00',                   // zero extents
+     b'\x44', b'\x00', // 4-byte offset/length, no base
+     b'\x00', b'\x01', // one item
+     b'\x00', b'\x01', // item id
+     b'\x00', b'\x02', // construction method 2
+     b'\x00', b'\x00', // data reference index
+     b'\x00', b'\x00', // zero extents
   ]
-  let box : GaBox = { typ: ga_iloc, start: 0, payload: 0, end: data.length(), parent: -1 }
-  let items : Array[GaItem] = [{
-    id: 1,
-    typ: ga_grid,
-    method_id: 0,
-    base: 0,
-    offs: [],
-    lens: [],
-  }]
+  let box : GaBox = {
+    typ: ga_iloc,
+    start: 0,
+    payload: 0,
+    end: data.length(),
+    parent: -1,
+  }
+  let items : Array[GaItem] = [
+    { id: 1, typ: ga_grid, method_id: 0, base: 0, offs: [], lens: [], },
+  ]
   let rejected = try {
     ga_parse_iloc(data, box, items)
     false
@@ -253,34 +270,29 @@ test "iloc rejects unsupported construction method" {
   }
   assert_true(rejected)
 }
-
+///|
 test "iloc resolves idat construction method extents" {
   let data : Array[Byte] = [
-    b'\x01', b'\x00', b'\x00', b'\x00',
-    b'\x44', b'\x00',
-    b'\x00', b'\x00', b'\x00', b'\x01',
-    b'\x00', b'\x01',
-    b'\x10', b'\x00', // construction method 1
-    b'\x00', b'\x00',
-    b'\x00', b'\x01',
-    b'\x00', b'\x00', b'\x00', b'\x05',
-    b'\x00', b'\x00', b'\x00', b'\x03',
+    b'\x01', b'\x00', b'\x00', b'\x00', b'\x44', b'\x00', b'\x00', b'\x01', b'\x00',
+    b'\x01', b'\x00', b'\x01', // construction method 1
+     b'\x00', b'\x00', b'\x00', b'\x01', b'\x00', b'\x00', b'\x00', b'\x05', b'\x00',
+    b'\x00', b'\x00', b'\x03',
   ]
-  let box : GaBox = { typ: ga_iloc, start: 0, payload: 0, end: data.length(), parent: -1 }
-  let items : Array[GaItem] = [{
-    id: 1,
-    typ: ga_grid,
-    method_id: 0,
-    base: 0,
-    offs: [],
-    lens: [],
-  }]
+  let box : GaBox = {
+    typ: ga_iloc,
+    start: 0,
+    payload: 0,
+    end: data.length(),
+    parent: -1,
+  }
+  let items : Array[GaItem] = [
+    { id: 1, typ: ga_grid, method_id: 0, base: 0, offs: [], lens: [], },
+  ]
   ga_parse_iloc(data, box, items)
   assert_eq(items[0].method_id, 1)
   assert_eq(items[0].offs[0], 5)
   assert_eq(items[0].lens[0], 3)
 }
-
 ///|
 priv suberror GridAnimError {
   Invalid
@@ -330,6 +342,8 @@ let ga_dimg = 0x64696D67
 ///|
 let ga_grid = 0x67726964
 
+///|
+let ga_pitm = 0x7069746D
 ///|
 let ga_moov = 0x6D6F6F76
 
@@ -386,16 +400,16 @@ fn ga_u32(d : Array[Byte], p : Int, e : Int) -> Int raise GridAnimError {
 
 ///|
 fn ga_u64(d : Array[Byte], p : Int, e : Int) -> Int raise GridAnimError {
-  if ga_u8(d, p, e) > 127 {
+  for i in 0..<4 {
+    if ga_u8(d, p + i, e) != 0 {
+      raise GridAnimError::Unsupported
+    }
+  }
+  if ga_u8(d, p + 4, e) > 127 {
     raise GridAnimError::Unsupported
   }
-  let mut x = 0
-  for i in 0..<8 {
-    x = x * 256 + ga_u8(d, p + i, e)
-  }
-  x
+  ga_u32(d, p + 4, e)
 }
-
 ///|
 fn ga_idx(bs : Array[GaBox], start : Int) -> Int {
   for i in 0..<bs.length() {
@@ -486,9 +500,9 @@ fn ga_items(
   for b in bs {
     if b.parent == xi && b.typ == ga_infe {
       let v = ga_u8(d, b.payload, b.end)
-      // The fixture format used by older AVIF writers may carry the v2
-      // layout with a zeroed version field; parse the bounded id/type fields
-      // identically while still rejecting truncated entries below.
+      if v != 2 && v != 3 {
+        raise GridAnimError::Unsupported
+      }
       let id = if v >= 3 {
         ga_u32(d, b.payload + 4, b.end)
       } else {
@@ -507,7 +521,6 @@ fn ga_items(
   }
   out
 }
-
 ///|
 fn ga_item_idx(xs : Array[GaItem], id : Int) -> Int {
   for i in 0..<xs.length() {
@@ -526,6 +539,9 @@ fn ga_parse_iloc(
 ) -> Unit raise GridAnimError {
   let p = b.payload
   let v = ga_u8(d, p, b.end)
+  if v > 2 {
+    raise GridAnimError::Unsupported
+  }
   let a = ga_u8(d, p + 4, b.end)
   let os = a >> 4
   let ls = a & 15
@@ -538,12 +554,12 @@ fn ga_parse_iloc(
     raise GridAnimError::Unsupported
   }
   let mut q = p + 6
-  let n = if v == 0 { ga_u16(d, q, b.end) } else { ga_u32(d, q, b.end) }
-  q = q + (if v == 0 { 2 } else { 4 })
+  let n = if v < 2 { ga_u16(d, q, b.end) } else { ga_u32(d, q, b.end) }
+  q = q + (if v < 2 { 2 } else { 4 })
   for _ in 0..<n {
     let id = if v < 2 { ga_u16(d, q, b.end) } else { ga_u32(d, q, b.end) }
     q = q + (if v < 2 { 2 } else { 4 })
-    let method_id = if v >= 1 { (ga_u16(d, q, b.end) >> 12) & 15 } else { 0 }
+    let method_id = if v >= 1 { ga_u16(d, q, b.end) & 15 } else { 0 }
     // ISO BMFF iloc defines construction_method 0 (file) and 1 (idat).
     // Treat all other values as unsupported instead of accidentally treating
     // them as method 0 and reading bytes from the wrong base.
@@ -597,181 +613,6 @@ fn ga_parse_iloc(
     }
   }
 }
-
-///|
-/// Extract a validated grid item and its ordered `dimg` tile references.
-pub fn avif_grid_descriptor(data : Array[Byte]) -> AvifGridDescriptor? {
-  try {
-    let bs : Array[GaBox] = []
-    ga_walk(data, 0, data.length(), -1, bs)
-    let meta = match ga_find(bs, -1, ga_meta) {
-      Some(x) => x
-      None => raise GridAnimError::Invalid
-    }
-    let xs = ga_items(data, bs, meta)
-    let iloc = match ga_find(bs, ga_idx(bs, meta.start), ga_iloc) {
-      Some(x) => x
-      None => raise GridAnimError::Invalid
-    }
-    ga_parse_iloc(data, iloc, xs)
-    let mut grid_idx = -1
-    for i in 0..<xs.length() {
-      if xs[i].typ == ga_grid {
-        grid_idx = i
-        break
-      }
-    }
-    if grid_idx < 0 {
-      return None
-    }
-    let grid = xs[grid_idx]
-    if grid.offs.length() != 1 {
-      raise GridAnimError::Unsupported
-    }
-    let idat = ga_find(bs, ga_idx(bs, meta.start), ga_idat)
-    let base = if grid.method_id == 1 {
-      match idat {
-        Some(x) => x.payload
-        None => raise GridAnimError::Invalid
-      }
-    } else {
-      0
-    }
-    let off = base + grid.base + grid.offs[0]
-    let len = grid.lens[0]
-    if off < 0 || len < 0 || off > data.length() - len {
-      raise GridAnimError::Invalid
-    }
-    let v = ga_u8(data, off, off + len)
-    if v > 1 {
-      raise GridAnimError::Unsupported
-    }
-    let rows = ga_u8(data, off + 4, off + len) + 1
-    let cols = ga_u8(data, off + 5, off + len) + 1
-    if rows > 32 || cols > 32 {
-      raise GridAnimError::Unsupported
-    }
-    let w = if v == 0 {
-      ga_u16(data, off + 6, off + len)
-    } else {
-      ga_u32(data, off + 6, off + len)
-    }
-    let hpos = off + 6 + (if v == 0 { 2 } else { 4 })
-    let h = if v == 0 {
-      ga_u16(data, hpos, off + len)
-    } else {
-      ga_u32(data, hpos, off + len)
-    }
-    if w <= 0 || h <= 0 {
-      raise GridAnimError::Invalid
-    }
-    let ri = ga_find(bs, ga_idx(bs, meta.start), ga_iref)
-    let refbox = match ri {
-      Some(x) => x
-      None => raise GridAnimError::Invalid
-    }
-    let tile_ids : Array[Int] = []
-    let vv = ga_u8(data, refbox.payload, refbox.end)
-    if vv > 1 {
-      raise GridAnimError::Unsupported
-    }
-    let idw = if vv == 0 { 2 } else { 4 }
-    // ISO BMFF stores an entry_count immediately after the FullBox header,
-    // followed by sized dimg reference boxes.  Older fixtures used the
-    // pre-entry-count payload; retain that bounded form for compatibility.
-    let first = if refbox.end - refbox.payload >= 8 {
-      ga_u32(data, refbox.payload + 4, refbox.end)
-    } else {
-      0
-    }
-    let standard = first != ga_dimg && first <= 4096
-    let mut rq = refbox.payload + (if standard { 8 } else { 4 })
-    let mut entries = if standard { first } else { -1 }
-    while rq < refbox.end && (entries < 0 || entries > 0) {
-      if standard {
-        if refbox.end - rq < 8 {
-          raise GridAnimError::Invalid
-        }
-        let size = ga_u32(data, rq, refbox.end)
-        if size < 8 || size > refbox.end - rq {
-          raise GridAnimError::Invalid
-        }
-        let end = rq + size
-        let rt = ga_u32(data, rq + 4, end)
-        let qp = rq + 8
-        let from = if idw == 2 { ga_u16(data, qp, end) } else { ga_u32(data, qp, end) }
-        let np = qp + idw
-        let n = ga_u16(data, np, end)
-        rq = np + 2
-        if rq + n * idw > end { raise GridAnimError::Invalid }
-        for _ in 0..<n {
-          let to = if idw == 2 { ga_u16(data, rq, end) } else { ga_u32(data, rq, end) }
-          rq = rq + idw
-          if rt == ga_dimg && from == grid.id { tile_ids.push(to) }
-        }
-        rq = end
-        entries = entries - 1
-      } else {
-        if refbox.end - rq < 4 + idw + 2 { raise GridAnimError::Invalid }
-        let rt = ga_u32(data, rq, refbox.end)
-        rq = rq + 4
-        let from = if idw == 2 { ga_u16(data, rq, refbox.end) } else { ga_u32(data, rq, refbox.end) }
-        rq = rq + idw
-        let n = ga_u16(data, rq, refbox.end)
-        rq = rq + 2
-        if rq + n * idw > refbox.end { raise GridAnimError::Invalid }
-        for _ in 0..<n {
-          let to = if idw == 2 { ga_u16(data, rq, refbox.end) } else { ga_u32(data, rq, refbox.end) }
-          rq = rq + idw
-          if rt == ga_dimg && from == grid.id { tile_ids.push(to) }
-        }
-      }
-    }
-    if standard && entries != 0 { raise GridAnimError::Invalid }
-    if tile_ids.length() != rows * cols {
-      raise GridAnimError::Invalid
-    }
-    let tiles : Array[AvifGridTile] = []
-    for id in tile_ids {
-      let ti = ga_item_idx(xs, id)
-      if ti < 0 || xs[ti].offs.length() == 0 {
-        raise GridAnimError::Invalid
-      }
-      // iloc construction_method=1 stores extents relative to the idat
-      // payload. Resolve that base while the enclosing BMFF boxes are still
-      // available; callers of `avif_decode_grid` receive data-relative
-      // offsets for both construction methods.
-      let tile_base = if xs[ti].method_id == 1 {
-        match idat {
-          Some(x) => x.payload + xs[ti].base
-          None => raise GridAnimError::Invalid
-        }
-      } else {
-        xs[ti].base
-      }
-      let ex : Array[AvifGridExtent] = []
-      for j in 0..<xs[ti].offs.length() {
-        ex.push({
-          offset: tile_base + xs[ti].offs[j],
-          length: xs[ti].lens[j],
-          construction_method: xs[ti].method_id,
-        })
-      }
-      tiles.push({ item_id: id, extents: ex, })
-    }
-    Some({
-      item_id: grid.id,
-      rows,
-      columns: cols,
-      output_width: w,
-      output_height: h,
-      tiles,
-    })
-  } catch {
-    _ => None
-  }
-}
-
 ///|
 /// Extract bounded animation samples from the first picture track in `moov`.
 pub fn avif_animation_descriptor(

@@ -1,0 +1,196 @@
+{
+  "provenance": "complete constructed AV1 syntax, not encoder output or patched entropy",
+  "base_q_idx": 32,
+  "bit_depth": 10,
+  "monochrome": true,
+  "tx_mode": "LARGEST",
+  "target_coding_dimensions": [
+    4,
+    8
+  ],
+  "partition_symbol": 2,
+  "partition_name": "VERT",
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "dimensions": [
+        4,
+        8
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            4,
+            8
+          ],
+          "inverse_transform": "DCT_DCT",
+          "max_transform": true,
+          "tx_depth": 0,
+          "all_zero_context": 0,
+          "tx_type_symbol": 1,
+          "tx_type_cdf": [
+            1,
+            0,
+            0
+          ],
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            1,
+            4
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 4,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 1,
+              "eob": false,
+              "context": 11,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        4,
+        0
+      ],
+      "dimensions": [
+        4,
+        8
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            4,
+            0
+          ],
+          "size": [
+            4,
+            8
+          ],
+          "inverse_transform": "DCT_DCT",
+          "max_transform": true,
+          "tx_depth": 0,
+          "all_zero_context": 0,
+          "tx_type_symbol": 1,
+          "tx_type_cdf": [
+            1,
+            0,
+            0
+          ],
+          "tx_size_context": 1,
+          "coefficient_q_context": 1,
+          "plane_type": 0,
+          "eob_table_area": 32,
+          "eob_pt": 3,
+          "eob_extra": 0,
+          "eob": 3,
+          "scan_prefix": [
+            0,
+            1,
+            4
+          ],
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "base_contexts_in_decode_order": [
+            {
+              "scan_index": 2,
+              "position": 4,
+              "eob": true,
+              "context": 1,
+              "level": 2
+            },
+            {
+              "scan_index": 1,
+              "position": 1,
+              "eob": false,
+              "context": 11,
+              "level": 2
+            },
+            {
+              "scan_index": 0,
+              "position": 0,
+              "eob": false,
+              "context": 0,
+              "level": 2
+            }
+          ],
+          "dc_sign_context": 2
+        }
+      ]
+    }
+  ],
+  "entropy_symbol_count": 25,
+  "entropy_snapshot_sha256": "af67b323bc4a9603014a6373d26775f7c98d7bbcc2b418284a670c37557d9c1d",
+  "entropy_roundtrip": "CDF snapshot/symbol transcript decoded with independent MsacDecoder dual",
+  "frame_header_bytes": 5,
+  "tile_payload_bytes": 7
+}

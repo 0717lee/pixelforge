@@ -386,7 +386,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
 pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
-    None => None
+    None => avif_decode_grid_auto(data)
     Some(value) =>
       av1_decode_tile_group_with_boundaries(
         value.width,
