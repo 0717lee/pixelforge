@@ -5,6 +5,8 @@
 - Added uniform multi-tile reduced-still frame-header parsing, checked tile
   size-prefix extraction, and bounded raster stitching for supported intra
   tiles. Multi-tile inputs now avoid feeding group prefixes into tile entropy.
+- Preserved non-uniform tile superblock boundaries through the public stage-one
+  metadata and routed supported bounded tile images by their explicit origins.
 - Added AV1 partition CDF/MSAC decoding for NONE, HORZ, VERT, SPLIT and
   extended geometry symbols, with recursive raster leaf output and W8–W128
   neighbour contexts.
