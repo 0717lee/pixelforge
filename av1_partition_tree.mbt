@@ -429,6 +429,7 @@ pub fn av1_decode_partition_leaves(
   }
   let mut root_size = if frame_width > frame_height { frame_width } else { frame_height }
   if root_size < 8 { root_size = 8 }
+  if use_128x128_superblock && root_size < 128 { root_size = 128 }
   if root_size > 128 { return None }
   let mut power = 8
   while power < root_size { power = power * 2 }
@@ -468,9 +469,5 @@ pub fn av1_decode_partition_leaves(
     }
     true
   }
-  // Keep the optional superblock argument meaningful: a 128x128 root is
-  // legal only when the sequence tool is enabled, otherwise callers get the
-  // normal 64x64/32x32 tree.
-  if use_128x128_superblock && root_size != 128 { return None }
   if !walk(decoder, state, root, leaves) { None } else { Some(leaves) }
 }
