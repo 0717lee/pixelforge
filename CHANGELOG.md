@@ -11,6 +11,8 @@
 - Added bounded `show_existing_frame` envelope parsing with timing/frame-ID
   fields and explicit eight-slot reference-state validation; reference pixel
   storage and inter prediction remain separate stages.
+- Added an eight-slot copy-on-store reference image state and a safe
+  show-existing resolver for decoded RGBA frames.
 - Extended the bounded tx-mode coefficient path to AV1 64x32/32x64
   rectangular leaves, including adjusted 32x32 coefficient storage, correct
   transform-size contexts, scan ordering, and 4:2:0 typed reconstruction.
