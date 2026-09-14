@@ -130,6 +130,27 @@ test "tile group decoder stitches two neutral 64x64 tiles" {
   assert_eq(image.get_pixel(127, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
 
+/// A complete reduced-still OBU with a 2x2 uniform tile grid.  Each tile has
+/// its own one-byte MSAC payload; decoding the four payloads independently
+/// proves that CDF state and prediction edges do not leak across tile origins.
+test "av1 decodes a 128x128 four-tile reduced-still fixture" {
+  let stream : Array[Byte] = [
+    b'\x12', b'\x00',
+    b'\x0A', b'\x06', b'\x18', b'\x19', b'\xBF', b'\xFF',
+    b'\x00', b'\x02', b'\x32', b'\x0D',
+    b'\x1C', b'\x0A', b'\xC0', b'\x00', b'\x00', b'\x00',
+    b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x2E',
+  ]
+  let image = av1_decode(stream).unwrap()
+  assert_eq((image.width, image.height), (128, 128))
+  assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(63, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(64, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(127, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(0, 64), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(127, 127), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}
+
 test "tile group decoder stitches a 2x2 128x128 canvas" {
   let image = av1_decode_tile_group(
     128,

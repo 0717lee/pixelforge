@@ -59,6 +59,9 @@ pub(all) struct Av1Stage1Input {
   tile_rows : Int
   tile_cols_log2 : Int
   tile_rows_log2 : Int
+  /// Tile boundaries in superblock units, including the terminal boundary.
+  tile_col_starts_sb : Array[Int]
+  tile_row_starts_sb : Array[Int]
   tile_size_bytes : Int
   enable_filter_intra : Bool
   full_range : Bool
@@ -622,6 +625,8 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             tile_rows: frame.tile_rows,
             tile_cols_log2: frame.tile_cols_log2,
             tile_rows_log2: frame.tile_rows_log2,
+            tile_col_starts_sb: frame.tile_col_starts_sb,
+            tile_row_starts_sb: frame.tile_row_starts_sb,
             tile_size_bytes: frame.tile_size_bytes,
             enable_filter_intra: seq.enable_filter_intra,
             full_range: seq.full_range,

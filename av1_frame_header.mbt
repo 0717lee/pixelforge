@@ -12,6 +12,12 @@ pub(all) struct Av1FrameHeaderInfo {
   tile_rows : Int
   tile_cols_log2 : Int
   tile_rows_log2 : Int
+  /// Tile boundaries in superblock units, including the terminal boundary.
+  /// These arrays preserve non-uniform `tile_info()` geometry for callers that
+  /// can place independently-sized tile images. The first element is always
+  /// zero and the final element is the superblock count for that axis.
+  tile_col_starts_sb : Array[Int]
+  tile_row_starts_sb : Array[Int]
   /// Size-prefix width for the tile group (0 for the legacy isolated tile).
   tile_size_bytes : Int
   tx_mode_select : Bool
@@ -62,6 +68,38 @@ fn av1_tile_log2(block_size : Int, target : Int) -> Int {
     out = out + 1
   }
   out
+}
+
+/// AV1 `ns(n)` descriptor from §4. The result is in [0, n); malformed or
+/// truncated input returns None. `n == 1` consumes no bits as required by the
+/// descriptor.
+fn Av1FrameBits::ns(self : Av1FrameBits, n : Int) -> Int? {
+  if n <= 0 {
+    return None
+  }
+  let mut w = 0
+  let mut power = 1
+  while power < n {
+    power = power << 1
+    w = w + 1
+  }
+  // For n=1, w=0 and m=0; the descriptor has a zero-bit payload.
+  if w == 0 {
+    return Some(0)
+  }
+  let m = (1 << w) - n
+  let value = match self.take(w - 1) {
+    Some(v) => v
+    None => return None
+  }
+  if value < m {
+    Some(value)
+  } else {
+    match self.take(1) {
+      Some(bit) => Some((value << 1) - m + bit)
+      None => None
+    }
+  }
 }
 
 /// Consume the tile-group header and return the byte-aligned tile data.
@@ -197,16 +235,9 @@ pub fn av1_parse_stage1_frame(
     Some(v) => v == 1
     None => return None
   }
-  if !uniform {
-    // Non-uniform spacing uses ns() coding and needs a bounded range reader;
-    // reject it explicitly instead of guessing tile boundaries.
-    return None
-  }
 
   // AV1 §5.9.15 tile_info(). The limits are expressed in superblocks and
-  // match the profile-independent maxima from §3. Tiles are uniformly spaced
-  // in this reduced parser, but non-power-of-two frame dimensions still use
-  // ceil(sb_count / 2^log2) for the final tile.
+  // match the profile-independent maxima from §3.
   let sb_size = sb_shift + 2
   let max_tile_width_sb = 4096 >> sb_size
   let max_tile_area_sb = (4096 * 2304) >> (2 * sb_size)
@@ -223,41 +254,124 @@ pub fn av1_parse_stage1_frame(
   if min_log2_tile_cols > max_log2_tile_cols {
     return None
   }
-  let mut tile_cols_log2 = min_log2_tile_cols
-  while tile_cols_log2 < max_log2_tile_cols {
-    let more = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
+  let mut tile_cols_log2 = 0
+  let mut tile_rows_log2 = 0
+  let mut tile_cols = 0
+  let mut tile_rows = 0
+  let tile_col_starts_sb : Array[Int] = []
+  let tile_row_starts_sb : Array[Int] = []
+  if uniform {
+    tile_cols_log2 = min_log2_tile_cols
+    while tile_cols_log2 < max_log2_tile_cols {
+      let more = match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+      if !more {
+        break
+      }
+      tile_cols_log2 = tile_cols_log2 + 1
     }
-    if !more {
-      break
+    let min_log2_tile_rows = {
+      let value = min_log2_tiles - tile_cols_log2
+      if value > 0 { value } else { 0 }
     }
-    tile_cols_log2 = tile_cols_log2 + 1
-  }
-  let min_log2_tile_rows = {
-    let value = min_log2_tiles - tile_cols_log2
-    if value > 0 { value } else { 0 }
-  }
-  if min_log2_tile_rows > max_log2_tile_rows {
-    return None
-  }
-  let mut tile_rows_log2 = min_log2_tile_rows
-  while tile_rows_log2 < max_log2_tile_rows {
-    let more = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
+    if min_log2_tile_rows > max_log2_tile_rows {
+      return None
     }
-    if !more {
-      break
+    tile_rows_log2 = min_log2_tile_rows
+    while tile_rows_log2 < max_log2_tile_rows {
+      let more = match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+      if !more {
+        break
+      }
+      tile_rows_log2 = tile_rows_log2 + 1
     }
-    tile_rows_log2 = tile_rows_log2 + 1
+    let tile_width_sb =
+      (sb_cols + (1 << tile_cols_log2) - 1) >> tile_cols_log2
+    let tile_height_sb =
+      (sb_rows + (1 << tile_rows_log2) - 1) >> tile_rows_log2
+    let mut start_sb = 0
+    while start_sb < sb_cols {
+      tile_col_starts_sb.push(start_sb)
+      start_sb = start_sb + tile_width_sb
+    }
+    tile_col_starts_sb.push(sb_cols)
+    tile_cols = tile_col_starts_sb.length() - 1
+    start_sb = 0
+    while start_sb < sb_rows {
+      tile_row_starts_sb.push(start_sb)
+      start_sb = start_sb + tile_height_sb
+    }
+    tile_row_starts_sb.push(sb_rows)
+    tile_rows = tile_row_starts_sb.length() - 1
+  } else {
+    // Non-uniform spacing codes each tile width with ns(max_width)+1. The
+    // widest column bounds the legal tile-area height, as in tile_info().
+    let mut widest_tile_sb = 0
+    let mut start_sb = 0
+    while start_sb < sb_cols {
+      tile_col_starts_sb.push(start_sb)
+      let remaining = sb_cols - start_sb
+      let max_width = if remaining < max_tile_width_sb {
+        remaining
+      } else {
+        max_tile_width_sb
+      }
+      let width = match r.ns(max_width) {
+        Some(v) => v + 1
+        None => return None
+      }
+      if width <= 0 || width > max_width {
+        return None
+      }
+      if width > widest_tile_sb {
+        widest_tile_sb = width
+      }
+      start_sb = start_sb + width
+    }
+    tile_col_starts_sb.push(sb_cols)
+    tile_cols = tile_col_starts_sb.length() - 1
+    tile_cols_log2 = av1_tile_log2(1, tile_cols)
+    let mut max_area_sb = if min_log2_tiles > 0 {
+      total_sb >> (min_log2_tiles + 1)
+    } else {
+      total_sb
+    }
+    if max_area_sb < 1 {
+      max_area_sb = 1
+    }
+    let mut max_height_sb = max_area_sb / {
+      if widest_tile_sb > 0 { widest_tile_sb } else { 1 }
+    }
+    if max_height_sb < 1 {
+      max_height_sb = 1
+    }
+    start_sb = 0
+    while start_sb < sb_rows {
+      tile_row_starts_sb.push(start_sb)
+      let remaining = sb_rows - start_sb
+      let max_height = if remaining < max_height_sb {
+        remaining
+      } else {
+        max_height_sb
+      }
+      let height = match r.ns(max_height) {
+        Some(v) => v + 1
+        None => return None
+      }
+      if height <= 0 || height > max_height {
+        return None
+      }
+      start_sb = start_sb + height
+    }
+    tile_row_starts_sb.push(sb_rows)
+    tile_rows = tile_row_starts_sb.length() - 1
+    tile_rows_log2 = av1_tile_log2(1, tile_rows)
   }
-  let tile_width_sb =
-    (sb_cols + (1 << tile_cols_log2) - 1) >> tile_cols_log2
-  let tile_height_sb =
-    (sb_rows + (1 << tile_rows_log2) - 1) >> tile_rows_log2
-  let tile_cols = (sb_cols + tile_width_sb - 1) / tile_width_sb
-  let tile_rows = (sb_rows + tile_height_sb - 1) / tile_height_sb
   if tile_cols <= 0 || tile_rows <= 0 || tile_cols > 64 || tile_rows > 64 {
     return None
   }
@@ -448,6 +562,8 @@ pub fn av1_parse_stage1_frame(
       tile_rows,
       tile_cols_log2,
       tile_rows_log2,
+      tile_col_starts_sb,
+      tile_row_starts_sb,
       tile_size_bytes,
       tx_mode_select,
       reduced_tx_set,
@@ -478,6 +594,8 @@ pub fn av1_parse_stage1_frame(
       tile_rows,
       tile_cols_log2,
       tile_rows_log2,
+      tile_col_starts_sb,
+      tile_row_starts_sb,
       tile_size_bytes,
       tx_mode_select: false,
       reduced_tx_set: false,

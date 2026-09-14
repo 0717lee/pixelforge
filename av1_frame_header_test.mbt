@@ -43,7 +43,7 @@ test "av1 parses a uniform two-tile reduced frame" {
   assert_eq(tiles[1].bytes, [b'\xB0'])
 }
 
-test "av1 rejects unsupported or truncated multi-tile envelopes" {
+test "av1 parses nonuniform and rejects truncated multi-tile envelopes" {
   let seq = av1_sequence_info([
     b'\x0A', b'\x06', b'\x18', b'\x19', b'\x7F', b'\xFE', b'\x00', b'\x04',
   ]).unwrap()
@@ -52,8 +52,13 @@ test "av1 rejects unsupported or truncated multi-tile envelopes" {
     b'\xA1', b'\xB0',
   ]
   let nonuniform = frame.copy()
-  nonuniform[0] = b'\x08'
-  assert_true(av1_parse_stage1_frame(nonuniform, seq) is None)
+  nonuniform[0] = b'\x00'
+  let nonuniform_header = av1_parse_stage1_frame(nonuniform, seq).unwrap()
+  assert_eq((nonuniform_header.tile_cols, nonuniform_header.tile_rows), (2, 1))
+  assert_eq((nonuniform_header.tile_cols_log2, nonuniform_header.tile_rows_log2), (1, 0))
+  assert_eq(nonuniform_header.tile_col_starts_sb, [0, 1, 2])
+  assert_eq(nonuniform_header.tile_row_starts_sb, [0, 1])
+  assert_eq(nonuniform_header.tile_size_bytes, 1)
   let truncated : Array[Byte] = [
     b'\x18', b'\x80', b'\x00', b'\x00', b'\x02', b'\x00',
   ]

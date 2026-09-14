@@ -876,6 +876,16 @@ pub fn av1_decode_tile_group(
   Some(output)
 }
 
+fn av1_tile_boundaries_uniform(starts : Array[Int]) -> Bool {
+  if starts.length() <= 2 { return true }
+  let step = starts[1] - starts[0]
+  if step <= 0 { return false }
+  for i in 2..<(starts.length() - 1) {
+    if starts[i] - starts[i - 1] != step { return false }
+  }
+  true
+}
+
 ///|
 /// Decodes a reduced-still AV1 OBU stream when it matches the first tile
 /// milestone. The input is the AV1 item payload extracted from AVIF.
@@ -899,6 +909,10 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   match header {
     None => None
     Some(frame) => {
+      if !av1_tile_boundaries_uniform(frame.tile_col_starts_sb) ||
+        !av1_tile_boundaries_uniform(frame.tile_row_starts_sb) {
+        return None
+      }
       // Keep tile-group size prefixes out of the single-tile entropy path.
       av1_decode_tile_group(
         seq.width,
@@ -932,6 +946,10 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   match input {
     None => None
     Some(value) => {
+      if !av1_tile_boundaries_uniform(value.tile_col_starts_sb) ||
+        !av1_tile_boundaries_uniform(value.tile_row_starts_sb) {
+        return None
+      }
       av1_decode_tile_group(
         value.width,
         value.height,
