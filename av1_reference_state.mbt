@@ -42,6 +42,21 @@ pub fn av1_reference_show_existing(
   state.images[envelope.frame_to_show_map_idx].map(fn(image) { image.copy() })
 }
 
+/// Resolve a show-existing frame header directly to a copy of its stored RGBA
+/// image. This is the bounded inter-frame entry; motion-compensated blocks are
+/// intentionally handled by a later planar decoder stage.
+pub fn av1_decode_show_existing_frame(
+  frame_payload : Array[Byte],
+  state : Av1ReferenceState,
+  config : Av1ShowExistingFrameConfig,
+) -> Image? {
+  let envelope = match av1_parse_show_existing_frame(frame_payload, config) {
+    Some(value) => value
+    None => return None
+  }
+  av1_reference_show_existing(state, envelope)
+}
+
 ///| 
 test "reference state stores and resolves show-existing pixels" {
   let state = av1_reference_state()
@@ -69,4 +84,7 @@ test "reference state stores and resolves show-existing pixels" {
     header_bits: 4,
     header_bytes: 1,
   }) is None)
+  let decoded = av1_decode_show_existing_frame([b'\xB0'], state, config).unwrap()
+  decoded.set_pixel(0, 0, b'\x99', b'\x99', b'\x99', b'\xFF')
+  assert_eq(shown.get_pixel(0, 0), (b'\x10', b'\x20', b'\x30', b'\xFF'))
 }
