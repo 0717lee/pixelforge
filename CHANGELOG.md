@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added 4x4, 4x8, 8x4, 4x16 and 16x4 coding blocks, including normative
+  sub-eight-pixel chroma ownership, mode syntax and transform traversal.
+- Added eight original libaom small-block cases and eight constructed lossless
+  rectangle conformance streams, verified by dav1d CLI and FFmpeg before
+  comparing native planes and public AV1/AVIF output on all three targets.
+- Bound alpha selection to the primary item's auxl relationship and standard
+  auxC alpha type. Selected malformed alpha now fails composition; shape and
+  bit depth must match. Actual 8/10/12-bit paired AVIF files cover the binding.
+- Corrected iloc version-one counts and construction methods, ipma item-ID and
+  association widths, zero property indices and representable extent bounds.
+  Valid idat/wide-ID variants match libavif; overflowing extents are rejected.
+
 - Added 64x128, 128x64 and 128x128 coding blocks. Residuals follow the
   normative 64x64-chunk then plane order while retaining complete coding-plane
   skip contexts, native samples and shared coefficient state.

@@ -1,0 +1,6 @@
+# Decoder references must retain their exact bytes on every checkout.
+tests/fixtures/**/*.avif binary
+tests/fixtures/**/*.obu binary
+tests/fixtures/**/*.rgba binary
+tests/fixtures/**/*.yuv binary
+tests/fixtures/**/*.y4m binary

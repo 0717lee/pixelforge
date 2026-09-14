@@ -110,14 +110,21 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
 /// A valid image without an alpha item keeps the existing opaque result; an
 /// alpha item that cannot be decoded is reported as `None` rather than dropped.
 pub fn avif_decode_rgba(data : Array[Byte]) -> Image? {
+  let alpha_descriptor = try {
+    avif_alpha_descriptor_checked(data)
+  } catch {
+    _ => return None
+  }
   let image = match avif_decode(data) {
     Some(value) => value
     None => return None
   }
-  let alpha_descriptor = avif_alpha_item_descriptor(data)
   match alpha_descriptor {
     None => Some(image)
-    Some(_) => {
+    Some(descriptor) => {
+      if descriptor.width != image.width || descriptor.height != image.height {
+        return None
+      }
       let alpha = match avif_decode_alpha(data) {
         Some(value) => value
         None => return None

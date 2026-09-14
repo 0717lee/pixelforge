@@ -49,29 +49,6 @@ test "avif stage one extracts a real 8-bit 4:2:0 tile" {
   assert_true(input.tile_payload.length() > 0)
   assert_eq(input.base_q_idx, 0)
 
-  // An alpha association belongs to the container boundary, not to the
-  // primary AV1 tile validator. Re-tag the fixture's colour property as the
-  // auxiliary association marker and make sure the primary stage still
-  // reaches the tile handoff. Auxiliary payload validation remains a separate
-  // responsibility of `avif_decode_rgba`.
-  let alpha_marked = data.copy()
-  let mut marked = false
-  for i in 0..<(alpha_marked.length() - 4) {
-    if alpha_marked[i] == b'c' && alpha_marked[i + 1] == b'o' &&
-      alpha_marked[i + 2] == b'l' && alpha_marked[i + 3] == b'r' {
-      alpha_marked[i] = b'a'
-      alpha_marked[i + 1] = b'u'
-      alpha_marked[i + 2] = b'x'
-      alpha_marked[i + 3] = b'C'
-      marked = true
-      break
-    }
-  }
-  assert_true(marked)
-  let alpha_container = avif_container_parse(alpha_marked).unwrap()
-  assert_true(alpha_container.has_alpha)
-  assert_true(avif_stage1_input(alpha_marked) is Some(_))
-
   // Replace only the 19-byte mdat payload with the canonical flat AV1 frame
   // (same item length) to exercise the AVIF container -> tile -> RGBA path.
   let canonical = data.copy()

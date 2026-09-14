@@ -118,14 +118,14 @@ fn u32(d : Array[Byte], p : Int, e : Int) -> Int raise AvifError {
 
 ///|
 fn u64(d : Array[Byte], p : Int, e : Int) -> Int raise AvifError {
-  if u8(d, p, e) > 127 {
+  // Box sizes and array offsets must fit Int before any arithmetic.
+  for i in 0..<4 {
+    if u8(d, p + i, e) != 0 { raise AvifError::Unsupported }
+  }
+  if u8(d, p + 4, e) > 127 {
     raise AvifError::Unsupported
   }
-  let mut x = 0
-  for i in 0..<8 {
-    x = x * 256 + u8(d, p + i, e)
-  }
-  x
+  u32(d, p + 4, e)
 }
 
 ///|
@@ -302,12 +302,6 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       raise AvifError::Invalid
     }
     let it = items[pi]
-    // Auxiliary alpha is a separate `auxl` item in `iinf`; it is not
-    // necessarily attached as an `auxC` property to the primary item.
-    let mut alpha_item = false
-    for candidate in items {
-      if candidate.typ == 0x6175786C { alpha_item = true }
-    }
     let mut w = 0
     let mut h = 0
     let mut depth = 8
@@ -317,7 +311,6 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     let mut np : Int? = None
     let mut nt : Int? = None
     let mut nm : Int? = None
-    let mut alpha = alpha_item
     for ai in it.props {
       if ai <= 0 || ai > props.length() {
         raise AvifError::Invalid
@@ -339,9 +332,6 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
         nt = Some(q.t)
         nm = Some(q.m)
       }
-      if q.kind == t_auxc {
-        alpha = true
-      }
     }
     if w <= 0 || h <= 0 || av1 is None || it.offs.length() == 0 {
       raise AvifError::Invalid
@@ -349,19 +339,21 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     let idat = find_box(bs, mi, t_idat)
     let payload : Array[Byte] = []
     for i in 0..<it.offs.length() {
-      let base = if it.method_id == 1 {
+      let (base, bound) = if it.method_id == 1 {
         match idat {
-          Some(x) => x.payload
+          Some(x) => (x.payload, x.end)
           None => raise AvifError::Invalid
         }
       } else {
-        0
+        (0, data.length())
       }
-      let off = base + it.base + it.offs[i]
       let len = it.lens[i]
-      if off < 0 || len < 0 || off > data.length() - len {
+      if len < 0 || it.base < 0 || it.offs[i] < 0 ||
+        base > bound - len || it.base > bound - len - base ||
+        it.offs[i] > bound - len - base - it.base {
         raise AvifError::Invalid
       }
+      let off = base + it.base + it.offs[i]
       for j in off..<(off + len) {
         payload.push(data[j])
       }
@@ -372,7 +364,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       bit_depth: depth,
       monochrome: mono,
       yuv420: yuv,
-      has_alpha: alpha,
+      has_alpha: avif_alpha_descriptor_checked(data) is Some(_),
       av1c: av1.unwrap(),
       payload,
       nclx_primaries: np,
@@ -392,6 +384,7 @@ fn parse_iloc(
 ) -> Unit raise AvifError {
   let p = b.payload
   let v = u8(d, p, b.end)
+  if v > 2 { raise AvifError::Unsupported }
   let a = u8(d, p + 4, b.end)
   let os = a >> 4
   let ls = a & 15
@@ -404,12 +397,12 @@ fn parse_iloc(
     raise AvifError::Unsupported
   }
   let mut q = p + 6
-  let n = if v == 0 { u16(d, q, b.end) } else { u32(d, q, b.end) }
-  q = q + (if v == 0 { 2 } else { 4 })
+  let n = if v < 2 { u16(d, q, b.end) } else { u32(d, q, b.end) }
+  q = q + (if v < 2 { 2 } else { 4 })
   for _ in 0..<n {
     let id = if v < 2 { u16(d, q, b.end) } else { u32(d, q, b.end) }
     q = q + (if v < 2 { 2 } else { 4 })
-    let method_code = if v >= 1 { (u16(d, q, b.end) >> 12) & 15 } else { 0 }
+    let method_code = if v >= 1 { u16(d, q, b.end) & 15 } else { 0 }
     if method_code != 0 && method_code != 1 {
       raise AvifError::Unsupported
     }
@@ -479,22 +472,24 @@ fn parse_ipma(
     None => return
   }
   let p = b.payload
+  let version = u8(d, p, b.end)
+  if version > 1 { raise AvifError::Unsupported }
   let flags = u32(d, p, b.end) & 0xFFFFFF
   let mut q = p + 4
   let n = u32(d, q, b.end)
   q = q + 4
   for _ in 0..<n {
-    let id = if (flags & 1) != 0 { u32(d, q, b.end) } else { u16(d, q, b.end) }
-    q = q + (if (flags & 1) != 0 { 4 } else { 2 })
+    let id = if version >= 1 { u32(d, q, b.end) } else { u16(d, q, b.end) }
+    q = q + (if version >= 1 { 4 } else { 2 })
     let c = u8(d, q, b.end)
     q = q + 1
     let xi = idx_item(xs, id)
     for _ in 0..<c {
-      let a = if (flags & 2) != 0 { u16(d, q, b.end) } else { u8(d, q, b.end) }
-      q = q + (if (flags & 2) != 0 { 2 } else { 1 })
+      let a = if (flags & 1) != 0 { u16(d, q, b.end) } else { u8(d, q, b.end) }
+      q = q + (if (flags & 1) != 0 { 2 } else { 1 })
       if xi >= 0 {
-        let property = if (flags & 2) != 0 { a & 0x7FFF } else { a & 0x7F }
-        xs[xi].props.push(property)
+        let property = if (flags & 1) != 0 { a & 0x7FFF } else { a & 0x7F }
+        if property != 0 { xs[xi].props.push(property) }
       }
     }
   }

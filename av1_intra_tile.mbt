@@ -120,10 +120,15 @@ fn av1_intra_state(
 }
 
 ///|
-/// AV1 BLOCK_* indices for coding rectangles with unambiguous 4:2:0 chroma
-/// ownership. Sub-eight-pixel axes are rejected.
+/// AV1 BLOCK_* indices for every legal coding-block geometry.
 fn av1_intra_block_index(width : Int, height : Int) -> Int? {
-  if width == 8 && height == 8 {
+  if width == 4 && height == 4 {
+    Some(0)
+  } else if width == 4 && height == 8 {
+    Some(1)
+  } else if width == 8 && height == 4 {
+    Some(2)
+  } else if width == 8 && height == 8 {
     Some(3)
   } else if width == 8 && height == 16 {
     Some(4)
@@ -149,6 +154,10 @@ fn av1_intra_block_index(width : Int, height : Int) -> Int? {
     Some(14)
   } else if width == 128 && height == 128 {
     Some(15)
+  } else if width == 4 && height == 16 {
+    Some(16)
+  } else if width == 16 && height == 4 {
+    Some(17)
   } else if width == 8 && height == 32 {
     Some(18)
   } else if width == 32 && height == 8 {
@@ -160,6 +169,16 @@ fn av1_intra_block_index(width : Int, height : Int) -> Int? {
   } else {
     None
   }
+}
+
+///|
+/// With 4:2:0 subsampling, blocks narrower than eight luma pixels share UV
+/// samples with the preceding block. Only the odd MI coordinate on each
+/// sub-eight-pixel axis reads and reconstructs the shared chroma block.
+fn av1_intra_has_chroma(state : Av1IntraState, block : Av1SbBlock) -> Bool {
+  !state.monochrome &&
+  (block.width >= 8 || ((block.col / 4) & 1) != 0) &&
+  (block.height >= 8 || ((block.row / 4) & 1) != 0)
 }
 
 ///|
@@ -406,16 +425,19 @@ fn av1_intra_transform(
 }
 
 ///|
-/// V/H still signal angle_delta for coding blocks >=8x8. The other
+/// V/H signal angle_delta for BLOCK indices >= BLOCK_8X8, including the
+/// extended 4x16/16x4 geometries. The three smaller BLOCK indices imply zero.
+/// The other
 /// supported modes have no angle syntax; diagonal modes and CfL need their
 /// own prediction paths before their residuals can be reconstructed.
 fn av1_intra_read_mode_angle(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
   mode : Int,
+  block_index : Int,
 ) -> Bool {
   if mode == AV1_INTRA_V || mode == AV1_INTRA_H {
-    return decoder.symbol(state.angle_delta[mode - 1]) == 3
+    return block_index < 3 || decoder.symbol(state.angle_delta[mode - 1]) == 3
   }
   mode == AV1_INTRA_DC ||
   mode == AV1_INTRA_SMOOTH ||
@@ -502,12 +524,23 @@ fn av1_intra_residuals(
   luma_tx_height : Int,
   skip : Int,
 ) -> Bool {
+  let plane_count = if av1_intra_has_chroma(state, block) { 3 } else { 1 }
   for chunk_y in 0..<((block.height + 63) / 64) {
     for chunk_x in 0..<((block.width + 63) / 64) {
-      for plane in 0..<state.planes.length() {
+      for plane in 0..<plane_count {
         let divisor = if plane == 0 { 1 } else { 2 }
-        let width = block.width / divisor
-        let height = block.height / divisor
+        let width = if plane != 0 && block.width < 8 {
+          4
+        } else {
+          block.width / divisor
+        }
+        let height = if plane != 0 && block.height < 8 {
+          4
+        } else {
+          block.height / divisor
+        }
+        let origin_x = if plane == 0 { block.col } else { block.col / 8 * 4 }
+        let origin_y = if plane == 0 { block.row } else { block.row / 8 * 4 }
         let unit_width = if block.width < 64 { width } else { 64 / divisor }
         let unit_height = if block.height < 64 { height } else { 64 / divisor }
         let tx_width = if plane == 0 {
@@ -541,8 +574,8 @@ fn av1_intra_residuals(
                 } else {
                   uv_mode
                 },
-                (block.col + chunk_x * 64) / divisor + col,
-                (block.row + chunk_y * 64) / divisor + row,
+                origin_x + chunk_x * (64 / divisor) + col,
+                origin_y + chunk_y * (64 / divisor) + row,
                 tx_width,
                 tx_height,
                 width,
@@ -573,6 +606,7 @@ fn av1_intra_block(
   }
   let x4 = block.col / 4
   let y4 = block.row / 4
+  let has_chroma = av1_intra_has_chroma(state, block)
   let mut skip_context = 0
   if y4 > 0 {
     skip_context = skip_context + state.skips[(y4 - 1) * state.cols + x4]
@@ -602,18 +636,18 @@ fn av1_intra_block(
       left_mode,
     )],
   )
-  if !av1_intra_read_mode_angle(decoder, state, y_mode) {
+  if !av1_intra_read_mode_angle(decoder, state, y_mode, block_index) {
     return false
   }
-  // Monochrome streams contain no UV mode, angle or palette syntax. The
-  // placeholder mode is never consumed because there is only a luma plane.
-  let uv_mode = if state.monochrome {
+  // Non-owning 4-axis blocks and monochrome streams have no UV syntax.
+  // Their placeholder mode is unused because residuals process only luma.
+  let uv_mode = if !has_chroma {
     AV1_INTRA_DC
   } else {
     // is_cfl_allowed differs for lossless: only a 4x4 chroma residual block
     // may use CfL, even when the luma coding block is below 32 pixels.
     let cfl_allowed = if state.base_q_idx == 0 {
-      block.width == 8 && block.height == 8
+      block.width <= 8 && block.height <= 8
     } else {
       block.width <= 32 && block.height <= 32
     }
@@ -624,12 +658,15 @@ fn av1_intra_block(
         state.uv_no_cfl[y_mode]
       },
     )
-    if !av1_intra_read_mode_angle(decoder, state, mode) {
+    if !av1_intra_read_mode_angle(decoder, state, mode, block_index) {
       return false
     }
     mode
   }
-  if state.allow_screen_content_tools && block.width <= 64 && block.height <= 64 {
+  if state.allow_screen_content_tools &&
+    block_index >= 3 &&
+    block.width <= 64 &&
+    block.height <= 64 {
     let palette_context = av1_msac_floor_log2(block.width / 4) +
       av1_msac_floor_log2(block.height / 4) -
       2
@@ -637,7 +674,7 @@ fn av1_intra_block(
       decoder.symbol(state.palette_y[palette_context]) != 0 {
       return false
     }
-    if !state.monochrome &&
+    if has_chroma &&
       uv_mode == AV1_INTRA_DC &&
       decoder.symbol(state.palette_uv) != 0 {
       return false
