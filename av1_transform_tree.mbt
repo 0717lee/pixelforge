@@ -260,15 +260,17 @@ fn av1_tx_decode_leaf_nodes(
   let out : Array[Av1LeafCoeffs] = []
   for leaf in leaves {
     let side = leaf.node.width
-    // The coefficient entropy reader still indexes square tx-size CDF rows.
-    // Rectangular transform leaves are supported by the reconstruction API,
-    // but remain rejected here until width/height-specific CDF contexts are
-    // wired through the scan and EOB tables.
-    if side != leaf.node.height ||
-      (side != 4 && side != 8 && side != 16 && side != 32 && side != 64) {
+    let height = leaf.node.height
+    if !((side == height && (side == 4 || side == 8 || side == 16 || side == 32 || side == 64)) ||
+      (side == 32 && height == 16) || (side == 16 && height == 32)) {
       return None
     }
-    let leaf_coeffs = if side <= 16 {
+    let leaf_coeffs = if (side == 32 && height == 16) || (side == 16 && height == 32) {
+      context.tx_ctx = 3
+      av1_decode_coeffs_leaf_with_decoder(
+        decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~, height~,
+      )
+    } else if side <= 16 {
       context.tx_ctx = if side == 16 { 2 } else if side == 8 { 1 } else { 0 }
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~,
@@ -544,12 +546,17 @@ fn av1_tx_decode_coeff_leaves(
   }
   let out : Array[Array[Int]] = []
   for leaf in leaves {
-    if leaf.width != leaf.height ||
-      (leaf.width != 4 && leaf.width != 8 && leaf.width != 16 &&
-        leaf.width != 32 && leaf.width != 64) {
+    if !((leaf.width == leaf.height && (leaf.width == 4 || leaf.width == 8 || leaf.width == 16 ||
+      leaf.width == 32 || leaf.width == 64)) ||
+      (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32)) {
       return None
     }
-    let coeffs = if leaf.width <= 16 {
+    let coeffs = if (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) {
+      context.tx_ctx = 3
+      av1_decode_coeffs_leaf_with_decoder(
+        decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth, height=leaf.height,
+      ).map(fn(value) { value.coeffs })
+    } else if leaf.width <= 16 {
       context.tx_ctx = if leaf.width == 16 { 2 } else if leaf.width == 8 { 1 } else { 0 }
       av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth)
     } else {
@@ -779,13 +786,15 @@ test "transform tree decodes multiple leaves with one CDF context" {
 }
 
 ///|
-test "transform tree documents rectangular coefficient boundary" {
+test "transform tree decodes 32x16 rectangular coefficient leaf" {
   let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
   let leaves : Array[Av1TxLeaf] = [
-    { node: { row: 0, col: 0, width: 8, height: 4 }, depth: 0 },
+    { node: { row: 0, col: 0, width: 32, height: 16 }, depth: 0 },
   ]
   let result = av1_tx_decode_leaf_nodes(
     decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,
   )
-  assert_true(result is None)
+  let coefficients = result.unwrap()
+  assert_eq(coefficients.length(), 1)
+  assert_eq(coefficients[0].coeffs.length(), 32 * 16)
 }

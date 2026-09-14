@@ -24,6 +24,7 @@ priv struct Av1LeafCoeffs {
 priv struct Av1CoeffContext {
   mut tx_ctx : Int
   eob : Array[Int]
+  eob512 : Array[Int]
   eob_small : Array[Array[Int]]
   extra : Array[Array[Array[Int]]]
   base_eob : Array[Array[Array[Int]]]
@@ -84,6 +85,7 @@ fn av1_coeff_context(
   {
     tx_ctx,
     eob: av1_coeff_eob1024_default(qctx, plane),
+    eob512: av1_coeff_eob_small_default(5, qctx, plane, 0),
     eob_small,
     extra,
     base_eob,
@@ -152,6 +154,111 @@ fn av1_coeff_scan_square(side : Int, scan_class : Int) -> Array[Int] {
     return av1_scan_default_16.copy()
   }
   av1_coeff_scan_32()
+}
+
+/// Scans for the two 32-point rectangular transforms.  The default diagonal
+/// scan is the AV1 adjusted 32x16/16x32 order; one-dimensional transform
+/// classes use the corresponding row- or column-major order over the same
+/// adjusted rectangle.
+fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int) -> Array[Int] {
+  let out : Array[Int] = []
+  if scan_class == AV1_SCAN_VERT {
+    for c in 0..<width { for r in 0..<height { out.push(r * width + c) } }
+    return out
+  }
+  if scan_class == AV1_SCAN_HORZ {
+    for r in 0..<height { for c in 0..<width { out.push(r * width + c) } }
+    return out
+  }
+  let max_d = width + height - 1
+  for d in 0..<max_d {
+    let lo = if d < width { 0 } else { d - width + 1 }
+    let hi = if d < height { d } else { height - 1 }
+    if (d & 1) == 0 {
+      let mut r = hi
+      while r >= lo { out.push(r * width + (d - r)); r = r - 1 }
+    } else {
+      let mut r = lo
+      while r <= hi { out.push(r * width + (d - r)); r = r + 1 }
+    }
+  }
+  out
+}
+
+fn av1_coeff_log2(value : Int) -> Int {
+  if value <= 4 { 2 } else if value <= 8 { 3 } else if value <= 16 { 4 } else { 5 }
+}
+
+/// Rectangular counterpart of get_coeff_base_ctx/get_coeff_br_ctx.  `width`
+/// and `height` are the adjusted coefficient dimensions (at most 32).
+fn av1_coeff_base_ctx_rect(
+  quant : Array[Int], pos : Int, c : Int, is_eob : Bool,
+  width : Int, height : Int, size_row : Int, scan_class : Int,
+) -> Int {
+  let area = width * height
+  if is_eob {
+    if c == 0 { return 0 }
+    if c <= area / 8 { return 1 }
+    if c <= area / 4 { return 2 }
+    return 3
+  }
+  let row = pos / width
+  let col = pos - row * width
+  let refs : Array[Array[Int]] = if scan_class == AV1_SCAN_VERT {
+    [[0, 1], [1, 0], [2, 0], [3, 0], [4, 0]]
+  } else if scan_class == AV1_SCAN_HORZ {
+    [[0, 1], [1, 0], [0, 2], [0, 3], [0, 4]]
+  } else {
+    [[0, 1], [1, 0], [1, 1], [0, 2], [2, 0]]
+  }
+  let mut mag = 0
+  for delta in refs {
+    let rr = row + delta[0]
+    let cc = col + delta[1]
+    if rr < height && cc < width {
+      let v = av1_coeff_abs(quant[rr * width + cc])
+      mag = mag + (if v < 3 { v } else { 3 })
+    }
+  }
+  let ctx = if (mag + 1) >> 1 < 4 { (mag + 1) >> 1 } else { 4 }
+  if scan_class != AV1_SCAN_DEFAULT {
+    let idx = if scan_class == AV1_SCAN_VERT { row } else { col }
+    return ctx + 26 + 5 * (if idx < 2 { idx } else { 2 })
+  }
+  if row == 0 && col == 0 { return 0 }
+  ctx + av1_coeff_base_ctx_offset[size_row][if row < 4 { row } else { 4 }][if col < 4 { col } else { 4 }]
+}
+
+fn av1_coeff_br_ctx_rect(
+  quant : Array[Int], pos : Int, width : Int, height : Int, scan_class : Int,
+) -> Int {
+  let row = pos / width
+  let col = pos - row * width
+  let refs : Array[Array[Int]] = if scan_class == AV1_SCAN_VERT {
+    [[0, 1], [1, 0], [2, 0]]
+  } else if scan_class == AV1_SCAN_HORZ {
+    [[0, 1], [1, 0], [0, 2]]
+  } else {
+    [[0, 1], [1, 0], [1, 1]]
+  }
+  let mut mag = 0
+  for delta in refs {
+    let rr = row + delta[0]
+    let cc = col + delta[1]
+    if rr < height && cc < width {
+      let v = quant[rr * width + cc]
+      mag = mag + (if v < 15 { v } else { 15 })
+    }
+  }
+  let m = if (mag + 1) >> 1 < 6 { (mag + 1) >> 1 } else { 6 }
+  if pos == 0 { return m }
+  if scan_class == AV1_SCAN_HORZ {
+    return m + (if col == 0 { 7 } else { 14 })
+  }
+  if scan_class == AV1_SCAN_VERT {
+    return m + (if row == 0 { 7 } else { 14 })
+  }
+  m + (if row < 2 && col < 2 { 7 } else { 14 })
 }
 
 ///|
@@ -306,6 +413,7 @@ fn av1_decode_coeffs_leaf_with_decoder(
   bit_depth? : Int = 8,
   scan_class? : Int = AV1_SCAN_DEFAULT,
   dc_sign_ctx? : Int = 0,
+  height? : Int = 0,
 ) -> Av1LeafCoeffs? {
   if base_q_idx < 0 || base_q_idx > 255 ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
@@ -313,24 +421,36 @@ fn av1_decode_coeffs_leaf_with_decoder(
     context.tx_ctx != 3 && context.tx_ctx != 4) {
     return None
   }
+  let actual_height = if height > 0 { height } else { side }
+  let rectangular = (side == 32 && actual_height == 16) ||
+    (side == 16 && actual_height == 32)
+  if !rectangular && actual_height != side { return None }
   let large = side == 32 || side == 64
-  let domain = if large { 32 } else { side }
-  let area = domain * domain
+  let domain_width = if side > 32 { 32 } else { side }
+  let domain_height = if actual_height > 32 { 32 } else { actual_height }
+  let domain = if large && !rectangular { 32 } else { side }
+  let area = domain_width * domain_height
   if scan_class != AV1_SCAN_DEFAULT && large && side == 64 {
     return None
   }
   // End-of-block position by transform-area class (AV1 spec §5.11.39).
-  let log2_domain = if domain == 4 {
-    2
-  } else if domain == 8 {
-    3
-  } else if domain == 16 {
-    4
-  } else {
-    5
-  }
+  let log2_domain = av1_coeff_log2(domain_width)
   let mut eob = 0
-  if large {
+  if rectangular {
+    let eob_pt = decoder.symbol(context.eob512) + 1
+    if eob_pt < 1 || eob_pt > 11 { return None }
+    eob = eob_pt
+    if eob_pt >= 2 { eob = (1 << (eob_pt - 2)) + 1 }
+    if eob_pt >= 3 {
+      let shift = eob_pt - 3
+      if decoder.symbol(context.extra[context.tx_ctx][shift]) == 1 { eob = eob + (1 << shift) }
+      let hi = if eob_pt - 2 > 0 { eob_pt - 2 } else { 0 }
+      if hi > 1 {
+        for i in 1..<hi { if decoder.bool() == 1 { eob = eob + (1 << (hi - 1 - i)) } }
+      }
+    }
+    if eob < 1 || eob > area { return None }
+  } else if large {
     let eob_pt = decoder.symbol(context.eob) + 1
     if eob_pt < 1 || eob_pt > 11 {
       return None
@@ -386,12 +506,16 @@ fn av1_decode_coeffs_leaf_with_decoder(
       return None
     }
   }
-  let scan = if large {
+  let scan = if rectangular {
+    av1_coeff_scan_rect(domain_width, domain_height, scan_class)
+  } else if large {
     av1_coeff_scan_32()
   } else {
     av1_coeff_scan_square(domain, scan_class)
   }
-  let size_row = if domain == 4 {
+  let size_row = if rectangular {
+    3
+  } else if domain == 4 {
     0
   } else if domain == 8 {
     1
@@ -406,9 +530,15 @@ fn av1_decode_coeffs_leaf_with_decoder(
   for ci in 0..<eob {
     let c = eob - 1 - ci
     let pos = scan[c]
-    let ctx = av1_coeff_base_ctx_square(
-      quant, pos, c, c == eob - 1, domain, size_row, scan_class,
-    )
+    let ctx = if rectangular {
+      av1_coeff_base_ctx_rect(
+        quant, pos, c, c == eob - 1, domain_width, domain_height, size_row, scan_class,
+      )
+    } else {
+      av1_coeff_base_ctx_square(
+        quant, pos, c, c == eob - 1, domain, size_row, scan_class,
+      )
+    }
     let mut value = if c == eob - 1 {
       let v0 = decoder.symbol(context.base_eob[context.tx_ctx][ctx]) + 1
       v0
@@ -422,7 +552,11 @@ fn av1_decode_coeffs_leaf_with_decoder(
         if !done {
           let br = decoder.symbol(
             context.br[if context.tx_ctx > 3 { 3 } else { context.tx_ctx }][
-              av1_coeff_br_ctx_square(quant, pos, domain, scan_class)
+              if rectangular {
+                av1_coeff_br_ctx_rect(quant, pos, domain_width, domain_height, scan_class)
+              } else {
+                av1_coeff_br_ctx_square(quant, pos, domain, scan_class)
+              }
             ],
           )
           value = value + br
@@ -488,8 +622,13 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     1L
   }
-  let out : Array[Int] = Array::make(side * side, 0)
-  if large {
+  let out : Array[Int] = Array::make(side * actual_height, 0)
+  if rectangular {
+    for i in 0..<area {
+      let q = if i == 0 { dc_q } else { ac_q }
+      out[i] = av1_dequant_clip(quant[i], q, denom, bit_depth)
+    }
+  } else if large {
     for i in 0..<1024 {
       let q = if i == 0 { dc_q } else { ac_q }
       out[(i >> 5) * side + (i & 31)] = av1_dequant_clip(
@@ -499,7 +638,7 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     for i in 0..<area {
       let q = if i == 0 { dc_q } else { ac_q }
-      out[(i >> log2_domain) * side + (i & (domain - 1))] = av1_dequant_clip(
+      out[(i / domain) * side + (i % domain)] = av1_dequant_clip(
         quant[i], q, denom, bit_depth,
       )
     }

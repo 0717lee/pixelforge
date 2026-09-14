@@ -136,15 +136,18 @@ fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bo
 
 ///|
 /// dc_sign context from the neighbour dc categories (AV1 spec §8.3).
-fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, units : Int) -> Int {
+fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, width_units : Int, height_units? : Int = 0) -> Int {
+  let h_units = if height_units > 0 { height_units } else { width_units }
   let mut score = 0
-  for k in 0..<units {
+  for k in 0..<width_units {
     let a = above_dc[x4 + k]
     if a == 1 {
       score = score - 1
     } else if a == 2 {
       score = score + 1
     }
+  }
+  for k in 0..<h_units {
     let l = left_dc[y4 + k]
     if l == 1 {
       score = score - 1
@@ -224,13 +227,17 @@ fn av1_decode_tx_mode_residuals(
   let left_dc : Array[Int] = Array::make(units, 0)
   for leaf in leaves {
     let side = leaf.node.width
-    if side != leaf.node.height || side < 4 || side > 64 {
+    let leaf_height = leaf.node.height
+    if side < 4 || side > 64 || leaf_height < 4 || leaf_height > 64 ||
+      !(side == leaf_height || (side == 32 && leaf_height == 16) ||
+        (side == 16 && leaf_height == 32)) {
       return None
     }
     let x4 = leaf.node.col / 4
     let y4 = leaf.node.row / 4
     let w4 = side / 4
-    if x4 + w4 > units || y4 + w4 > units {
+    let h4 = leaf_height / 4
+    if x4 + w4 > units || y4 + h4 > units {
       return None
     }
     let mut top = 0
@@ -240,7 +247,7 @@ fn av1_decode_tx_mode_residuals(
       }
     }
     let mut left = 0
-    for k in 0..<w4 {
+    for k in 0..<h4 {
       if left_level[y4 + k] > left {
         left = left_level[y4 + k]
       }
@@ -259,12 +266,12 @@ fn av1_decode_tx_mode_residuals(
         above_level[x4 + i] = 0
         above_dc[x4 + i] = 0
       }
-      for j in 0..<w4 {
+      for j in 0..<h4 {
         left_level[y4 + j] = 0
         left_dc[y4 + j] = 0
       }
       y_coeff_results.push({
-        coeffs: Array::make(side * side, 0),
+        coeffs: Array::make(side * leaf_height, 0),
         cul_level: 0,
         dc_category: 0,
       })
@@ -275,7 +282,7 @@ fn av1_decode_tx_mode_residuals(
         Some(value) => value
         None => return None
       }
-      let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4)
+      let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4, height_units=h4)
       y_context.tx_ctx = av1_tx_size_ctx(side)
       let decoded = match
         av1_tx_decode_leaf_nodes(
@@ -295,7 +302,7 @@ fn av1_decode_tx_mode_residuals(
         above_level[x4 + i] = result.cul_level
         above_dc[x4 + i] = result.dc_category
       }
-      for j in 0..<w4 {
+      for j in 0..<h4 {
         left_level[y4 + j] = result.cul_level
         left_dc[y4 + j] = result.dc_category
       }
@@ -363,6 +370,7 @@ fn av1_decode_tx_mode_residuals(
       let x4 = leaf.node.col / 4
       let y4 = leaf.node.row / 4
       let w4 = side / 4
+      let h4 = side / 4
       let mut above_nonzero = false
       let mut left_nonzero = false
       for i in 0..<w4 {
@@ -390,7 +398,7 @@ fn av1_decode_tx_mode_residuals(
           above_level[x4 + i] = 0
           above_dc[x4 + i] = 0
         }
-        for j in 0..<w4 {
+        for j in 0..<h4 {
           left_level[y4 + j] = 0
           left_dc[y4 + j] = 0
         }
