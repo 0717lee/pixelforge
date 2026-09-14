@@ -1,7 +1,7 @@
 /// Bounded reduced-still frame header parsing for the first AVIF pixel stage.
 ///
 /// The parser follows the reduced-still ordering from AV1 §5.9.2 and keeps
-/// only the one-tile envelope needed by the first intra reconstruction path.
+/// the checked tile-group envelope needed by the intra reconstruction path.
 
 ///|
 pub(all) struct Av1FrameHeaderInfo {
@@ -10,6 +10,8 @@ pub(all) struct Av1FrameHeaderInfo {
   base_q_idx : Int
   tile_cols : Int
   tile_rows : Int
+  tile_cols_log2 : Int
+  tile_rows_log2 : Int
   /// Size-prefix width for the tile group (0 for the legacy isolated tile).
   tile_size_bytes : Int
   tx_mode_select : Bool
@@ -53,10 +55,71 @@ fn Av1FrameBits::signed(self : Av1FrameBits, count : Int) -> Int? {
   }
 }
 
+/// ceil(log2(target / block_size)), matching AV1 tile_log2().
+fn av1_tile_log2(block_size : Int, target : Int) -> Int {
+  let mut out = 0
+  while (block_size << out) < target {
+    out = out + 1
+  }
+  out
+}
+
+/// Consume the tile-group header and return the byte-aligned tile data.
+///
+/// A reduced frame carries a complete tile group in the frame OBU.  A ranged
+/// tile group is accepted only when it explicitly covers every tile; partial
+/// groups need frame-level state and are kept outside this bounded API.
+fn av1_frame_tile_group_payload(
+  frame_payload : Array[Byte],
+  bit_pos : Int,
+  tile_cols : Int,
+  tile_rows : Int,
+  tile_cols_log2 : Int,
+  tile_rows_log2 : Int,
+) -> (Int, Array[Byte])? {
+  let reader : Av1FrameBits = { data: frame_payload, bit_pos, }
+  let tile_count = tile_cols * tile_rows
+  if tile_count <= 0 {
+    return None
+  }
+  if tile_count > 1 {
+    let has_range = match reader.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if has_range {
+      let range_bits = tile_cols_log2 + tile_rows_log2
+      if range_bits <= 0 {
+        return None
+      }
+      let start = match reader.take(range_bits) {
+        Some(v) => v
+        None => return None
+      }
+      let end = match reader.take(range_bits) {
+        Some(v) => v
+        None => return None
+      }
+      if start != 0 || end != tile_count - 1 || start > end {
+        return None
+      }
+    }
+  }
+  let offset = (reader.bit_pos + 7) / 8
+  if offset > frame_payload.length() {
+    return None
+  }
+  let tile_payload : Array[Byte] = []
+  for i in offset..<frame_payload.length() {
+    tile_payload.push(frame_payload[i])
+  }
+  Some((offset, tile_payload))
+}
+
 ///|
-/// Parses the supported one-tile reduced-still frame envelope and returns its
-/// entropy-coded tile bytes. Unsupported syntax is rejected before any bytes
-/// are exposed to the reconstruction stage.
+/// Parses a reduced-still frame envelope and returns its entropy-coded tile
+/// group. Unsupported syntax is rejected before any bytes are exposed to the
+/// reconstruction stage.
 pub fn av1_parse_stage1_frame(
   frame_payload : Array[Byte],
   sequence : Av1SequenceInfo,
@@ -124,9 +187,10 @@ pub fn av1_parse_stage1_frame(
 
   let mi_cols = 2 * ((sequence.width + 7) / 8)
   let mi_rows = 2 * ((sequence.height + 7) / 8)
-  let sb_cols = (mi_cols + 15) / 16
-  let sb_rows = (mi_rows + 15) / 16
-  if sb_cols != 1 || sb_rows != 1 {
+  let sb_shift = if sequence.use_128x128_superblock { 5 } else { 4 }
+  let sb_cols = (mi_cols + (1 << sb_shift) - 1) >> sb_shift
+  let sb_rows = (mi_rows + (1 << sb_shift) - 1) >> sb_shift
+  if sb_cols <= 0 || sb_rows <= 0 {
     return None
   }
   let uniform = match r.take(1) {
@@ -134,7 +198,78 @@ pub fn av1_parse_stage1_frame(
     None => return None
   }
   if !uniform {
+    // Non-uniform spacing uses ns() coding and needs a bounded range reader;
+    // reject it explicitly instead of guessing tile boundaries.
     return None
+  }
+
+  // AV1 §5.9.15 tile_info(). The limits are expressed in superblocks and
+  // match the profile-independent maxima from §3. Tiles are uniformly spaced
+  // in this reduced parser, but non-power-of-two frame dimensions still use
+  // ceil(sb_count / 2^log2) for the final tile.
+  let sb_size = sb_shift + 2
+  let max_tile_width_sb = 4096 >> sb_size
+  let max_tile_area_sb = (4096 * 2304) >> (2 * sb_size)
+  let min_log2_tile_cols = av1_tile_log2(max_tile_width_sb, sb_cols)
+  let bounded_cols = if sb_cols < 64 { sb_cols } else { 64 }
+  let bounded_rows = if sb_rows < 64 { sb_rows } else { 64 }
+  let max_log2_tile_cols = av1_tile_log2(1, bounded_cols)
+  let max_log2_tile_rows = av1_tile_log2(1, bounded_rows)
+  let total_sb = sb_cols * sb_rows
+  let min_log2_tiles = {
+    let area_log2 = av1_tile_log2(max_tile_area_sb, total_sb)
+    if min_log2_tile_cols > area_log2 { min_log2_tile_cols } else { area_log2 }
+  }
+  if min_log2_tile_cols > max_log2_tile_cols {
+    return None
+  }
+  let mut tile_cols_log2 = min_log2_tile_cols
+  while tile_cols_log2 < max_log2_tile_cols {
+    let more = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if !more {
+      break
+    }
+    tile_cols_log2 = tile_cols_log2 + 1
+  }
+  let min_log2_tile_rows = {
+    let value = min_log2_tiles - tile_cols_log2
+    if value > 0 { value } else { 0 }
+  }
+  if min_log2_tile_rows > max_log2_tile_rows {
+    return None
+  }
+  let mut tile_rows_log2 = min_log2_tile_rows
+  while tile_rows_log2 < max_log2_tile_rows {
+    let more = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if !more {
+      break
+    }
+    tile_rows_log2 = tile_rows_log2 + 1
+  }
+  let tile_width_sb =
+    (sb_cols + (1 << tile_cols_log2) - 1) >> tile_cols_log2
+  let tile_height_sb =
+    (sb_rows + (1 << tile_rows_log2) - 1) >> tile_rows_log2
+  let tile_cols = (sb_cols + tile_width_sb - 1) / tile_width_sb
+  let tile_rows = (sb_rows + tile_height_sb - 1) / tile_height_sb
+  if tile_cols <= 0 || tile_rows <= 0 || tile_cols > 64 || tile_rows > 64 {
+    return None
+  }
+  let mut tile_size_bytes = 0
+  if tile_cols_log2 > 0 || tile_rows_log2 > 0 {
+    if r.take(tile_cols_log2 + tile_rows_log2) is None {
+      return None
+    }
+    tile_size_bytes = match r.take(2) {
+      Some(v) => v + 1
+      None => return None
+    }
   }
 
   let base_q_idx = match r.take(8) {
@@ -294,21 +429,26 @@ pub fn av1_parse_stage1_frame(
       Some(v) => v == 1
       None => return None
     }
-    let offset = (r.bit_pos + 7) / 8
-    if offset > frame_payload.length() {
-      return None
-    }
-    let tile_payload : Array[Byte] = []
-    for i in offset..<frame_payload.length() {
-      tile_payload.push(frame_payload[i])
+    let (offset, tile_payload) = match av1_frame_tile_group_payload(
+      frame_payload,
+      r.bit_pos,
+      tile_cols,
+      tile_rows,
+      tile_cols_log2,
+      tile_rows_log2,
+    ) {
+      Some(value) => value
+      None => return None
     }
     Some({
       header_bytes: offset,
       tile_payload,
       base_q_idx,
-      tile_cols: 1,
-      tile_rows: 1,
-      tile_size_bytes: 0,
+      tile_cols,
+      tile_rows,
+      tile_cols_log2,
+      tile_rows_log2,
+      tile_size_bytes,
       tx_mode_select,
       reduced_tx_set,
       coded_lossless,
@@ -319,21 +459,26 @@ pub fn av1_parse_stage1_frame(
     if r.take(1) is None {
       return None
     }
-    let offset = (r.bit_pos + 7) / 8
-    if offset > frame_payload.length() {
-      return None
-    }
-    let tile_payload : Array[Byte] = []
-    for i in offset..<frame_payload.length() {
-      tile_payload.push(frame_payload[i])
+    let (offset, tile_payload) = match av1_frame_tile_group_payload(
+      frame_payload,
+      r.bit_pos,
+      tile_cols,
+      tile_rows,
+      tile_cols_log2,
+      tile_rows_log2,
+    ) {
+      Some(value) => value
+      None => return None
     }
     Some({
       header_bytes: offset,
       tile_payload,
       base_q_idx,
-      tile_cols: 1,
-      tile_rows: 1,
-      tile_size_bytes: 0,
+      tile_cols,
+      tile_rows,
+      tile_cols_log2,
+      tile_rows_log2,
+      tile_size_bytes,
       tx_mode_select: false,
       reduced_tx_set: false,
       coded_lossless,
@@ -343,10 +488,9 @@ pub fn av1_parse_stage1_frame(
   }
 }
 
-/// Return validated tile payload slices for a parsed frame header.  The
-/// current reduced-still parser exposes one already-isolated tile; keeping the
-/// extraction at this boundary lets a future tile-info parser opt into the
-/// same checked size-prefix handling without changing callers.
+/// Return validated tile payload slices for a parsed frame header. The frame
+/// parser has already consumed the optional tile-group range header; this
+/// boundary applies the checked size-prefix handling to the remaining bytes.
 pub fn av1_frame_tile_payloads(
   frame : Av1FrameHeaderInfo,
 ) -> Array[Av1TilePayload]? {
