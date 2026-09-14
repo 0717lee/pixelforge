@@ -477,6 +477,18 @@ test "tx luma assembler accepts rectangular transform leaves" {
 }
 
 ///|
+test "tx luma assembler reconstructs both 32x16 orientations" {
+  let a : Av1TxLeaf = { node: { row: 0, col: 0, width: 32, height: 16 }, depth: 0 }
+  let b : Av1TxLeaf = { node: { row: 0, col: 0, width: 16, height: 32 }, depth: 0 }
+  let ca = Array::make(32 * 16, 0)
+  let cb = Array::make(16 * 32, 0)
+  ca[0] = 8
+  cb[0] = 8
+  assert_true(av1_reconstruct_tx_luma(32, 16, [a], [ca], AV1_INTRA_DC, [Av1TxDctDct]) is Some(_))
+  assert_true(av1_reconstruct_tx_luma(16, 32, [b], [cb], AV1_INTRA_DC, [Av1TxDctDct]) is Some(_))
+}
+
+///|
 test "tx chroma assembler uses 16 pixel leaves" {
   let leaves : Array[Av1TxLeaf] = [
     { node: { row: 0, col: 0, width: 16, height: 16 }, depth: 1 },

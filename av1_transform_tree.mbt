@@ -798,3 +798,15 @@ test "transform tree decodes 32x16 rectangular coefficient leaf" {
   assert_eq(coefficients.length(), 1)
   assert_eq(coefficients[0].coeffs.length(), 32 * 16)
 }
+
+///|
+test "transform tree decodes the transposed 16x32 rectangular leaf" {
+  let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
+  let leaves : Array[Av1TxLeaf] = [
+    { node: { row: 0, col: 0, width: 16, height: 32 }, depth: 0 },
+  ]
+  let result = av1_tx_decode_leaf_nodes(
+    decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,
+  ).unwrap()
+  assert_eq(result[0].coeffs.length(), 16 * 32)
+}

@@ -31,3 +31,17 @@ test "square coefficient decoder returns full 64x64 transform storage" {
   assert_eq(coefficients.length(), 4096)
   assert_eq(coefficients[0], 8)
 }
+
+///|
+test "rectangular coefficient scans cover both adjusted domains and 1D classes" {
+  let diagonal = av1_coeff_scan_rect(32, 16, AV1_SCAN_DEFAULT)
+  let vertical = av1_coeff_scan_rect(32, 16, AV1_SCAN_VERT)
+  let horizontal = av1_coeff_scan_rect(16, 32, AV1_SCAN_HORZ)
+  assert_eq(diagonal.length(), 512)
+  assert_eq(vertical.length(), 512)
+  assert_eq(horizontal.length(), 512)
+  assert_eq(diagonal[0], 0)
+  assert_eq(diagonal[1], 1)
+  assert_eq(vertical[1], 32)
+  assert_eq(horizontal[16], 16)
+}
