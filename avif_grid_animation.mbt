@@ -355,6 +355,9 @@ let ga_stts = 0x73747473
 let ga_stsz = 0x7374737A
 
 ///|
+let ga_stsc = 0x73747363
+
+///|
 let ga_stco = 0x7374636F
 
 ///|
@@ -848,8 +851,81 @@ pub fn avif_animation_descriptor(
     // We can resolve that case from the sample sizes without requiring the
     // optional stsc table.  Reject other ambiguous mappings instead of
     // attaching pixels to guessed offsets.
-    if nc <= 0 || (nc != count && nc != 1) {
+    let stsc = ga_find(bs, si, ga_stsc)
+    if nc <= 0 || (stsc is None && nc != count && nc != 1) {
       raise GridAnimError::Unsupported
+    }
+    // Resolve the standard sample-to-chunk table when present.  A single
+    // chunk may contain several samples, and conversely a writer may group
+    // multiple samples per chunk; relying on contiguous offsets alone is
+    // incorrect for either layout.
+    let sample_offsets : Array[Int] = []
+    match stsc {
+      None => {
+        if nc == count {
+          for i in 0..<count {
+            let op = cp + 4 + i * (if co.typ == ga_stco { 4 } else { 8 })
+            sample_offsets.push(if co.typ == ga_stco {
+              ga_u32(data, op, co.end)
+            } else {
+              ga_u64(data, op, co.end)
+            })
+          }
+        } else {
+          let base = if co.typ == ga_stco {
+            ga_u32(data, cp + 4, co.end)
+          } else {
+            ga_u64(data, cp + 4, co.end)
+          }
+          let mut delta = 0
+          for i in 0..<count {
+            sample_offsets.push(base + delta)
+            delta = delta + sizes[i]
+          }
+        }
+      }
+      Some(table) => {
+        let ep = table.payload + 4
+        let entries = ga_u32(data, ep, table.end)
+        if entries <= 0 || entries > 4096 || table.end - ep < 8 + entries * 12 {
+          raise GridAnimError::Invalid
+        }
+        let first_chunks : Array[Int] = []
+        let per_chunk : Array[Int] = []
+        for j in 0..<entries {
+          let p = ep + 4 + j * 12
+          let first_chunk = ga_u32(data, p, table.end)
+          let samples_per_chunk = ga_u32(data, p + 4, table.end)
+          let description = ga_u32(data, p + 8, table.end)
+          if first_chunk <= 0 || samples_per_chunk <= 0 || description <= 0 ||
+            (j > 0 && first_chunk <= first_chunks[j - 1]) {
+            raise GridAnimError::Invalid
+          }
+          first_chunks.push(first_chunk)
+          per_chunk.push(samples_per_chunk)
+        }
+        let mut sample_index = 0
+        for chunk in 1..<(nc + 1) {
+          let mut entry = -1
+          for j in 0..<entries {
+            if first_chunks[j] <= chunk { entry = j }
+          }
+          if entry < 0 { raise GridAnimError::Invalid }
+          let chunk_offset = if co.typ == ga_stco {
+            ga_u32(data, cp + 4 + (chunk - 1) * 4, co.end)
+          } else {
+            ga_u64(data, cp + 4 + (chunk - 1) * 8, co.end)
+          }
+          let mut offset = chunk_offset
+          for _ in 0..<per_chunk[entry] {
+            if sample_index >= count { raise GridAnimError::Invalid }
+            sample_offsets.push(offset)
+            offset = offset + sizes[sample_index]
+            sample_index = sample_index + 1
+          }
+        }
+        if sample_index != count { raise GridAnimError::Invalid }
+      }
     }
     let stts = match ga_find(bs, si, ga_stts) {
       Some(x) => x
@@ -874,27 +950,7 @@ pub fn avif_animation_descriptor(
     let frames : Array[AvifAnimationFrame] = []
     let mut t = 0
     for i in 0..<count {
-      let o = if nc == count {
-        let op = cp + 4 + i * (if co.typ == ga_stco { 4 } else { 8 })
-        if co.typ == ga_stco {
-          ga_u32(data, op, co.end)
-        } else {
-          ga_u64(data, op, co.end)
-        }
-      } else {
-        // One chunk containing all samples; offsets are contiguous in sample
-        // order and are derived from the preceding sample sizes.
-        let base = if co.typ == ga_stco {
-          ga_u32(data, cp + 4, co.end)
-        } else {
-          ga_u64(data, cp + 4, co.end)
-        }
-        let mut delta = 0
-        for j in 0..<i {
-          delta = delta + sizes[j]
-        }
-        base + delta
-      }
+      let o = sample_offsets[i]
       let l = sizes[i]
       if o < 0 || l < 0 || o > data.length() - l {
         raise GridAnimError::Invalid
