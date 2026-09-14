@@ -77,3 +77,14 @@ test "MSAC partition fixture decodes NONE and recursive SPLIT" {
   assert_eq((split[2].row, split[2].col, split[2].size), (32, 0, 32))
   assert_eq((split[3].row, split[3].col, split[3].size), (32, 32, 32))
 }
+
+test "MSAC partition fixtures decode HORZ and VERT children" {
+  // Root HORZ (0x9F) followed by two W32 NONE symbols.
+  let horizontal = av1_decode_partition_leaves([b'\x9F'], 64, 64).unwrap()
+  assert_eq(horizontal.length(), 2)
+  assert_eq((horizontal[1].row, horizontal[1].col), (32, 0))
+  // Root VERT (0xA9) followed by two W32 NONE symbols.
+  let vertical = av1_decode_partition_leaves([b'\xA9'], 64, 64).unwrap()
+  assert_eq(vertical.length(), 2)
+  assert_eq((vertical[1].row, vertical[1].col), (0, 32))
+}
