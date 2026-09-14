@@ -238,18 +238,24 @@ fn av1_large_block_reference_compare(
 """
     for case in cases:
         name = case["name"]
-        stream = (base / case["obu_file"]).read_bytes()
+        width, height = case["dimensions"]
+        depth = case["bit_depth"]
+        reference = mono_helpers.read_hashed(base / case["reference_file"], case["reference_sha256"])
+        planes = ([mono_helpers.unpack(reference, width * height, depth)] if case["monochrome"]
+                  else helpers.unpack_planes(reference, width, height, depth))
+        gray8 = (mono_helpers.unpack(mono_helpers.read_hashed(base / case["gray8_reference_file"], case["gray8_reference_sha256"]), width * height, 8)
+                 if case["monochrome"] else [])
+        stream = mono_helpers.read_hashed(base / case["obu_file"], case["obu_sha256"])
         source += f'\n///|\ntest "external true large coding block {name}" {{\n'
         lines = ["    " + ", ".join(f"b'\\x{x:02X}'" for x in stream[i:i + 12]) + "," for i in range(0, len(stream), 12)]
         source += "  let stream : Array[Byte] = [\n" + "\n".join(lines) + "\n  ]\n"
-        avif = (base / case["avif_file"]).read_bytes()
+        avif = mono_helpers.read_hashed(base / case["avif_file"], case["avif_sha256"])
         lines = ["    " + ", ".join(f"b'\\x{x:02X}'" for x in avif[i:i + 12]) + "," for i in range(0, len(avif), 12)]
         source += "  let avif : Array[Byte] = [\n" + "\n".join(lines) + "\n  ]\n"
         for index, plane in enumerate(("y", "u", "v")):
-            values = case["reference_planes_rle"][index] if index < len(case["reference_planes_rle"]) else []
+            values = rle(planes[index]) if index < len(planes) else []
             source += f"  let {plane}_runs : Array[Int] = " + helpers.helpers.helpers.array(values) + "\n"
-        source += "  let gray8_runs : Array[Int] = " + helpers.helpers.helpers.array(case.get("gray8_reference_rle", [])) + "\n"
-        width, height = case["dimensions"]
+        source += "  let gray8_runs : Array[Int] = " + helpers.helpers.helpers.array(rle(gray8)) + "\n"
         source += f'  av1_large_block_reference_compare(stream, avif, {width}, {height}, {case["bit_depth"]}, {str(case["monochrome"]).lower()}, y_runs, u_runs, v_runs, gray8_runs)\n}}\n'
     return source
 
@@ -268,7 +274,13 @@ def main() -> int:
     parser.add_argument("--include-rectangles-lossless", action="store_true", help="append exactly four source-guided 10-bit rectangle and two lossless128 candidates")
     parser.add_argument("--include-neutral-chroma-rectangles", action="store_true", help="append exactly two 10-bit color rectangles with unchanged checkerboard Y and neutral U/V")
     parser.add_argument("--reuse-existing", action="store_true", help="verify and preserve the current manifest/artifacts, encoding only new candidate names")
+    parser.add_argument("--verify-existing-test", action="store_true", help="regenerate the recorded test in memory from hashed references; require unchanged bytes without encoding or writing files")
     args = parser.parse_args()
+    if args.verify_existing_test:
+        manifest = json.loads((args.out / "manifest.json").read_text(encoding="utf-8"))
+        verify_existing_artifacts(manifest, args.out)
+        mono_helpers.verify_generated_test(manifest, generated_test(manifest["fixtures"], args.out), args.moonfmt)
+        return 0
     args.out.mkdir(parents=True, exist_ok=True)
     scalar, scalar_version = mono_helpers.scalar_library(args.libavif_scalar)
     source_manifest = json.loads(args.source.read_text(encoding="utf-8"))
@@ -460,13 +472,13 @@ def main() -> int:
                 raise RuntimeError(f"{name}: scalar grayscale oracle is not opaque gray")
             gray8_path = args.out / f"{name}.gray8.scalar.reference"
             gray8_path.write_bytes(gray8)
-            gray8_fields = {"gray8_reference_file": gray8_path.name, "gray8_reference_sha256": sha256(gray8), "gray8_reference_rle": rle(list(gray8))}
+            gray8_fields = {"gray8_reference_file": gray8_path.name, "gray8_reference_sha256": sha256(gray8)}
         records.append({"name": name, "category": kind, "dimensions": [width, height], "bit_depth": bit_depth, "monochrome": mono,
                         "source_file": source_path.name, "source_sha256": sha256(source_data), "encoder_input_file": input_path.name, "encoder_input_sha256": sha256(input_path.read_bytes()),
                         "input_pattern": input_pattern,
                         "obu_file": obu_path.name, "obu_bytes": len(data), "obu_sha256": sha256(data),
                         "avif_file": avif_path.name, "avif_sha256": sha256(avif_path.read_bytes()), "avif_reference_matches_obu": True,
-                        "reference_file": reference_path.name, "reference_sha256": sha256(reference), "reference_planes_rle": [rle(plane) for plane in reference_planes],
+                        "reference_file": reference_path.name, "reference_sha256": sha256(reference),
                         "unfiltered_file": unfiltered_path.name, "unfiltered_sha256": sha256(raw), "pixel_format": pixel_format,
                         "actual_prefix": prefix, "header_trace": fields, "cdef": cdef, "loop_filter_levels": loop_levels,
                         "nonzero_chunk_evidence": chunk_evidence, "nonzero_evidence_reason": "DC prediction is constant within a transform; visible variation within every reported unfiltered transform proves nonzero AC residual in that plane/chunk",

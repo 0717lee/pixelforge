@@ -78,6 +78,13 @@ directory for staged development. Options also include `--source`, `--out`, enco
 paths, `--moonfmt`, and the version-checked scalar `--libavif-scalar` library.
 Only the generated test is formatted through `moonfmt -`.
 
+The manifest stores metadata and hashes; canonical sample values live in the
+binary `*.reference.yuv` and `*.gray8.scalar.reference` files. Generation and
+reuse load those files with hash and dimension checks and compute RLE only for
+the white-box test. `python scripts/generate-av1-large-block-reference.py
+--verify-existing-test` rebuilds the recorded test in memory and requires
+identical bytes, without encoding or writing files.
+
 Files retain native source planes, original OBU, filtered and same-OBU `nocdef`
 dav1d references, and a real AVIF remux. FFmpeg and dav1d CLI outputs must agree;
 AVIF remux references must equal the original OBU references. The generated tests

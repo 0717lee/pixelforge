@@ -117,6 +117,22 @@ def unpack(data: bytes, count: int, depth: int) -> list[int]:
     return values
 
 
+def read_hashed(path: Path, expected_sha256: str) -> bytes:
+    data = path.read_bytes()
+    if sha256(data) != expected_sha256:
+        raise RuntimeError(f"reference hash mismatch: {path}")
+    return data
+
+
+def verify_generated_test(manifest: dict[str, object], source: str, moonfmt: str) -> None:
+    path = Path(manifest["generated_test"])
+    existing = read_hashed(path, manifest["generated_test_sha256"])
+    generated = run([moonfmt, "-"], input_text=source).stdout.encode("utf-8")
+    if generated != existing:
+        raise RuntimeError(f"canonical references did not reproduce the existing test: {path}")
+    print(f"verified unchanged {path}: SHA256 {sha256(generated)}")
+
+
 def box(typ: bytes, payload: bytes) -> bytes:
     return struct.pack(">I", len(payload) + 8) + typ + payload
 
@@ -257,18 +273,22 @@ fn av1_mono_alpha_pair_compare(
         return f"  let {label} : Array[Byte] = [\n" + "\n".join(rows) + "\n  ]\n"
 
     for case in records:
-        source += f'\n///|\ntest "external mono native and UNORM {case["name"]}" {{\n'
-        source += byte_array("stream", (base / case["obu_file"]).read_bytes())
-        source += byte_array("avif", (base / case["avif_file"]).read_bytes())
-        source += "  let y_runs : Array[Int] = " + helpers.helpers.helpers.array(case["reference_y_rle"]) + "\n"
-        source += "  let gray8_runs : Array[Int] = " + helpers.helpers.helpers.array(case["gray8_reference_rle"]) + "\n"
         width, height = case["dimensions"]
+        native = unpack(read_hashed(base / case["reference_file"], case["reference_sha256"]), width * height, case["bit_depth"])
+        gray8 = unpack(read_hashed(base / case["gray8_reference_file"], case["gray8_reference_sha256"]), width * height, 8)
+        source += f'\n///|\ntest "external mono native and UNORM {case["name"]}" {{\n'
+        source += byte_array("stream", read_hashed(base / case["obu_file"], case["obu_sha256"]))
+        source += byte_array("avif", read_hashed(base / case["avif_file"], case["avif_sha256"]))
+        source += "  let y_runs : Array[Int] = " + helpers.helpers.helpers.array(rle(native)) + "\n"
+        source += "  let gray8_runs : Array[Int] = " + helpers.helpers.helpers.array(rle(gray8)) + "\n"
         source += f'  av1_mono_reference_compare(stream, avif, {width}, {height}, {case["bit_depth"]}, y_runs, gray8_runs)\n}}\n'
     for case in alpha_records:
         source += f'\n///|\ntest "external AVIF scalar alpha {case["bit_depth"]}bit full range" {{\n'
-        source += byte_array("primary", Path(case["color_source_avif"]).read_bytes())
-        source += byte_array("container", (base / case["file"]).read_bytes())
-        alpha8 = list((base / case["alpha8_reference_file"]).read_bytes())
+        source += byte_array("primary", read_hashed(Path(case["color_source_avif"]), case["color_source_sha256"]))
+        source += byte_array("container", read_hashed(base / case["file"], case["sha256"]))
+        alpha_case = next(record for record in records if record["name"] == case["alpha_case"])
+        width, height = alpha_case["dimensions"]
+        alpha8 = unpack(read_hashed(base / case["alpha8_reference_file"], case["alpha8_reference_sha256"]), width * height, 8)
         source += "  let alpha_runs : Array[Int] = " + helpers.helpers.helpers.array(rle(alpha8)) + "\n"
         source += "  av1_mono_alpha_pair_compare(primary, container, alpha_runs)\n}\n"
     return source
@@ -285,7 +305,12 @@ def main() -> int:
     parser.add_argument("--libavif-scalar", default=shutil.which("avif.dll") or "avif.dll")
     parser.add_argument("--test", type=Path, help="optional generated white-box test path")
     parser.add_argument("--moonfmt", default=shutil.which("moonfmt") or "moonfmt")
+    parser.add_argument("--verify-existing-test", action="store_true", help="regenerate the recorded test in memory from hashed references; require unchanged bytes without encoding or writing files")
     args = parser.parse_args()
+    if args.verify_existing_test:
+        manifest = json.loads((args.out / "manifest.json").read_text(encoding="utf-8"))
+        verify_generated_test(manifest, generate_test(manifest["fixtures"], manifest["alpha_containers"], args.out), args.moonfmt)
+        return 0
     args.out.mkdir(parents=True, exist_ok=True)
     scalar, scalar_version = scalar_library(args.libavif_scalar)
     source_manifest = json.loads(args.source.read_text(encoding="utf-8"))
@@ -429,8 +454,8 @@ def main() -> int:
             "obu_file": obu_path.name, "obu_bytes": obu_path.stat().st_size, "obu_sha256": sha256(obu_path.read_bytes()),
             "avif_file": avif_path.name, "avif_sha256": sha256(avif_path.read_bytes()),
             "reference_file": reference_path.name, "reference_sha256": sha256(reference), "reference_samples": len(values),
-            "reference_minimum": min(values), "reference_maximum": max(values), "reference_unique_count": len(set(values)), "reference_y_rle": rle(values),
-            "gray8_reference_file": gray8_path.name, "gray8_reference_sha256": sha256(gray8), "gray8_reference_rle": rle(list(gray8)),
+            "reference_minimum": min(values), "reference_maximum": max(values), "reference_unique_count": len(set(values)),
+            "gray8_reference_file": gray8_path.name, "gray8_reference_sha256": sha256(gray8),
             "native_reference_format": gray_format, "probe_stream": stream_info[0], "cli_matches_ffmpeg": True,
             "lossless_reference_matches_source": True if lossless else None,
             "unfiltered_file": unfiltered_path.name, "unfiltered_sha256": sha256(unfiltered_path.read_bytes()),

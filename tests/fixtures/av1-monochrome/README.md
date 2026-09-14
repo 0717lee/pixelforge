@@ -27,9 +27,15 @@ moon test av1_monochrome_reference_wbtest.mbt --target js
 Use `--test <path> --moonfmt <executable>` to additionally generate white-box
 tests. Other options select `--source`, `--out`, `--aomenc`, `--ffmpeg`,
 `--ffprobe`, `--dav1d`, and `--libavif-scalar`. The scalar conversion binding
-checks the recorded libavif 0.11.1 ABI before calling it. All commands, versions,
-source formulas, byte hashes, strengths, and full native/reference RLE arrays
-are recorded in `manifest.json`.
+checks the recorded libavif 0.11.1 ABI before calling it. Commands, versions,
+source formulas, byte hashes, strengths, and sample summaries are recorded in
+`manifest.json`. Native Y, gray8, and alpha8 samples are read from their canonical
+binary reference files after checking the recorded hashes and dimensions. RLE
+is generated only for the white-box test.
+
+`python scripts/generate-av1-monochrome-reference.py --verify-existing-test`
+rebuilds the recorded test in memory and requires identical bytes. This check
+uses `moonfmt -` and performs no encoding or file writes.
 
 Limited-range conversion vectors are also recorded for black, middle, white,
 and out-of-range samples at each depth. They come from the same actual scalar
