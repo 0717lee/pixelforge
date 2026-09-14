@@ -34,3 +34,19 @@ test "horizontal and vertical children stop at frame edges" {
   assert_eq(v.length(), 2)
   assert_eq(v[1].col, 32)
 }
+
+test "extended partition geometry emits three and four square children" {
+  let node = av1_partition_node(0, 0, 64, 64, 64)
+  let ha = av1_partition_children(node, Av1SbPartitionHorzA)
+  let vb = av1_partition_children(node, Av1SbPartitionVertB)
+  assert_eq(ha.length(), 3)
+  assert_eq(vb.length(), 3)
+  assert_eq((ha[1].row, ha[1].col), (32, 0))
+  assert_eq((vb[2].row, vb[2].col), (32, 32))
+  let h4 = av1_partition_children(node, Av1SbPartitionHorz4)
+  let v4 = av1_partition_children(node, Av1SbPartitionVert4)
+  assert_eq(h4.length(), 4)
+  assert_eq(v4.length(), 4)
+  assert_eq((h4[3].row, h4[3].size), (48, 16))
+  assert_eq((v4[3].col, v4[3].size), (48, 16))
+}

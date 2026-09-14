@@ -167,13 +167,45 @@ pub fn av1_partition_children(
         av1_partition_child(node, node.row + half, node.col + half, half),
       )
     }
-    // Extended partitions are intentionally represented but not walked yet.
-    Av1SbPartitionHorzA |
-    Av1SbPartitionHorzB |
-    Av1SbPartitionVertA |
-    Av1SbPartitionVertB |
-    Av1SbPartitionHorz4 |
-    Av1SbPartitionVert4 => out.push(node)
+    // A/B partitions combine one full half with two quarter blocks.  The
+    // children stay square in this geometry model; rectangular transform
+    // leaves are handled by the separate tx tree.
+    Av1SbPartitionHorzA => {
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col + half, half))
+    }
+    Av1SbPartitionHorzB => {
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + half, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
+    }
+    Av1SbPartitionVertA => {
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + half, half))
+    }
+    Av1SbPartitionVertB => {
+      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
+      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col + half, half))
+    }
+    Av1SbPartitionHorz4 => {
+      let quarter = node.size / 4
+      if quarter >= 4 {
+        for i in 0..<4 {
+          av1_partition_push_child(out, av1_partition_child(node, node.row + i * quarter, node.col, quarter))
+        }
+      }
+    }
+    Av1SbPartitionVert4 => {
+      let quarter = node.size / 4
+      if quarter >= 4 {
+        for i in 0..<4 {
+          av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + i * quarter, quarter))
+        }
+      }
+    }
   }
   out
 }
