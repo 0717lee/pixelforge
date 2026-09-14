@@ -639,6 +639,26 @@ def main() -> int:
         bit_depth=12,
     )
 
+    # E: profile 2 12-bit tx_mode=SELECT stream with one diagonal AC value.
+    # The zero-valued scan prefix is explicit so the encoder and decoder agree
+    # on the adjusted 32x32 diagonal position.
+    streams["txsel_highbd12_ac"] = build_obu(
+        64,
+        64,
+        120,
+        craft_tile(
+            fresh(),
+            120,
+            64,
+            1,
+            [LeafPlan(zero=False, levels={0: 1, 1: 0, 32: 1})]
+            + [LeafPlan(zero=True) for _ in range(3)],
+            [LeafPlan(), LeafPlan()],
+        ),
+        profile=2,
+        bit_depth=12,
+    )
+
 
     for name, data in streams.items():
         if args.check:
