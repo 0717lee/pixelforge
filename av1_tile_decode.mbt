@@ -464,7 +464,18 @@ fn av1_decode_tx_mode_residuals(
   for result in v_results {
     v_coeffs.push(result.coeffs)
   }
-  Some((y_coeffs, u_coeffs, v_coeffs, y_types, [u_type], [v_type], chroma_leaves))
+  // Every chroma transform leaf has its own type slot.  A single type is
+  // derived from uv_mode for this intra path, but returning one entry per
+  // decoded leaf keeps the coefficient and type arrays aligned for raster
+  // reconstruction (notably when a 64x64 luma block has four 32x32 leaves
+  // on each 4:2:0 chroma plane).
+  let u_types : Array[Av1TxType] = []
+  let v_types : Array[Av1TxType] = []
+  for _ in chroma_leaves {
+    u_types.push(u_type)
+    v_types.push(v_type)
+  }
+  Some((y_coeffs, u_coeffs, v_coeffs, y_types, u_types, v_types, chroma_leaves))
 }
 
 ///|
@@ -830,6 +841,7 @@ pub fn av1_decode_tile_group(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
+  tx_partition_tree? : Bool = false,
 ) -> Image? {
   if width <= 0 || height <= 0 || tile_cols <= 0 || tile_rows <= 0 ||
     width % tile_cols != 0 || height % tile_rows != 0 {

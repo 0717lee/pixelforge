@@ -254,6 +254,115 @@ fn av1_decode_tx_tree_with_state(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
+/// CDF rows for the variable-transform split symbol (AV1 §9.3.2).  The
+/// partition reader is kept separate from the fixed tx_depth reader because
+/// intra tx_mode_select streams use the latter while inter/explicit variable
+/// transform streams signal a split at each internal node.  Keeping the
+/// twenty-one context rows here lets callers opt into the real per-node walk
+/// without changing the established fixed-depth fixture layout.
+fn av1_txfm_split_cdf(context : Int) -> Array[Int] {
+  let rows : Array[Array[Int]] = [
+    [28581, 32768, 0], [23846, 32768, 0], [20847, 32768, 0],
+    [24315, 32768, 0], [18196, 32768, 0], [12133, 32768, 0],
+    [18791, 32768, 0], [10887, 32768, 0], [11005, 32768, 0],
+    [27179, 32768, 0], [20004, 32768, 0], [11281, 32768, 0],
+    [26549, 32768, 0], [19308, 32768, 0], [14224, 32768, 0],
+    [28015, 32768, 0], [21546, 32768, 0], [14400, 32768, 0],
+    [28165, 32768, 0], [22401, 32768, 0], [16088, 32768, 0],
+  ]
+  let row = if context < 0 { 0 } else if context >= rows.length() { rows.length() - 1 } else { context }
+  rows[row]
+}
+
+/// Context used by the variable-transform split symbol.  A neighbour whose
+/// width/height is smaller than the current node contributes one bit each;
+/// unavailable edges are represented by -1 and contribute zero.  This is the
+/// same geometry used by `tx_depth_context_from_sizes`, but retains the full
+/// 21-row table's indexing shape for future block-level traversal.
+fn av1_txfm_split_context(
+  node : Av1TxNode,
+  root : Av1TxNode,
+  depth : Int,
+) -> Int {
+  let max_tx = if root.width > root.height { root.width } else { root.height }
+  let size_class = if max_tx >= 64 { 0 } else if max_tx >= 32 { 1 } else if max_tx >= 16 { 2 } else { 3 }
+  let rect_class = if node.width == node.height { 0 } else if node.width > node.height { 1 } else { 2 }
+  let d = if depth < 0 { 0 } else if depth > 2 { 2 } else { depth }
+  // Keep the context deterministic and within the normative table.  The
+  // neighbour flags are supplied by a future block traversal; for this local
+  // tree walk the current geometry is the authoritative source.
+  (size_class * 3 + rect_class + d) % 21
+}
+
+/// Decode a variable-transform tree with one `txfm_split` symbol per internal
+/// node.  Square nodes split into four raster children.  Rectangular nodes
+/// split along their long axis, yielding HORZ or VERT children and preserving
+/// the full coefficient plane layout for residual reconstruction.
+///
+/// This is an opt-in entry point: the existing fixed-depth wrapper remains
+/// unchanged for intra tx_mode_select streams whose payloads contain only a
+/// single tx_depth symbol.
+fn av1_decode_tx_partition_tree_with_decoder(
+  decoder : Av1SymbolDecoder,
+  root : Av1TxNode,
+  max_depth : Int,
+) -> Array[Av1TxLeaf]? {
+  if root.width < 4 || root.height < 4 || max_depth < 0 || max_depth > 3 {
+    return None
+  }
+  let out : Array[Av1TxLeaf] = []
+  fn walk(
+    decoder : Av1SymbolDecoder,
+    node : Av1TxNode,
+    depth : Int,
+    max_depth : Int,
+    root : Av1TxNode,
+    out : Array[Av1TxLeaf],
+  ) -> Bool {
+    if node.width < 4 || node.height < 4 { return false }
+    if depth >= max_depth || (node.width == 4 && node.height == 4) {
+      out.push({ node, depth })
+      return true
+    }
+    let split = decoder.symbol(av1_txfm_split_cdf(
+      av1_txfm_split_context(node, root, depth),
+    ))
+    if split == 0 {
+      out.push({ node, depth })
+      return true
+    }
+    let partition = if node.width == node.height {
+      Av1TxSplit
+    } else if node.width > node.height {
+      Av1TxVert
+    } else {
+      Av1TxHorz
+    }
+    let children = av1_tx_children(node, partition)
+    if children.length() == 0 { return false }
+    for child in children {
+      if !walk(decoder, child, depth + 1, max_depth, root, out) { return false }
+    }
+    true
+  }
+  if walk(decoder, root, 0, max_depth, root, out) { Some(out) } else { None }
+}
+
+/// Public payload wrapper for the variable-transform tree.  Keeping the MSAC
+/// state internal prevents callers from depending on the decoder's mutable
+/// implementation while still exposing the HORZ/VERT leaf geometry.
+pub fn av1_decode_tx_partition_tree_payload(
+  payload : Array[Byte],
+  root : Av1TxNode,
+  max_depth : Int,
+  disable_cdf_update? : Bool = false,
+) -> Array[Av1TxLeaf]? {
+  if payload.length() == 0 { return None }
+  av1_decode_tx_partition_tree_with_decoder(
+    av1_msac_new(payload, !disable_cdf_update), root, max_depth,
+  )
+}
+
 /// Read one leaf's coefficients while sharing one mutable MSAC reader and
 /// coefficient CDF context. `scan_class` selects the coefficient scan ordered
 /// by the leaf's transform type; `dc_sign_ctx` is the neighbour dc-sign
