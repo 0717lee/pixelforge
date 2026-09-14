@@ -18,14 +18,16 @@ pub fn av1_decode_alpha_tile(
   base_q_idx : Int,
   use_128x128_superblock? : Bool = false,
   allow_screen_content_tools? : Bool = false,
+  bit_depth? : Int = 8,
 ) -> Array[Byte]? {
   if (width != 32 && width != 64) || width != height ||
     base_q_idx < 0 || base_q_idx > 255 || tile_payload.length() == 0 ||
     tile_payload.length() > 255 {
     return None
   }
+  if bit_depth != 8 && bit_depth != 10 && bit_depth != 12 { return None }
   if width == 64 {
-    match av1_decode_alpha_split_tile(tile_payload, base_q_idx, allow_screen_content_tools) {
+    match av1_decode_alpha_split_tile(tile_payload, base_q_idx, allow_screen_content_tools, bit_depth) {
       Some(value) => return Some(value)
       None => ()
     }
@@ -52,11 +54,12 @@ pub fn av1_decode_alpha_tile(
       decoder,
       base_q_idx,
       av1_coeff_context(base_q_idx, if width == 64 { 4 } else { 3 }, 0),
+      bit_depth=bit_depth,
     ) {
       Some(value) => value
       None => return None
     }
-    residual = match av1_inverse_dct_2d(coeffs, side, side, 8) {
+    residual = match av1_inverse_dct_2d(coeffs, side, side, bit_depth) {
       Some(value) => value
       None => return None
     }
@@ -64,8 +67,10 @@ pub fn av1_decode_alpha_tile(
     return None
   }
   let out : Array[Byte] = []
+  let neutral = 1 << (bit_depth - 1)
+  let shift = bit_depth - 8
   for i in 0..<(side * side) {
-    out.push(clamp_byte(128 + residual[i]))
+    out.push(clamp_byte((neutral + residual[i]) >> shift))
   }
   let _ = use_128x128_superblock
   Some(out)
@@ -78,12 +83,13 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     None => return None
   }
   if !sequence.monochrome || sequence.width != sequence.height ||
-    (sequence.width != 32 && sequence.width != 64) {
+    (sequence.width != 32 && sequence.width != 64) ||
+    (sequence.bit_depth != 8 && sequence.bit_depth != 10 && sequence.bit_depth != 12) {
     return None
   }
   let frames = av1_obu_payloads(data, 6)
   if frames.length() == 0 { return None }
-  let frame = match av1_parse_stage1_frame(frames[0], sequence, allow_monochrome=true) {
+  let frame = match av1_parse_stage1_frame(frames[0], sequence, allow_monochrome=true, allow_highbd=true) {
     Some(value) => value
     None => return None
   }
@@ -94,6 +100,7 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     frame.base_q_idx,
     use_128x128_superblock=sequence.use_128x128_superblock,
     allow_screen_content_tools=frame.allow_screen_content_tools,
+    bit_depth=sequence.bit_depth,
   )
 }
 
@@ -101,10 +108,13 @@ fn av1_decode_alpha_split_tile(
   tile_payload : Array[Byte],
   base_q_idx : Int,
   allow_screen_content_tools : Bool,
+  bit_depth : Int,
 ) -> Array[Byte]? {
   let decoder = av1_msac_new(tile_payload, true)
   if decoder.symbol(av1_split_partition_cdf(false)) != 3 { return None }
-  let plane : Array[Int] = Array::make(64 * 64, 128)
+  let neutral = 1 << (bit_depth - 1)
+  let shift = bit_depth - 8
+  let plane : Array[Int] = Array::make(64 * 64, neutral)
   let context = av1_coeff_context(base_q_idx, 3, 0)
   for child in 0..<4 {
     if decoder.symbol(av1_split_skip_cdf()) != 0 { return None }
@@ -116,11 +126,11 @@ fn av1_decode_alpha_split_tile(
     let residual = if all_zero == 1 {
       Array::make(32 * 32, 0)
     } else if all_zero == 0 {
-      let coeffs = match av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context) {
+      let coeffs = match av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth=bit_depth) {
         Some(value) => value
         None => return None
       }
-      match av1_inverse_dct_2d(coeffs, 32, 32, 8) {
+      match av1_inverse_dct_2d(coeffs, 32, 32, bit_depth) {
         Some(value) => value
         None => return None
       }
@@ -128,11 +138,11 @@ fn av1_decode_alpha_split_tile(
     let ox = (child % 2) * 32
     let oy = (child / 2) * 32
     for y in 0..<32 { for x in 0..<32 {
-      plane[(oy + y) * 64 + ox + x] = 128 + residual[y * 32 + x]
+      plane[(oy + y) * 64 + ox + x] = neutral + residual[y * 32 + x]
     }}
   }
   let out : Array[Byte] = []
-  for value in plane { out.push(clamp_byte(value)) }
+  for value in plane { out.push(clamp_byte(value >> shift)) }
   Some(out)
 }
 
