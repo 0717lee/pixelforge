@@ -209,3 +209,40 @@ pub fn av1_partition_children(
   }
   out
 }
+
+/// Walk a pre-decoded partition sequence and return leaf blocks in raster
+/// order.  Entropy decoding remains the caller's responsibility; this helper
+/// provides the same bounded geometry walk used by the transform tree.
+pub fn av1_partition_leaves(
+  root : Av1SbPartitionNode,
+  partitions : Array[Av1SbPartition],
+) -> Array[Av1SbPartitionNode]? {
+  let cursor : Ref[Int] = { val: 0 }
+  let out : Array[Av1SbPartitionNode] = []
+  fn walk(
+    node : Av1SbPartitionNode,
+    parts : Array[Av1SbPartition],
+    cursor : Ref[Int],
+    out : Array[Av1SbPartitionNode],
+  ) -> Bool {
+    if cursor.val >= parts.length() { return false }
+    let partition = parts[cursor.val]
+    cursor.val = cursor.val + 1
+    let children = av1_partition_children(node, partition)
+    if children.length() == 0 { return false }
+    match partition {
+      Av1SbPartitionNone => { out.push(node); true }
+      _ => {
+        for child in children {
+          if !walk(child, parts, cursor, out) { return false }
+        }
+        true
+      }
+    }
+  }
+  if walk(root, partitions, cursor, out) && cursor.val == partitions.length() {
+    Some(out)
+  } else {
+    None
+  }
+}

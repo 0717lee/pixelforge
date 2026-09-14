@@ -50,3 +50,15 @@ test "extended partition geometry emits three and four square children" {
   assert_eq((h4[3].row, h4[3].size), (48, 16))
   assert_eq((v4[3].col, v4[3].size), (48, 16))
 }
+
+test "partition leaf walker preserves raster order across extended nodes" {
+  let root = av1_partition_node(0, 0, 64, 64, 64)
+  let leaves = av1_partition_leaves(
+    root,
+    [Av1SbPartitionHorz, Av1SbPartitionNone, Av1SbPartitionNone],
+  ).unwrap()
+  assert_eq(leaves.length(), 2)
+  assert_eq((leaves[0].row, leaves[0].col), (0, 0))
+  assert_eq((leaves[1].row, leaves[1].col), (32, 0))
+  assert_true(av1_partition_leaves(root, [Av1SbPartitionHorz]) is None)
+}
