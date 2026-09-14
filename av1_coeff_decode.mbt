@@ -72,12 +72,12 @@ fn av1_coeff_context(
   for i in 0..<3 {
     sign.push(av1_coeff_dc_sign_default(qctx, plane, i))
   }
-  // Small-leaf eob_pt rows for the square kinds used by this context:
-  // slot 0 = eobPt16 (4x4), 1 = eobPt64 (8x8), 2 = eobPt256 (16x16), each for
-  // both transform classes. They must adapt across every leaf of the tile.
+  // EOB tables for multisize kinds 0..4 (EOB16..EOB256), two transform-class
+  // contexts per kind. EOB512 has no class context and is kept in eob512;
+  // EOB1024 uses eob.
   let eob_small : Array[Array[Int]] = []
-  for kind_slot in 0..<3 {
-    let kind = kind_slot * 2
+  for kind_slot in 0..<5 {
+    let kind = kind_slot
     for tx_class in 0..<2 {
       eob_small.push(av1_coeff_eob_small_default(kind, qctx, plane, tx_class))
     }
@@ -156,10 +156,11 @@ fn av1_coeff_scan_square(side : Int, scan_class : Int) -> Array[Int] {
   av1_coeff_scan_32()
 }
 
-/// Scans for the two 32-point rectangular transforms.  The default diagonal
-/// scan is the AV1 adjusted 32x16/16x32 order; one-dimensional transform
-/// classes use the corresponding row- or column-major order over the same
-/// adjusted rectangle.
+/// Scans for rectangular transforms.  The default diagonal scan is the AV1
+/// adjusted order; large rectangles (64x32/32x64) use the adjusted 32x32
+/// coefficient domain, while 32x16/16x32 use the 32x16 domain.  One-
+/// dimensional transform classes use the corresponding row- or column-major
+/// order over the same adjusted rectangle.
 fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int) -> Array[Int] {
   let out : Array[Int] = []
   if scan_class == AV1_SCAN_VERT {
@@ -170,11 +171,18 @@ fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int) -> Array[Int
     for r in 0..<height { for c in 0..<width { out.push(r * width + c) } }
     return out
   }
+  if width == height {
+    return av1_coeff_scan_square(width, AV1_SCAN_DEFAULT)
+  }
   let max_d = width + height - 1
   for d in 0..<max_d {
     let lo = if d < width { 0 } else { d - width + 1 }
     let hi = if d < height { d } else { height - 1 }
-    if (d & 1) == 0 {
+    // AV1's rectangular default scans keep the short-axis direction
+    // monotonic: width>height walks rows high-to-low (scan_def32x16), while
+    // width<height walks rows low-to-high (scan_def16x32).  Only square
+    // domains alternate diagonal direction.
+    if width > height || (width == height && (d & 1) == 0) {
       let mut r = hi
       while r >= lo { out.push(r * width + (d - r)); r = r - 1 }
     } else {
@@ -422,21 +430,27 @@ fn av1_decode_coeffs_leaf_with_decoder(
     return None
   }
   let actual_height = if height > 0 { height } else { side }
-  let rectangular = (side == 32 && actual_height == 16) ||
+  // AV1 caps coded coefficients for the large rectangular transforms at the
+  // adjusted 32x32 domain, just as it does for 64x64.  Keep the smaller
+  // 32x16/16x32 pair on the 512-coefficient eob_pt table.
+  let rectangular_small = (side == 32 && actual_height == 16) ||
     (side == 16 && actual_height == 32)
+  let rectangular_large = (side == 64 && actual_height == 32) ||
+    (side == 32 && actual_height == 64)
+  let rectangular = rectangular_small || rectangular_large
   if !rectangular && actual_height != side { return None }
   let large = side == 32 || side == 64
   let domain_width = if side > 32 { 32 } else { side }
   let domain_height = if actual_height > 32 { 32 } else { actual_height }
   let domain = if large && !rectangular { 32 } else { side }
   let area = domain_width * domain_height
-  if scan_class != AV1_SCAN_DEFAULT && large && side == 64 {
+  if scan_class != AV1_SCAN_DEFAULT && large && (side == 64 || actual_height == 64) {
     return None
   }
   // End-of-block position by transform-area class (AV1 spec §5.11.39).
   let log2_domain = av1_coeff_log2(domain_width)
   let mut eob = 0
-  if rectangular {
+  if rectangular_small {
     let eob_pt = decoder.symbol(context.eob512) + 1
     if eob_pt < 1 || eob_pt > 11 { return None }
     eob = eob_pt
@@ -478,9 +492,8 @@ fn av1_decode_coeffs_leaf_with_decoder(
     }
   } else {
     let multisize = log2_domain + log2_domain - 4
-    let kind_slot = multisize / 2
     let pt_ctx = if scan_class == AV1_SCAN_DEFAULT { 0 } else { 1 }
-    let eob_pt = decoder.symbol(context.eob_small[kind_slot * 2 + pt_ctx]) + 1
+    let eob_pt = decoder.symbol(context.eob_small[multisize * 2 + pt_ctx]) + 1
     if eob_pt < 1 || eob_pt > 11 {
       return None
     }
@@ -513,7 +526,9 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     av1_coeff_scan_square(domain, scan_class)
   }
-  let size_row = if rectangular {
+  let size_row = if rectangular_large {
+    4
+  } else if rectangular_small {
     3
   } else if domain == 4 {
     0
@@ -626,7 +641,12 @@ fn av1_decode_coeffs_leaf_with_decoder(
   if rectangular {
     for i in 0..<area {
       let q = if i == 0 { dc_q } else { ac_q }
-      out[i] = av1_dequant_clip(quant[i], q, denom, bit_depth)
+      // The coded coefficient domain is 32x32 for 64x32/32x64.  Place it
+      // in the top-left of the full transform plane and leave the expanded
+      // tail zero-filled, matching the AV1 adjusted-transform layout.
+      let row = i / domain_width
+      let col = i - row * domain_width
+      out[row * side + col] = av1_dequant_clip(quant[i], q, denom, bit_depth)
     }
   } else if large {
     for i in 0..<1024 {

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Extended the bounded tx-mode coefficient path to AV1 64x32/32x64
+  rectangular leaves, including adjusted 32x32 coefficient storage, correct
+  transform-size contexts, scan ordering, and 4:2:0 typed reconstruction.
+- Primary AVIF stage input now remains decodable when the container carries a
+  validated auxiliary alpha item; `avif_decode_rgba()` can reach its automatic
+  alpha composition path without weakening auxiliary-item validation.
 - Added a pure MoonBit single-tile AV1 path for 64x64 reduced-still, 8-bit
   4:2:0 frames with DC intra prediction, square DCT_DCT coefficient decoding,
   and luma/chroma residual reconstruction. The path is validated against

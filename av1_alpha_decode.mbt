@@ -157,6 +157,18 @@ pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
     Some(value) => value
     None => return None
   }
+  // Keep the auxiliary item's declared geometry and bit depth tied to the
+  // sequence header carried by its AV1 payload.  Without this check a valid
+  // payload could be attached to a mismatched alpha descriptor and only fail
+  // later as an opaque pixel-length error.
+  let sequence = match av1_sequence_info(payload) {
+    Some(value) => value
+    None => return None
+  }
+  if sequence.width != descriptor.width || sequence.height != descriptor.height ||
+    sequence.bit_depth != descriptor.bit_depth || !sequence.monochrome {
+    return None
+  }
   let alpha = match av1_decode_alpha(payload) {
     Some(value) => value
     None => return None

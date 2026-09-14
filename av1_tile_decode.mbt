@@ -97,6 +97,13 @@ fn av1_tx_size_ctx(side : Int) -> Int {
   }
 }
 
+/// Transform-size context for rectangular leaves.  AV1's Tx_Size_Sqr context
+/// follows the larger transform axis, so 64x32 and 32x64 use the 64-wide row.
+fn av1_tx_size_ctx_rect(width : Int, height : Int) -> Int {
+  let max_side = if width > height { width } else { height }
+  av1_tx_size_ctx(max_side)
+}
+
 ///|
 /// Luma all_zero context from the neighbour level model (AV1 spec §8.3,
 /// readAllZero). `top`/`left` are the maximum neighbour cul levels over the
@@ -230,7 +237,8 @@ fn av1_decode_tx_mode_residuals(
     let leaf_height = leaf.node.height
     if side < 4 || side > 64 || leaf_height < 4 || leaf_height > 64 ||
       !(side == leaf_height || (side == 32 && leaf_height == 16) ||
-        (side == 16 && leaf_height == 32)) {
+        (side == 16 && leaf_height == 32) || (side == 64 && leaf_height == 32) ||
+        (side == 32 && leaf_height == 64)) {
       return None
     }
     let x4 = leaf.node.col / 4
@@ -252,9 +260,9 @@ fn av1_decode_tx_mode_residuals(
         left = left_level[y4 + k]
       }
     }
-    let whole = side == width && side == height
+    let whole = side == width && leaf_height == height
     let ctx = av1_txb_skip_ctx_luma(top, left, whole)
-    let y_zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(side)][ctx])
+    let y_zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx])
     if y_zero > 1 {
       return None
     }
@@ -283,7 +291,7 @@ fn av1_decode_tx_mode_residuals(
         None => return None
       }
       let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4, height_units=h4)
-      y_context.tx_ctx = av1_tx_size_ctx(side)
+      y_context.tx_ctx = av1_tx_size_ctx_rect(side, leaf_height)
       let decoded = match
         av1_tx_decode_leaf_nodes(
           decoder,
@@ -336,7 +344,8 @@ fn av1_decode_tx_mode_residuals(
       }
       if leaf_width < 4 || leaf_height < 4 ||
         !((leaf_width == leaf_height) || (leaf_width == 32 && leaf_height == 16) ||
-          (leaf_width == 16 && leaf_height == 32)) {
+          (leaf_width == 16 && leaf_height == 32) || (leaf_width == 64 && leaf_height == 32) ||
+          (leaf_width == 32 && leaf_height == 64)) {
         return None
       }
       chroma_leaves.push({
@@ -393,7 +402,7 @@ fn av1_decode_tx_mode_residuals(
       }
       let whole = side == chroma_width && leaf_height == chroma_height
       let ctx = av1_txb_skip_ctx_chroma(above_nonzero, left_nonzero, whole)
-      let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(side)][ctx])
+      let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx])
       if zero > 1 {
         return None
       }
@@ -486,7 +495,9 @@ pub fn av1_decode_dc_tile(
     (bit_depth != 8 && tile_payload.length() > 8 && !tx_mode_select) ||
     (width != 16 && width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
-    (width != height && !(tx_mode_select && ((width == 32 && height == 16) || (width == 16 && height == 32)))) ||
+    (width != height && !(tx_mode_select && ((width == 32 && height == 16) ||
+      (width == 16 && height == 32) || (width == 64 && height == 32) ||
+      (width == 32 && height == 64)))) ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||

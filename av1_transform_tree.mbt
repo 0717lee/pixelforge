@@ -262,11 +262,13 @@ fn av1_tx_decode_leaf_nodes(
     let side = leaf.node.width
     let height = leaf.node.height
     if !((side == height && (side == 4 || side == 8 || side == 16 || side == 32 || side == 64)) ||
-      (side == 32 && height == 16) || (side == 16 && height == 32)) {
+      (side == 32 && height == 16) || (side == 16 && height == 32) ||
+      (side == 64 && height == 32) || (side == 32 && height == 64)) {
       return None
     }
-    let leaf_coeffs = if (side == 32 && height == 16) || (side == 16 && height == 32) {
-      context.tx_ctx = 3
+    let leaf_coeffs = if (side == 32 && height == 16) || (side == 16 && height == 32) ||
+      (side == 64 && height == 32) || (side == 32 && height == 64) {
+      context.tx_ctx = if side == 64 || height == 64 { 4 } else { 3 }
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~, height~,
       )
@@ -548,11 +550,13 @@ fn av1_tx_decode_coeff_leaves(
   for leaf in leaves {
     if !((leaf.width == leaf.height && (leaf.width == 4 || leaf.width == 8 || leaf.width == 16 ||
       leaf.width == 32 || leaf.width == 64)) ||
-      (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32)) {
+      (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) ||
+      (leaf.width == 64 && leaf.height == 32) || (leaf.width == 32 && leaf.height == 64)) {
       return None
     }
-    let coeffs = if (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) {
-      context.tx_ctx = 3
+    let coeffs = if (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) ||
+      (leaf.width == 64 && leaf.height == 32) || (leaf.width == 32 && leaf.height == 64) {
+      context.tx_ctx = if leaf.width == 64 || leaf.height == 64 { 4 } else { 3 }
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth, height=leaf.height,
       ).map(fn(value) { value.coeffs })

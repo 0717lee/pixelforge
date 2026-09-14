@@ -223,7 +223,8 @@ pub fn av1_reconstruct_tx_rgba(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
-  if (width != height && !((width == 32 && height == 16) || (width == 16 && height == 32))) ||
+  if (width != height && !((width == 32 && height == 16) || (width == 16 && height == 32) ||
+    (width == 64 && height == 32) || (width == 32 && height == 64))) ||
     (width != 32 && width != 64 && width != 16) ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
@@ -503,6 +504,17 @@ test "tx luma assembler reconstructs both 32x16 orientations" {
   assert_true(av1_reconstruct_tx_luma(16, 32, [b], [cb], AV1_INTRA_DC, [Av1TxDctDct]) is Some(_))
 }
 
+/// Large rectangular transforms use the same raster leaf assembler; their
+/// coefficient decoder supplies the full 64x32/32x64 plane shape.
+test "tx luma assembler reconstructs 64x32 and 32x64" {
+  let a : Av1TxLeaf = { node: { row: 0, col: 0, width: 64, height: 32 }, depth: 0 }
+  let b : Av1TxLeaf = { node: { row: 0, col: 0, width: 32, height: 64 }, depth: 0 }
+  let ca = Array::make(64 * 32, 0)
+  let cb = Array::make(32 * 64, 0)
+  assert_true(av1_reconstruct_tx_luma(64, 32, [a], [ca], AV1_INTRA_DC, [Av1TxDctDct]) is Some(_))
+  assert_true(av1_reconstruct_tx_luma(32, 64, [b], [cb], AV1_INTRA_DC, [Av1TxDctDct]) is Some(_))
+}
+
 ///|
 test "tx chroma assembler uses 16 pixel leaves" {
   let leaves : Array[Av1TxLeaf] = [
@@ -548,6 +560,22 @@ test "typed transform planes compose rectangular 420 geometry" {
   assert_eq(image.width, 32)
   assert_eq(image.height, 16)
   assert_eq(image.get_pixel(31, 15).3, b'\xFF')
+}
+
+/// The large rectangular entry carries the 4:2:0 plane geometry through the
+/// same typed reconstruction path (64x32 luma -> 32x16 chroma).
+test "typed transform planes compose 64x32 rectangular geometry" {
+  let y_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 64, height: 32 }, depth: 0 }]
+  let c_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 32, height: 16 }, depth: 0 }]
+  let y = Array::make(64 * 32, 0)
+  let c = Array::make(32 * 16, 0)
+  let image = av1_reconstruct_tx_rgba(
+    64, 32, y_leaf, [y], c_leaf, [c.copy()], c_leaf, [c.copy()],
+    AV1_INTRA_DC, AV1_INTRA_DC,
+    [Av1TxDctDct], [Av1TxDctDct], [Av1TxDctDct], 8,
+  ).unwrap()
+  assert_eq((image.width, image.height), (64, 32))
+  assert_eq(image.get_pixel(63, 31).3, b'\xFF')
 }
 
 ///|
