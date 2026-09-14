@@ -831,7 +831,11 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
   match header {
     None => None
-    Some(frame) =>
+    Some(frame) => {
+      // Keep tile-group size prefixes out of the single-tile entropy path.
+      if frame.tile_cols != 1 || frame.tile_rows != 1 {
+        return None
+      }
       av1_decode_dc_tile(
         seq.width,
         seq.height,
@@ -847,6 +851,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         reduced_tx_set=frame.reduced_tx_set,
         enable_filter_intra=seq.enable_filter_intra,
       )
+    }
   }
 }
 
@@ -859,7 +864,10 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
     None => None
-    Some(value) =>
+    Some(value) => {
+      if value.tile_cols != 1 || value.tile_rows != 1 {
+        return None
+      }
       av1_decode_dc_tile(
         value.width,
         value.height,
@@ -875,6 +883,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         reduced_tx_set=value.reduced_tx_set,
         enable_filter_intra=value.enable_filter_intra,
       )
+    }
   }
 }
 

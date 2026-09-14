@@ -106,7 +106,7 @@ fn av1_frame_tile_group_payload(
     }
   }
   let offset = (reader.bit_pos + 7) / 8
-  if offset > frame_payload.length() {
+  if offset >= frame_payload.length() {
     return None
   }
   let tile_payload : Array[Byte] = []

@@ -23,7 +23,7 @@ test "av1 parses the reduced still frame tile boundary" {
 /// one-byte tile_size_minus_1 prefix is 1); the final tile consumes the tail.
 test "av1 parses a uniform two-tile reduced frame" {
   let seq = av1_sequence_info([
-    b'\x18', b'\x19', b'\x7F', b'\xFE', b'\x00', b'\x04',
+    b'\x0A', b'\x06', b'\x18', b'\x19', b'\x7F', b'\xFE', b'\x00', b'\x04',
   ]).unwrap()
   assert_eq((seq.width, seq.height), (128, 64))
   let frame : Array[Byte] = [
@@ -45,14 +45,14 @@ test "av1 parses a uniform two-tile reduced frame" {
 
 test "av1 rejects unsupported or truncated multi-tile envelopes" {
   let seq = av1_sequence_info([
-    b'\x18', b'\x19', b'\x7F', b'\xFE', b'\x00', b'\x04',
+    b'\x0A', b'\x06', b'\x18', b'\x19', b'\x7F', b'\xFE', b'\x00', b'\x04',
   ]).unwrap()
   let frame : Array[Byte] = [
     b'\x18', b'\x80', b'\x00', b'\x00', b'\x02', b'\x00', b'\x01', b'\xA0',
     b'\xA1', b'\xB0',
   ]
   let nonuniform = frame.copy()
-  nonuniform[0] = b'\x10'
+  nonuniform[0] = b'\x08'
   assert_true(av1_parse_stage1_frame(nonuniform, seq) is None)
   let truncated : Array[Byte] = [
     b'\x18', b'\x80', b'\x00', b'\x00', b'\x02', b'\x00',
