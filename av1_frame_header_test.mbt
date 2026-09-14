@@ -12,4 +12,8 @@ test "av1 parses the reduced still frame tile boundary" {
   assert_eq(header.header_bytes, 8)
   assert_eq(header.tile_payload[0], b'\x0A')
   assert_eq(header.tile_payload.length(), 11)
+  assert_eq((header.tile_cols, header.tile_rows, header.tile_size_bytes), (1, 1, 0))
+  let tiles = av1_frame_tile_payloads(header).unwrap()
+  assert_eq(tiles.length(), 1)
+  assert_eq(tiles[0].bytes, header.tile_payload)
 }

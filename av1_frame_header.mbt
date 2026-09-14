@@ -10,6 +10,8 @@ pub(all) struct Av1FrameHeaderInfo {
   base_q_idx : Int
   tile_cols : Int
   tile_rows : Int
+  /// Size-prefix width for the tile group (0 for the legacy isolated tile).
+  tile_size_bytes : Int
   tx_mode_select : Bool
   reduced_tx_set : Bool
   coded_lossless : Bool
@@ -306,6 +308,7 @@ pub fn av1_parse_stage1_frame(
       base_q_idx,
       tile_cols: 1,
       tile_rows: 1,
+      tile_size_bytes: 0,
       tx_mode_select,
       reduced_tx_set,
       coded_lossless,
@@ -330,6 +333,7 @@ pub fn av1_parse_stage1_frame(
       base_q_idx,
       tile_cols: 1,
       tile_rows: 1,
+      tile_size_bytes: 0,
       tx_mode_select: false,
       reduced_tx_set: false,
       coded_lossless,
@@ -337,4 +341,19 @@ pub fn av1_parse_stage1_frame(
       allow_screen_content_tools: allow_tools,
     })
   }
+}
+
+/// Return validated tile payload slices for a parsed frame header.  The
+/// current reduced-still parser exposes one already-isolated tile; keeping the
+/// extraction at this boundary lets a future tile-info parser opt into the
+/// same checked size-prefix handling without changing callers.
+pub fn av1_frame_tile_payloads(
+  frame : Av1FrameHeaderInfo,
+) -> Array[Av1TilePayload]? {
+  av1_extract_tile_payloads(
+    frame.tile_payload,
+    frame.tile_cols,
+    frame.tile_rows,
+    frame.tile_size_bytes,
+  )
 }
