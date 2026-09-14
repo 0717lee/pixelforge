@@ -129,3 +129,17 @@ test "tile group decoder stitches two neutral 64x64 tiles" {
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
   assert_eq(image.get_pixel(127, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
+
+test "tile group decoder stitches a 2x2 128x128 canvas" {
+  let image = av1_decode_tile_group(
+    128,
+    128,
+    2,
+    2,
+    [b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x2E'],
+    1,
+    43,
+  ).unwrap()
+  assert_eq((image.width, image.height), (128, 128))
+  assert_eq(image.get_pixel(127, 127), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}
