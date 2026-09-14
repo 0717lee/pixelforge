@@ -114,3 +114,18 @@ test "highbd tile path normalizes a neutral 10-bit frame" {
   ).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x80', b'\x80', b'\x80', b'\xFF'))
 }
+
+test "tile group decoder stitches two neutral 64x64 tiles" {
+  let image = av1_decode_tile_group(
+    128,
+    64,
+    2,
+    1,
+    [b'\x00', b'\x2E', b'\x2E'],
+    1,
+    43,
+  ).unwrap()
+  assert_eq((image.width, image.height), (128, 64))
+  assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+  assert_eq(image.get_pixel(127, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
+}

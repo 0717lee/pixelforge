@@ -809,6 +809,73 @@ pub fn av1_decode_dc_tile(
   )
 }
 
+/// Decode a complete tile group into a raster image when every tile is a
+/// bounded intra tile supported by the current pixel path. Tile-local MSAC
+/// state is reset for each payload, then the decoded images are stitched in
+/// row-major order.
+pub fn av1_decode_tile_group(
+  width : Int,
+  height : Int,
+  tile_cols : Int,
+  tile_rows : Int,
+  tile_payload : Array[Byte],
+  tile_size_bytes : Int,
+  base_q_idx : Int,
+  disable_cdf_update? : Bool = false,
+  full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
+  use_128x128_superblock? : Bool = false,
+  bit_depth? : Int = 8,
+  allow_screen_content_tools? : Bool = false,
+  tx_mode_select? : Bool = false,
+  reduced_tx_set? : Bool = false,
+  enable_filter_intra? : Bool = false,
+) -> Image? {
+  if width <= 0 || height <= 0 || tile_cols <= 0 || tile_rows <= 0 ||
+    width % tile_cols != 0 || height % tile_rows != 0 {
+    return None
+  }
+  let tile_width = width / tile_cols
+  let tile_height = height / tile_rows
+  if tile_width < 16 || tile_width > 64 || tile_height < 16 || tile_height > 64 {
+    return None
+  }
+  let tiles = match av1_extract_tile_payloads(
+    tile_payload, tile_cols, tile_rows, tile_size_bytes,
+  ) {
+    Some(value) => value
+    None => return None
+  }
+  let output = Image::new(width, height)
+  for tile in tiles {
+    let image = match av1_decode_dc_tile(
+      tile_width,
+      tile_height,
+      tile.bytes,
+      base_q_idx,
+      disable_cdf_update~,
+      full_range~,
+      matrix_coefficients~,
+      use_128x128_superblock~,
+      bit_depth~,
+      allow_screen_content_tools~,
+      tx_mode_select~,
+      reduced_tx_set~,
+      enable_filter_intra~,
+    ) {
+      Some(value) => value
+      None => return None
+    }
+    for y in 0..<tile_height {
+      for x in 0..<tile_width {
+        let p = image.get_pixel(x, y)
+        output.set_pixel(tile.col * tile_width + x, tile.row * tile_height + y, p.0, p.1, p.2, p.3)
+      }
+    }
+  }
+  Some(output)
+}
+
 ///|
 /// Decodes a reduced-still AV1 OBU stream when it matches the first tile
 /// milestone. The input is the AV1 item payload extracted from AVIF.
@@ -833,13 +900,13 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
     None => None
     Some(frame) => {
       // Keep tile-group size prefixes out of the single-tile entropy path.
-      if frame.tile_cols != 1 || frame.tile_rows != 1 {
-        return None
-      }
-      av1_decode_dc_tile(
+      av1_decode_tile_group(
         seq.width,
         seq.height,
+        frame.tile_cols,
+        frame.tile_rows,
         frame.tile_payload,
+        frame.tile_size_bytes,
         frame.base_q_idx,
         disable_cdf_update=frame.disable_cdf_update,
         allow_screen_content_tools=frame.allow_screen_content_tools,
@@ -865,13 +932,13 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   match input {
     None => None
     Some(value) => {
-      if value.tile_cols != 1 || value.tile_rows != 1 {
-        return None
-      }
-      av1_decode_dc_tile(
+      av1_decode_tile_group(
         value.width,
         value.height,
+        value.tile_cols,
+        value.tile_rows,
         value.tile_payload,
+        value.tile_size_bytes,
         value.base_q_idx,
         disable_cdf_update=value.disable_cdf_update,
         allow_screen_content_tools=value.allow_screen_content_tools,
