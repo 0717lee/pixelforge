@@ -192,6 +192,18 @@ pub fn av1_reconstruct_tx_chroma(
   av1_reconstruct_tx_luma(size, size, leaves, coefficients, mode, types, bit_depth~)
 }
 
+fn av1_reconstruct_tx_chroma_rect(
+  width : Int,
+  height : Int,
+  leaves : Array[Av1TxLeaf],
+  coefficients : Array[Array[Int]],
+  mode : Int,
+  types : Array[Av1TxType],
+  bit_depth : Int,
+) -> Array[Int]? {
+  av1_reconstruct_tx_luma(width, height, leaves, coefficients, mode, types, bit_depth~)
+}
+
 /// Compose typed transform leaves for Y/U/V into an RGBA image.
 pub fn av1_reconstruct_tx_rgba(
   width : Int,
@@ -211,7 +223,8 @@ pub fn av1_reconstruct_tx_rgba(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
-  if width != height || (width != 32 && width != 64) ||
+  if (width != height && !((width == 32 && height == 16) || (width == 16 && height == 32))) ||
+    (width != 32 && width != 64 && width != 16) ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
   }
@@ -219,11 +232,13 @@ pub fn av1_reconstruct_tx_rgba(
     Some(value) => value
     None => return None
   }
-  let u = match av1_reconstruct_tx_chroma(u_leaves, u_coefficients, uv_mode, u_types, size=width / 2, bit_depth~) {
+  let cw = (width + 1) / 2
+  let ch = (height + 1) / 2
+  let u = match av1_reconstruct_tx_chroma_rect(cw, ch, u_leaves, u_coefficients, uv_mode, u_types, bit_depth) {
     Some(value) => value
     None => return None
   }
-  let v = match av1_reconstruct_tx_chroma(v_leaves, v_coefficients, uv_mode, v_types, size=width / 2, bit_depth~) {
+  let v = match av1_reconstruct_tx_chroma_rect(cw, ch, v_leaves, v_coefficients, uv_mode, v_types, bit_depth) {
     Some(value) => value
     None => return None
   }

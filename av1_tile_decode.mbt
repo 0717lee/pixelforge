@@ -315,35 +315,44 @@ fn av1_decode_tx_mode_residuals(
   // blocks at the plane maximum (32x32 for a 64x64 luma block, 16x16 for a
   // 32x32 block).  Keep the geometry explicit so larger callers can be
   // tiled without accidentally collapsing the plane into one block.
-  let chroma_side = width / 2
-  let chroma_tx_side = if chroma_side >= 32 { 32 } else { 16 }
+  let chroma_width = (width + 1) / 2
+  let chroma_height = (height + 1) / 2
+  let chroma_tx_width = if chroma_width >= 32 { 32 } else { chroma_width }
+  let chroma_tx_height = if chroma_height >= 32 { 32 } else { chroma_height }
   let chroma_leaves : Array[Av1TxLeaf] = []
   let mut chroma_row = 0
-  while chroma_row < chroma_side {
+  while chroma_row < chroma_height {
     let mut chroma_col = 0
-    while chroma_col < chroma_side {
-      let side = if chroma_side - chroma_col < chroma_tx_side {
-        chroma_side - chroma_col
+    while chroma_col < chroma_width {
+      let leaf_width = if chroma_width - chroma_col < chroma_tx_width {
+        chroma_width - chroma_col
       } else {
-        chroma_tx_side
+        chroma_tx_width
       }
-      if side < 4 || side != chroma_tx_side {
+      let leaf_height = if chroma_height - chroma_row < chroma_tx_height {
+        chroma_height - chroma_row
+      } else {
+        chroma_tx_height
+      }
+      if leaf_width < 4 || leaf_height < 4 ||
+        !((leaf_width == leaf_height) || (leaf_width == 32 && leaf_height == 16) ||
+          (leaf_width == 16 && leaf_height == 32)) {
         return None
       }
       chroma_leaves.push({
         node: {
           row: chroma_row,
           col: chroma_col,
-          width: side,
-          height: side,
+          width: leaf_width,
+          height: leaf_height,
         },
         depth: 0,
       })
-      chroma_col = chroma_col + chroma_tx_side
+      chroma_col = chroma_col + chroma_tx_width
     }
-    chroma_row = chroma_row + chroma_tx_side
+    chroma_row = chroma_row + chroma_tx_height
   }
-  let u_type = match av1_chroma_tx_type(uv_mode, chroma_tx_side, reduced_tx_set) {
+  let u_type = match av1_chroma_tx_type(uv_mode, chroma_tx_width, reduced_tx_set) {
     Some(value) => value
     None => return None
   }
@@ -356,10 +365,10 @@ fn av1_decode_tx_mode_residuals(
     let plane_idx = 1
     let context = av1_coeff_context(
       base_q_idx,
-      if chroma_tx_side == 32 { 3 } else { 2 },
+      if chroma_tx_width >= 32 { 3 } else { 2 },
       plane_idx,
     )
-    let units = chroma_side / 4
+    let units = chroma_width / 4
     let above_level : Array[Int] = Array::make(units, 0)
     let left_level : Array[Int] = Array::make(units, 0)
     let above_dc : Array[Int] = Array::make(units, 0)
@@ -367,21 +376,22 @@ fn av1_decode_tx_mode_residuals(
     let results : Array[Av1LeafCoeffs] = []
     for leaf in chroma_leaves {
       let side = leaf.node.width
+      let leaf_height = leaf.node.height
       let x4 = leaf.node.col / 4
       let y4 = leaf.node.row / 4
       let w4 = side / 4
-      let h4 = side / 4
+      let h4 = leaf_height / 4
       let mut above_nonzero = false
       let mut left_nonzero = false
       for i in 0..<w4 {
         if above_level[x4 + i] > 0 {
           above_nonzero = true
         }
-        if left_level[y4 + i] > 0 {
+        if left_level[y4 + (if i < h4 { i } else { h4 - 1 })] > 0 {
           left_nonzero = true
         }
       }
-      let whole = side == chroma_side
+      let whole = side == chroma_width && leaf_height == chroma_height
       let ctx = av1_txb_skip_ctx_chroma(above_nonzero, left_nonzero, whole)
       let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx(side)][ctx])
       if zero > 1 {
@@ -389,7 +399,7 @@ fn av1_decode_tx_mode_residuals(
       }
       if zero == 1 {
         let skipped = {
-          coeffs: Array::make(side * side, 0),
+          coeffs: Array::make(side * leaf_height, 0),
           cul_level: 0,
           dc_category: 0,
         }
@@ -425,7 +435,7 @@ fn av1_decode_tx_mode_residuals(
           above_level[x4 + i] = result.cul_level
           above_dc[x4 + i] = result.dc_category
         }
-        for j in 0..<w4 {
+        for j in 0..<h4 {
           left_level[y4 + j] = result.cul_level
           left_dc[y4 + j] = result.dc_category
         }
@@ -474,9 +484,9 @@ pub fn av1_decode_dc_tile(
     // partition syntax. tx_mode_select uses the bounded tree reader below;
     // keep the explicit rejection only for that legacy path.
     (bit_depth != 8 && tile_payload.length() > 8 && !tx_mode_select) ||
-    (width != 32 && width != 64) ||
+    (width != 16 && width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
-    width != height ||
+    (width != height && !(tx_mode_select && ((width == 32 && height == 16) || (width == 16 && height == 32)))) ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||
