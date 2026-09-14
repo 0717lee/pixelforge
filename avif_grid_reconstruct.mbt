@@ -105,6 +105,18 @@ pub fn avif_decode_grid(
   )
 }
 
+/// Decode and compose a grid directly from a BMFF buffer.  This convenience
+/// entrypoint performs descriptor extraction and pixel reconstruction as one
+/// operation, so callers cannot accidentally skip the `dimg` ordering or
+/// extent validation step.
+pub fn avif_decode_grid_auto(data : Array[Byte]) -> Image? {
+  let descriptor = match avif_grid_descriptor(data) {
+    Some(value) => value
+    None => return None
+  }
+  avif_decode_grid(data, descriptor)
+}
+
 ///|
 test "grid reconstruction crops edge tiles and preserves order" {
   let a = Image::new(2, 2)
@@ -261,4 +273,7 @@ test "grid decoder parses BMFF metadata and decodes tile pixels" {
   let image = avif_decode_grid(data, descriptor).unwrap()
   assert_eq((image.width, image.height), (128, 64))
   assert_eq(image.get_pixel(0, 0).3, b'\xFF')
+  let automatic = avif_decode_grid_auto(data).unwrap()
+  assert_eq((automatic.width, automatic.height), (128, 64))
+  assert_eq(automatic.get_pixel(127, 63).3, b'\xFF')
 }

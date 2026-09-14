@@ -160,6 +160,17 @@ pub fn avif_decode_animation(data : Array[Byte]) -> AvifAnimationPixels? {
   avif_decode_animation_frames(descriptor, samples)
 }
 
+/// Decode an AVIF sequence and select the image visible at `timestamp` in
+/// track timescale units.  The full sequence is validated before selection;
+/// malformed timing or pixel samples therefore cannot produce a partial frame.
+pub fn avif_decode_animation_frame(data : Array[Byte], timestamp : Int) -> Image? {
+  let animation = match avif_decode_animation(data) {
+    Some(value) => value
+    None => return None
+  }
+  avif_animation_frame_at(animation, timestamp)
+}
+
 /// Select the frame visible at a media timestamp. Playback loops at the
 /// track duration; negative timestamps are rejected.
 pub fn avif_animation_frame_at(

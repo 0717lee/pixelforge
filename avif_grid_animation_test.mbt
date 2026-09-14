@@ -157,4 +157,8 @@ test "animation decoder reads BMFF samples and returns pixels" {
   let animation = avif_decode_animation(data).unwrap()
   assert_eq(animation.frames.length(), 2)
   assert_eq((animation.frames[0].image.width, animation.frames[1].image.height), (64, 64))
+  let frame0 = avif_decode_animation_frame(data, 0).unwrap()
+  let frame1 = avif_decode_animation_frame(data, 15).unwrap()
+  assert_eq((frame0.width, frame0.height), (64, 64))
+  assert_eq((frame1.width, frame1.height), (64, 64))
 }

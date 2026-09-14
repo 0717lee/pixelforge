@@ -139,11 +139,26 @@ fn av1_decode_alpha_split_tile(
 /// Decode the validated auxiliary alpha item from a complete AVIF container.
 /// The result is a row-major 8-bit alpha plane for the supported 64x64 stage.
 pub fn avif_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
+  let descriptor = match avif_alpha_item_descriptor(data) {
+    Some(value) => value
+    None => return None
+  }
   let payload = match avif_alpha_item_payload(data) {
     Some(value) => value
     None => return None
   }
-  av1_decode_alpha(payload)
+  let alpha = match av1_decode_alpha(payload) {
+    Some(value) => value
+    None => return None
+  }
+  // The auxiliary item dimensions are authoritative at the container
+  // boundary.  Reject a stream whose sequence header decodes to another
+  // size instead of returning a plausible but misaligned plane.
+  if descriptor.width <= 0 || descriptor.height <= 0 ||
+    alpha.length() != descriptor.width * descriptor.height {
+    return None
+  }
+  Some(alpha)
 }
 
 /// Decode a primary AVIF image and compose its validated auxiliary alpha item.
