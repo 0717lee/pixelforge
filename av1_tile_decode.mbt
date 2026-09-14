@@ -211,6 +211,9 @@ fn av1_decode_tx_mode_residuals(
   bit_depth : Int,
   reduced_tx_set : Bool,
 ) -> (Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Av1TxType], Array[Av1TxType], Array[Av1TxType], Array[Av1TxLeaf])? {
+  // Keep every transform-size CDF row alive in one context object.  The
+  // selected row changes with each tx leaf (tx_depth can produce 8/16/32
+  // leaves), while the arrays themselves must remain shared for adaptation.
   let y_context = av1_coeff_context(base_q_idx, 3, 0)
   let y_coeff_results : Array[Av1LeafCoeffs] = []
   let y_types : Array[Av1TxType] = []
@@ -273,6 +276,7 @@ fn av1_decode_tx_mode_residuals(
         None => return None
       }
       let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4)
+      y_context.tx_ctx = av1_tx_size_ctx(side)
       let decoded = match
         av1_tx_decode_leaf_nodes(
           decoder,
@@ -340,6 +344,8 @@ fn av1_decode_tx_mode_residuals(
   let mut u_results : Array[Av1LeafCoeffs] = []
   let mut v_results : Array[Av1LeafCoeffs] = []
   for plane in 0..<2 {
+    // AV1's coefficient CDF tables use one shared chroma plane row for U/V;
+    // the plane loop still keeps independent mutable contexts for each plane.
     let plane_idx = 1
     let context = av1_coeff_context(
       base_q_idx,
