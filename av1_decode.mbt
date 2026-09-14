@@ -582,8 +582,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       }
       if (c.bit_depth != 8 && c.bit_depth != 10 && c.bit_depth != 12) ||
         c.monochrome ||
-        !c.yuv420 ||
-        c.has_alpha {
+        !c.yuv420 {
         return None
       }
       if c.width != seq.width ||

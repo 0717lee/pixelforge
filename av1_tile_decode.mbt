@@ -847,7 +847,9 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
 
 ///|
 /// Decodes an AVIF container through the same pure MoonBit stage-one tile
-/// path. Unsupported profiles, alpha items, and non-DC tiles return None.
+/// path. Unsupported profiles and non-DC tiles return None; a validated
+/// auxiliary alpha item is composed by `avif_decode_rgba` after this primary
+/// image decode succeeds.
 pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
