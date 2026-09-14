@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added 64x128, 128x64 and 128x128 coding blocks. Residuals follow the
+  normative 64x64-chunk then plane order while retaining complete coding-plane
+  skip contexts, native samples and shared coefficient state.
+- Capped large-block transforms at Y64/UV32 and preserved real SELECT depths
+  and lossless 4x4 traversal. Palette syntax is omitted on 128-axis blocks.
+- Added 19 original libaom/dav1d large-block cases: color/mono at 8/10/12 bits,
+  actual SELECT depths one and two, horizontal/vertical rectangles, cropped
+  frame edges and source-exact lossless planes. All native samples and public
+  AV1/AVIF pixels are compared, with scalar libavif references for mono RGB.
+
 - Shared the native-depth intra traversal and CDEF path with monochrome images
   and auxiliary alpha, including AC, lossless WHT, multiple tiles and supported
   predictors. Removed the old size-limited single-DC alpha probes.
@@ -18,7 +28,7 @@
 
 - Replaced speculative single-block tile probes with a shared MSAC traversal
   that decodes modes and residuals in partition order across superblocks.
-  Supported coding blocks span 8..64 pixels per axis, including rectangles.
+  Supported coding blocks span 8..128 pixels per axis, including rectangles.
 - Integrated intra transform-depth selection, including 8x8 signalling,
   16x16 depth-two transforms, rectangular splitting and neighbour updates.
 - Added tile decoding for V/H with zero angle delta, SMOOTH, SMOOTH_V/H and

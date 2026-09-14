@@ -121,7 +121,7 @@ fn av1_intra_state(
 
 ///|
 /// AV1 BLOCK_* indices for coding rectangles with unambiguous 4:2:0 chroma
-/// ownership. Sub-eight-pixel axes and 128-pixel coding blocks are rejected.
+/// ownership. Sub-eight-pixel axes are rejected.
 fn av1_intra_block_index(width : Int, height : Int) -> Int? {
   if width == 8 && height == 8 {
     Some(3)
@@ -143,6 +143,12 @@ fn av1_intra_block_index(width : Int, height : Int) -> Int? {
     Some(11)
   } else if width == 64 && height == 64 {
     Some(12)
+  } else if width == 64 && height == 128 {
+    Some(13)
+  } else if width == 128 && height == 64 {
+    Some(14)
+  } else if width == 128 && height == 128 {
+    Some(15)
   } else if width == 8 && height == 32 {
     Some(18)
   } else if width == 32 && height == 8 {
@@ -483,6 +489,79 @@ fn av1_intra_cdef_index(
 }
 
 ///|
+/// Decode residuals in AV1 syntax order: 64x64 luma chunk, then plane, then
+/// transform raster order within that chunk. Keep the full coding-plane
+/// dimensions for txb_skip context; a chunk is not a new coding block.
+fn av1_intra_residuals(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  block : Av1SbBlock,
+  y_mode : Int,
+  uv_mode : Int,
+  luma_tx_width : Int,
+  luma_tx_height : Int,
+  skip : Int,
+) -> Bool {
+  for chunk_y in 0..<((block.height + 63) / 64) {
+    for chunk_x in 0..<((block.width + 63) / 64) {
+      for plane in 0..<state.planes.length() {
+        let divisor = if plane == 0 { 1 } else { 2 }
+        let width = block.width / divisor
+        let height = block.height / divisor
+        let unit_width = if block.width < 64 { width } else { 64 / divisor }
+        let unit_height = if block.height < 64 { height } else { 64 / divisor }
+        let tx_width = if plane == 0 {
+          luma_tx_width
+        } else if state.base_q_idx == 0 {
+          4
+        } else if width > 32 {
+          32
+        } else {
+          width
+        }
+        let tx_height = if plane == 0 {
+          luma_tx_height
+        } else if state.base_q_idx == 0 {
+          4
+        } else if height > 32 {
+          32
+        } else {
+          height
+        }
+        let mut row = 0
+        while row < unit_height {
+          let mut col = 0
+          while col < unit_width {
+            if !av1_intra_transform(
+                decoder,
+                state,
+                plane,
+                if plane == 0 {
+                  y_mode
+                } else {
+                  uv_mode
+                },
+                (block.col + chunk_x * 64) / divisor + col,
+                (block.row + chunk_y * 64) / divisor + row,
+                tx_width,
+                tx_height,
+                width,
+                height,
+                skip,
+              ) {
+              return false
+            }
+            col = col + tx_width
+          }
+          row = row + tx_height
+        }
+      }
+    }
+  }
+  true
+}
+
+///|
 fn av1_intra_block(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
@@ -550,7 +629,7 @@ fn av1_intra_block(
     }
     mode
   }
-  if state.allow_screen_content_tools {
+  if state.allow_screen_content_tools && block.width <= 64 && block.height <= 64 {
     let palette_context = av1_msac_floor_log2(block.width / 4) +
       av1_msac_floor_log2(block.height / 4) -
       2
@@ -597,7 +676,10 @@ fn av1_intra_block(
       None => return false
     }
   } else {
-    (block.width, block.height)
+    match av1_tx_size_from_depth(block.width, block.height, 0) {
+      Some(value) => value
+      None => return false
+    }
   }
   let (luma_tx_width, luma_tx_height) = selected
   for row in y4..<(y4 + block.height / 4) {
@@ -612,53 +694,10 @@ fn av1_intra_block(
       state.y_modes[row * state.cols + col] = y_mode
     }
   }
-  // Chroma's maximum transform is independent of the luma tx_depth.
-  // Lossless uses 4x4 transforms on every plane.
-  for plane in 0..<state.planes.length() {
-    let divisor = if plane == 0 { 1 } else { 2 }
-    let width = block.width / divisor
-    let height = block.height / divisor
-    let tx_width = if plane == 0 {
-      luma_tx_width
-    } else if state.base_q_idx == 0 {
-      4
-    } else {
-      width
-    }
-    let tx_height = if plane == 0 {
-      luma_tx_height
-    } else if state.base_q_idx == 0 {
-      4
-    } else {
-      height
-    }
-    let mut row = 0
-    while row < height {
-      let mut col = 0
-      while col < width {
-        if !av1_intra_transform(
-            decoder,
-            state,
-            plane,
-            if plane == 0 {
-              y_mode
-            } else {
-              uv_mode
-            },
-            block.col / divisor + col,
-            block.row / divisor + row,
-            tx_width,
-            tx_height,
-            width,
-            height,
-            skip,
-          ) {
-          return false
-        }
-        col = col + tx_width
-      }
-      row = row + tx_height
-    }
+  if !av1_intra_residuals(
+      decoder, state, block, y_mode, uv_mode, luma_tx_width, luma_tx_height, skip,
+    ) {
+    return false
   }
   av1_tx_traversal_record_size(
     state.tx_neighbors,
