@@ -6,9 +6,8 @@
 /// `partition_context` calculation converts sizes to the corresponding MI
 /// logarithm.
 
-/// AV1 partition symbols.  The first four are the symbols used by the staged
-/// decoder; the extended forms are represented so a later walker can add them
-/// without changing the public data model.
+/// AV1 partition symbols. Only SPLIT creates more partition syntax; every
+/// other symbol produces one or more terminal coding blocks.
 pub(all) enum Av1SbPartition {
   Av1SbPartitionNone
   Av1SbPartitionHorz
@@ -22,13 +21,22 @@ pub(all) enum Av1SbPartition {
   Av1SbPartitionVert4
 }
 
-/// A rectangular node in a superblock partition tree.
+/// A square node at which AV1 partition syntax is evaluated.
 pub(all) struct Av1SbPartitionNode {
   row : Int
   col : Int
   size : Int
   frame_width : Int
   frame_height : Int
+}
+
+/// A coding-block rectangle in pixels. Dimensions retain the coded block
+/// size at frame edges; sample reconstruction is responsible for clipping.
+pub(all) struct Av1SbBlock {
+  row : Int
+  col : Int
+  width : Int
+  height : Int
 }
 
 /// Creates a square partition node.  Invalid geometry is rejected by the
@@ -45,19 +53,57 @@ pub fn av1_partition_node(
 
 /// Whether the lower half of this block lies inside the frame (AV1 `hasRows`).
 pub fn Av1SbPartitionNode::has_rows(self : Av1SbPartitionNode) -> Bool {
-  self.size > 0 && self.row >= 0 && self.row + self.size / 2 < self.frame_height
+  av1_partition_node_valid(self) &&
+  self.row + self.size / 2 < av1_partition_coded_extent(self.frame_height)
 }
 
 /// Whether the right half of this block lies inside the frame (AV1 `hasCols`).
 pub fn Av1SbPartitionNode::has_cols(self : Av1SbPartitionNode) -> Bool {
-  self.size > 0 && self.col >= 0 && self.col + self.size / 2 < self.frame_width
+  av1_partition_node_valid(self) &&
+  self.col + self.size / 2 < av1_partition_coded_extent(self.frame_width)
 }
 
 /// True when the node has no complete lower or right half.  AV1 forces a
 /// split in this case, avoiding a partition symbol that would address pixels
 /// outside the frame.
 pub fn Av1SbPartitionNode::edge_forces_split(self : Av1SbPartitionNode) -> Bool {
+  av1_partition_node_valid(self) && self.size >= 8 &&
   !self.has_rows() && !self.has_cols()
+}
+
+/// MiCols/MiRows are twice the frame dimension rounded up to eight pixels.
+fn av1_partition_coded_extent(pixels : Int) -> Int {
+  ((pixels + 7) / 8) * 8
+}
+
+///|
+fn av1_partition_node_valid(node : Av1SbPartitionNode) -> Bool {
+  node.size >= 4 && node.size <= 128 && (node.size & (node.size - 1)) == 0 &&
+  node.row >= 0 && node.col >= 0 && node.row % 4 == 0 && node.col % 4 == 0 &&
+  node.row <= 2147483647 - node.size && node.col <= 2147483647 - node.size &&
+  node.frame_width > 0 && node.frame_width <= 2147483640 &&
+  node.frame_height > 0 && node.frame_height <= 2147483640
+}
+
+///|
+fn av1_partition_symbol_allowed(
+  node : Av1SbPartitionNode,
+  partition : Av1SbPartition,
+) -> Bool {
+  if !av1_partition_node_valid(node) { return false }
+  if node.size == 4 { return partition is Av1SbPartitionNone }
+  if node.edge_forces_split() { return partition is Av1SbPartitionSplit }
+  if !node.has_rows() {
+    return partition is Av1SbPartitionHorz || partition is Av1SbPartitionSplit
+  }
+  if !node.has_cols() {
+    return partition is Av1SbPartitionVert || partition is Av1SbPartitionSplit
+  }
+  match partition {
+    Av1SbPartitionNone | Av1SbPartitionHorz | Av1SbPartitionVert | Av1SbPartitionSplit => true
+    Av1SbPartitionHorz4 | Av1SbPartitionVert4 => node.size >= 16 && node.size <= 64
+    _ => node.size >= 16
+  }
 }
 
 /// Convert a pixel block size to AV1's `MiWidthLog2` value.
@@ -74,8 +120,8 @@ fn av1_partition_size_log2(size : Int) -> Int {
   out
 }
 
-/// AV1 `partitionCtx`: above contributes one and left contributes two when
-/// the neighbouring block is smaller than the current block.
+/// AV1 partitionCtx: above_size is the above coding block's width; left_size
+/// is the left coding block's height. Unavailable tile neighbours are None.
 pub fn av1_partition_context(
   current_size : Int,
   above_size : Int?,
@@ -93,158 +139,144 @@ pub fn av1_partition_context(
   left * 2 + above
 }
 
-fn av1_partition_child(
+fn av1_partition_push_block(
+  out : Array[Av1SbBlock],
   node : Av1SbPartitionNode,
   row : Int,
   col : Int,
-  size : Int,
-) -> Av1SbPartitionNode? {
-  if row < 0 || col < 0 || row >= node.frame_height || col >= node.frame_width || size <= 0 {
-    None
-  } else {
-    Some({
-      row,
-      col,
-      size,
-      frame_width: node.frame_width,
-      frame_height: node.frame_height,
-    })
-  }
-}
-
-fn av1_partition_push_child(
-  out : Array[Av1SbPartitionNode],
-  child : Av1SbPartitionNode?,
+  width : Int,
+  height : Int,
 ) -> Unit {
-  match child {
-    Some(value) => out.push(value)
-    None => ()
+  if row < av1_partition_coded_extent(node.frame_height) &&
+    col < av1_partition_coded_extent(node.frame_width) {
+    out.push({ row, col, width, height })
   }
 }
 
-/// Return in-frame child coordinates for a partition symbol.  `None` returns
-/// the node itself as a leaf.  Split children are filtered at the frame edge,
-/// matching the reference decoder's early out for rows/columns outside the
-/// image.
+/// Return coding-block rectangles in AV1 syntax order. SPLIT rectangles are
+/// square recursive nodes; all other results are terminal blocks. Origins
+/// outside the MI grid are omitted, while partial edge blocks keep their
+/// full coded dimensions. Invalid geometry or partition combinations return [].
 pub fn av1_partition_children(
   node : Av1SbPartitionNode,
   partition : Av1SbPartition,
-) -> Array[Av1SbPartitionNode] {
+) -> Array[Av1SbBlock] {
+  if !av1_partition_symbol_allowed(node, partition) { return [] }
+  let size = node.size
   let half = node.size / 2
-  let out : Array[Av1SbPartitionNode] = []
+  let out : Array[Av1SbBlock] = []
   match partition {
-    Av1SbPartitionNone => out.push(node)
+    Av1SbPartitionNone => av1_partition_push_block(out, node, node.row, node.col, size, size)
     Av1SbPartitionHorz => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      if node.has_rows() {
-        av1_partition_push_child(
-          out,
-          av1_partition_child(node, node.row + half, node.col, half),
-        )
-      }
+      av1_partition_push_block(out, node, node.row, node.col, size, half)
+      av1_partition_push_block(out, node, node.row + half, node.col, size, half)
     }
     Av1SbPartitionVert => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      if node.has_cols() {
-        av1_partition_push_child(
-          out,
-          av1_partition_child(node, node.row, node.col + half, half),
-        )
-      }
+      av1_partition_push_block(out, node, node.row, node.col, half, size)
+      av1_partition_push_block(out, node, node.row, node.col + half, half, size)
     }
     Av1SbPartitionSplit => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      av1_partition_push_child(
-        out,
-        av1_partition_child(node, node.row, node.col + half, half),
-      )
-      av1_partition_push_child(
-        out,
-        av1_partition_child(node, node.row + half, node.col, half),
-      )
-      av1_partition_push_child(
-        out,
-        av1_partition_child(node, node.row + half, node.col + half, half),
-      )
+      av1_partition_push_block(out, node, node.row, node.col, half, half)
+      av1_partition_push_block(out, node, node.row, node.col + half, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col + half, half, half)
     }
-    // A/B partitions combine one full half with two quarter blocks.  The
-    // children stay square in this geometry model; rectangular transform
-    // leaves are handled by the separate tx tree.
     Av1SbPartitionHorzA => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col + half, half))
+      av1_partition_push_block(out, node, node.row, node.col, half, half)
+      av1_partition_push_block(out, node, node.row, node.col + half, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col, size, half)
     }
     Av1SbPartitionHorzB => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + half, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
+      av1_partition_push_block(out, node, node.row, node.col, size, half)
+      av1_partition_push_block(out, node, node.row + half, node.col, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col + half, half, half)
     }
     Av1SbPartitionVertA => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + half, half))
+      av1_partition_push_block(out, node, node.row, node.col, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col, half, half)
+      av1_partition_push_block(out, node, node.row, node.col + half, half, size)
     }
     Av1SbPartitionVertB => {
-      av1_partition_push_child(out, av1_partition_child(node, node.row, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col, half))
-      av1_partition_push_child(out, av1_partition_child(node, node.row + half, node.col + half, half))
+      av1_partition_push_block(out, node, node.row, node.col, half, size)
+      av1_partition_push_block(out, node, node.row, node.col + half, half, half)
+      av1_partition_push_block(out, node, node.row + half, node.col + half, half, half)
     }
     Av1SbPartitionHorz4 => {
-      let quarter = node.size / 4
-      if quarter >= 4 {
-        for i in 0..<4 {
-          av1_partition_push_child(out, av1_partition_child(node, node.row + i * quarter, node.col, quarter))
-        }
+      let quarter = size / 4
+      for i in 0..<4 {
+        av1_partition_push_block(out, node, node.row + i * quarter, node.col, size, quarter)
       }
     }
     Av1SbPartitionVert4 => {
-      let quarter = node.size / 4
-      if quarter >= 4 {
-        for i in 0..<4 {
-          av1_partition_push_child(out, av1_partition_child(node, node.row, node.col + i * quarter, quarter))
-        }
+      let quarter = size / 4
+      for i in 0..<4 {
+        av1_partition_push_block(out, node, node.row, node.col + i * quarter, quarter, size)
       }
     }
   }
   out
 }
 
-/// Walk a pre-decoded partition sequence and return leaf blocks in raster
-/// order.  Entropy decoding remains the caller's responsibility; this helper
-/// provides the same bounded geometry walk used by the transform tree.
+/// Walk signalled partition decisions in AV1 syntax order. Implied 4x4 NONE
+/// and forced frame-edge SPLIT decisions consume no entries. Only SPLIT
+/// recurses; rectangular and A/B partition blocks are terminal.
 pub fn av1_partition_leaves(
   root : Av1SbPartitionNode,
   partitions : Array[Av1SbPartition],
-) -> Array[Av1SbPartitionNode]? {
+) -> Array[Av1SbBlock]? {
   let cursor : Ref[Int] = { val: 0 }
-  let out : Array[Av1SbPartitionNode] = []
-  fn walk(
-    node : Av1SbPartitionNode,
-    parts : Array[Av1SbPartition],
-    cursor : Ref[Int],
-    out : Array[Av1SbPartitionNode],
-  ) -> Bool {
-    if cursor.val >= parts.length() { return false }
-    let partition = parts[cursor.val]
-    cursor.val = cursor.val + 1
-    let children = av1_partition_children(node, partition)
-    if children.length() == 0 { return false }
-    match partition {
-      Av1SbPartitionNone => { out.push(node); true }
-      _ => {
-        for child in children {
-          if !walk(child, parts, cursor, out) { return false }
-        }
-        true
-      }
-    }
-  }
-  if walk(root, partitions, cursor, out) && cursor.val == partitions.length() {
+  let out : Array[Av1SbBlock] = []
+  let complete = av1_walk_partition_geometry(
+    root,
+    fn(_) {
+      if cursor.val >= partitions.length() { return None }
+      let partition = partitions[cursor.val]
+      cursor.val = cursor.val + 1
+      Some(partition)
+    },
+    fn(block) { out.push(block); true },
+  )
+  if complete && cursor.val == partitions.length() {
     Some(out)
   } else {
     None
   }
+}
+
+/// Shared syntax-order traversal for the entropy reader and geometry probes.
+fn av1_walk_partition_geometry(
+  node : Av1SbPartitionNode,
+  read_partition : (Av1SbPartitionNode) -> Av1SbPartition?,
+  decode_leaf : (Av1SbBlock) -> Bool,
+) -> Bool {
+  if !av1_partition_node_valid(node) { return false }
+  if node.row >= av1_partition_coded_extent(node.frame_height) ||
+    node.col >= av1_partition_coded_extent(node.frame_width) {
+    return true
+  }
+  let partition = if node.size == 4 {
+    Av1SbPartitionNone
+  } else if node.edge_forces_split() {
+    Av1SbPartitionSplit
+  } else {
+    match read_partition(node) {
+      Some(value) => value
+      None => return false
+    }
+  }
+  let blocks = av1_partition_children(node, partition)
+  if blocks.length() == 0 { return false }
+  for block in blocks {
+    if partition is Av1SbPartitionSplit {
+      let child = av1_partition_node(
+        block.row, block.col, block.width, node.frame_width, node.frame_height,
+      )
+      if !av1_walk_partition_geometry(child, read_partition, decode_leaf) { return false }
+    } else if !decode_leaf(block) {
+      return false
+    }
+  }
+  true
 }
 
 /// Per-tile default partition CDFs.  The rows are indexed by the AV1
@@ -373,101 +405,198 @@ fn av1_partition_edge_symbol(
   }
 }
 
-fn av1_partition_neighbour_size(
-  leaves : Array[Av1SbPartitionNode],
+/// Coding-block dimensions at each 4x4 position in one tile. The tile bounds
+/// are in pixels on the MI grid, which may extend past visible frame pixels.
+/// Dimensions are recorded after the corresponding leaf callback succeeds.
+priv struct Av1PartitionNeighbors {
+  tile : Av1SbBlock
+  frame_width : Int
+  frame_height : Int
+  cols : Int
+  rows : Int
+  block_widths : Array[Int]
+  block_heights : Array[Int]
+}
+
+///|
+fn av1_partition_neighbor_state(
+  tile : Av1SbBlock,
+  frame_width : Int,
+  frame_height : Int,
+) -> Av1PartitionNeighbors? {
+  if frame_width <= 0 || frame_width > 2147483640 ||
+    frame_height <= 0 || frame_height > 2147483640 ||
+    tile.row < 0 || tile.col < 0 || tile.width <= 0 || tile.height <= 0 ||
+    tile.row % 4 != 0 || tile.col % 4 != 0 ||
+    tile.width % 4 != 0 || tile.height % 4 != 0 ||
+    tile.row > av1_partition_coded_extent(frame_height) - tile.height ||
+    tile.col > av1_partition_coded_extent(frame_width) - tile.width {
+    return None
+  }
+  let cols = tile.width / 4
+  let rows = tile.height / 4
+  if cols > 2147483647 / rows { return None }
+  Some({
+    tile,
+    frame_width,
+    frame_height,
+    cols,
+    rows,
+    block_widths: Array::make(cols * rows, -1),
+    block_heights: Array::make(cols * rows, -1),
+  })
+}
+
+///|
+fn av1_partition_node_in_tile(
+  state : Av1PartitionNeighbors,
   node : Av1SbPartitionNode,
-  above : Bool,
+) -> Bool {
+  if !av1_partition_node_valid(node) ||
+    node.frame_width != state.frame_width || node.frame_height != state.frame_height {
+    return false
+  }
+  let end_row = state.tile.row + state.tile.height
+  let end_col = state.tile.col + state.tile.width
+  node.row >= state.tile.row && node.col >= state.tile.col &&
+  node.row < end_row && node.col < end_col &&
+  (node.row + node.size <= end_row || end_row == av1_partition_coded_extent(state.frame_height)) &&
+  (node.col + node.size <= end_col || end_col == av1_partition_coded_extent(state.frame_width))
+}
+
+/// Read the coding-block width immediately above and height immediately left
+/// of this square node. A missing record inside the tile is a traversal error.
+fn av1_partition_neighbor_context(
+  state : Av1PartitionNeighbors,
+  node : Av1SbPartitionNode,
 ) -> Int? {
-  for leaf in leaves {
-    if above {
-      if leaf.row + leaf.size == node.row &&
-        node.col >= leaf.col && node.col < leaf.col + leaf.size {
-        return Some(leaf.size)
-      }
-    } else if leaf.col + leaf.size == node.col &&
-      node.row >= leaf.row && node.row < leaf.row + leaf.size {
-      return Some(leaf.size)
+  if !av1_partition_node_in_tile(state, node) { return None }
+  let x4 = (node.col - state.tile.col) / 4
+  let y4 = (node.row - state.tile.row) / 4
+  let above = if y4 == 0 {
+    None
+  } else {
+    let width = state.block_widths[(y4 - 1) * state.cols + x4]
+    if width < 0 { return None }
+    Some(width)
+  }
+  let left = if x4 == 0 {
+    None
+  } else {
+    let height = state.block_heights[y4 * state.cols + x4 - 1]
+    if height < 0 { return None }
+    Some(height)
+  }
+  Some(av1_partition_context(node.size, above, left))
+}
+
+/// Record the full coded dimensions over the block's in-frame MI footprint.
+fn av1_partition_record_block(state : Av1PartitionNeighbors, block : Av1SbBlock) -> Bool {
+  let width = block.width
+  let height = block.height
+  let max_size = if width > height { width } else { height }
+  let min_size = if width < height { width } else { height }
+  if width < 4 || height < 4 || width > 128 || height > 128 ||
+    (width & (width - 1)) != 0 || (height & (height - 1)) != 0 ||
+    max_size > min_size * 4 || (max_size == 128 && min_size < 64) ||
+    block.row < state.tile.row || block.col < state.tile.col ||
+    block.row % 4 != 0 || block.col % 4 != 0 ||
+    block.row >= state.tile.row + state.tile.height ||
+    block.col >= state.tile.col + state.tile.width {
+    return false
+  }
+  let x4 = (block.col - state.tile.col) / 4
+  let y4 = (block.row - state.tile.row) / 4
+  let end_x = if x4 + width / 4 > state.cols { state.cols } else { x4 + width / 4 }
+  let end_y = if y4 + height / 4 > state.rows { state.rows } else { y4 + height / 4 }
+  for y in y4..<end_y {
+    for x in x4..<end_x {
+      state.block_widths[y * state.cols + x] = width
+      state.block_heights[y * state.cols + x] = height
     }
   }
-  None
+  true
 }
 
 fn av1_decode_partition_symbol(
   decoder : Av1SymbolDecoder,
   state : Av1PartitionCdfState,
   node : Av1SbPartitionNode,
-  leaves : Array[Av1SbPartitionNode],
+  neighbors : Av1PartitionNeighbors,
 ) -> Av1SbPartition? {
-  if node.size <= 4 {
-    return Some(Av1SbPartitionNone)
+  if !av1_partition_node_in_tile(neighbors, node) { return None }
+  if node.size == 4 { return Some(Av1SbPartitionNone) }
+  if node.edge_forces_split() { return Some(Av1SbPartitionSplit) }
+  let context = match av1_partition_neighbor_context(neighbors, node) {
+    Some(value) => value
+    None => return None
   }
-  let above = av1_partition_neighbour_size(leaves, node, true)
-  let left = av1_partition_neighbour_size(leaves, node, false)
   let rows = av1_partition_cdf_rows(state, node.size)
-  let context = av1_partition_context(node.size, above, left)
-  let cdf = rows[if context < 4 { context } else { 3 }]
+  let cdf = rows[context]
   if !node.has_rows() || !node.has_cols() {
     return av1_partition_edge_symbol(decoder, cdf, node.has_rows(), node.has_cols())
   }
   av1_partition_symbol_from_index(decoder.symbol(cdf))
 }
 
-/// Decode the partition symbols of one reduced-still tile and return its
-/// in-frame leaf blocks in raster order.  This API deliberately stops at
-/// 4x4 leaves; block mode and transform syntax are decoded by the tile path
-/// after this geometry stage.  It is useful both as a conformance probe and
-/// as the shared walker for future multi-block reconstruction.
+/// Decode a superblock with one shared MSAC and tile CDF/neighbor state.
+/// Each terminal block is decoded synchronously before recording its coding
+/// dimensions and reading the next partition symbol. The callback consumes
+/// mode, transform and residual syntax from the supplied decoder. Returning
+/// false aborts immediately; callers discard decoder/context state on failure.
+fn av1_walk_partition_tree(
+  decoder : Av1SymbolDecoder,
+  cdfs : Av1PartitionCdfState,
+  neighbors : Av1PartitionNeighbors,
+  root : Av1SbPartitionNode,
+  decode_leaf : (Av1SymbolDecoder, Av1SbBlock) -> Bool,
+) -> Bool {
+  if !av1_partition_node_in_tile(neighbors, root) { return false }
+  av1_walk_partition_geometry(
+    root,
+    fn(node) { av1_decode_partition_symbol(decoder, cdfs, node, neighbors) },
+    fn(block) {
+      decode_leaf(decoder, block) && av1_partition_record_block(neighbors, block)
+    },
+  ) && decoder.symbol_max_bits >= -14
+}
+
+/// Decode an isolated partition-only probe, with fresh CDFs and unavailable
+/// external neighbours. Payloads contain partition symbols only: real tile
+/// mode and residual syntax must be consumed by the shared callback walker.
+/// The root is fixed at 64 pixels, or 128 when use_128x128_superblock is true.
+/// This probe accepts at most one root's frame extent and returns complete
+/// coded rectangles, including the MI padding beyond visible frame pixels.
 pub fn av1_decode_partition_leaves(
   tile_payload : Array[Byte],
   frame_width : Int,
   frame_height : Int,
   disable_cdf_update? : Bool = false,
   use_128x128_superblock? : Bool = false,
-) -> Array[Av1SbPartitionNode]? {
-  if tile_payload.length() == 0 || frame_width <= 0 || frame_height <= 0 {
+) -> Array[Av1SbBlock]? {
+  let root_size = if use_128x128_superblock { 128 } else { 64 }
+  if tile_payload.length() == 0 || frame_width <= 0 || frame_height <= 0 ||
+    frame_width > root_size || frame_height > root_size {
     return None
   }
-  let mut root_size = if frame_width > frame_height { frame_width } else { frame_height }
-  if root_size < 8 { root_size = 8 }
-  if use_128x128_superblock && root_size < 128 { root_size = 128 }
-  if root_size > 128 { return None }
-  let mut power = 8
-  while power < root_size { power = power * 2 }
-  root_size = power
   let root = av1_partition_node(0, 0, root_size, frame_width, frame_height)
   let decoder = av1_msac_new(tile_payload, !disable_cdf_update)
-  let state = av1_partition_cdf_state()
-  let leaves : Array[Av1SbPartitionNode] = []
-  fn walk(
-    decoder : Av1SymbolDecoder,
-    state : Av1PartitionCdfState,
-    node : Av1SbPartitionNode,
-    leaves : Array[Av1SbPartitionNode],
-  ) -> Bool {
-    if node.row >= node.frame_height || node.col >= node.frame_width {
-      return true
-    }
-    let partition = match av1_decode_partition_symbol(decoder, state, node, leaves) {
-      Some(value) => value
-      None => return false
-    }
-    match partition {
-      Av1SbPartitionNone => {
-        leaves.push(node)
-        return true
-      }
-      _ => ()
-    }
-    if node.size <= 4 {
-      leaves.push(node)
-      return true
-    }
-    let children = av1_partition_children(node, partition)
-    if children.length() == 0 { return false }
-    for child in children {
-      if !walk(decoder, state, child, leaves) { return false }
-    }
-    true
+  let neighbors = match av1_partition_neighbor_state(
+    {
+      row: 0,
+      col: 0,
+      width: av1_partition_coded_extent(frame_width),
+      height: av1_partition_coded_extent(frame_height),
+    },
+    frame_width,
+    frame_height,
+  ) {
+    Some(value) => value
+    None => return None
   }
-  if !walk(decoder, state, root, leaves) { None } else { Some(leaves) }
+  let leaves : Array[Av1SbBlock] = []
+  if av1_walk_partition_tree(
+    decoder, av1_partition_cdf_state(), neighbors, root,
+    fn(_, block) { leaves.push(block); true },
+  ) { Some(leaves) } else { None }
 }

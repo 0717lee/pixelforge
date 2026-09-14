@@ -1004,7 +1004,7 @@ test "tx depth context derives from neighbour transform sizes" {
 ///|
 test "tx traversal state keeps unavailable edges explicit" {
   let state = av1_tx_traversal_state(64, 64)
-  let first = { row: 0, col: 0, width: 32, height: 32, }
+  let first : Av1TxNode = { row: 0, col: 0, width: 32, height: 32, }
   assert_eq(av1_tx_depth_context_for_node(state, first), 0)
   av1_tx_traversal_record(state, first)
   // A block to the right sees the recorded left height; a block below sees

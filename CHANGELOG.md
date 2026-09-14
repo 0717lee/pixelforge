@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Removed the obsolete eight-byte high-bit-depth residual limit. Real
+  8/10/12-bit luma cosine, two-dimensional gradient and mixed-YUV AC fixtures
+  now exercise the shared coefficient decoder against full dav1d references.
+- Routed zero-quantizer intra blocks through per-4x4 coefficient decoding,
+  lossless inverse WHT and sequential prediction. Corrected historical
+  lossless pixel expectations using independently decoded planar samples.
+- Corrected partition geometry and syntax order. Geometry APIs now return
+  rectangular Av1SbBlock leaves with width/height instead of square size;
+  only SPLIT recurses, and the internal tile walker invokes each block's
+  decoder before reading later partition symbols. Standalone partition
+  probes remain separate from the complete tile syntax.
+
 - Corrected the standalone CDEF kernel's direction offsets, damping, signed
   rounding, clipping and 4:2:0 chroma grid. Its 8/10/12-bit output is checked
   against 58,632 libaom reference samples. Frame-level CDEF direction search,

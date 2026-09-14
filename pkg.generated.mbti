@@ -44,7 +44,7 @@ pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock?
 
 pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool) -> Image?
 
-pub fn av1_decode_partition_leaves(Array[Byte], Int, Int, disable_cdf_update? : Bool, use_128x128_superblock? : Bool) -> Array[Av1SbPartitionNode]?
+pub fn av1_decode_partition_leaves(Array[Byte], Int, Int, disable_cdf_update? : Bool, use_128x128_superblock? : Bool) -> Array[Av1SbBlock]?
 
 pub fn av1_decode_show_existing_frame(Array[Byte], Av1ReferenceState, Av1ShowExistingFrameConfig) -> Image?
 
@@ -82,11 +82,11 @@ pub fn av1_parse_show_existing_frame_envelope(Array[Byte], Av1ShowExistingFrameC
 
 pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool) -> Av1FrameHeaderInfo?
 
-pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbPartitionNode]
+pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbBlock]
 
 pub fn av1_partition_context(Int, Int?, Int?) -> Int
 
-pub fn av1_partition_leaves(Av1SbPartitionNode, Array[Av1SbPartition]) -> Array[Av1SbPartitionNode]?
+pub fn av1_partition_leaves(Av1SbPartitionNode, Array[Av1SbPartition]) -> Array[Av1SbBlock]?
 
 pub fn av1_partition_node(Int, Int, Int, Int, Int) -> Av1SbPartitionNode
 
@@ -276,6 +276,13 @@ pub(all) struct Av1FrameInfo {
 pub(all) struct Av1ReferenceState {
   images : Array[Image?]
   frame_types : Array[Int]
+}
+
+pub(all) struct Av1SbBlock {
+  row : Int
+  col : Int
+  width : Int
+  height : Int
 }
 
 pub(all) enum Av1SbPartition {

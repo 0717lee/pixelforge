@@ -12,7 +12,7 @@ fn av1_reconstruct_child(
   plane : Array[Int],
   frame_width : Int,
   frame_height : Int,
-  child : Av1SbPartitionNode,
+  child : Av1SbBlock,
   mode : Int,
   coeffs : Array[Int],
   side : Int,
@@ -26,14 +26,15 @@ fn av1_reconstruct_child_with_type(
   plane : Array[Int],
   frame_width : Int,
   frame_height : Int,
-  child : Av1SbPartitionNode,
+  child : Av1SbBlock,
   mode : Int,
   coeffs : Array[Int],
   side : Int,
   tx_type : Av1TxType,
   bit_depth? : Int = 8,
 ) -> Bool {
-  if child.size != side || child.row + side > frame_height || child.col + side > frame_width {
+  if child.width != side || child.height != side ||
+    child.row + side > frame_height || child.col + side > frame_width {
     return false
   }
   let above : Array[Int] = []
@@ -86,10 +87,8 @@ fn av1_reconstruct_child_with_type(
 
 /// Reconstruct a rectangular transform leaf in raster order.
 ///
-/// Superblock partition children are always square, but AV1 transform sizes
-/// may be rectangular (4x8, 8x4, ...). Keep this path separate so the
-/// square partition helper retains its simple `size` invariant while typed
-/// transform assembly can consume the full rectangular coefficient plane.
+/// This path consumes both rectangular transform dimensions. The separate
+/// square-transform helper requires width and height to match its side.
 fn av1_reconstruct_rect_leaf_with_type(
   plane : Array[Int],
   frame_width : Int,
@@ -169,7 +168,9 @@ pub fn av1_reconstruct_tx_luma(
       return None
     }
     if leaf.width == leaf.height {
-      let child = av1_partition_node(leaf.row, leaf.col, leaf.width, width, height)
+      let child : Av1SbBlock = {
+        row: leaf.row, col: leaf.col, width: leaf.width, height: leaf.height,
+      }
       if !av1_reconstruct_child_with_type(
         plane, width, height, child, mode, coefficients[i], leaf.width, types[i], bit_depth=bit_depth,
       ) { return None }
@@ -290,9 +291,9 @@ pub fn av1_reconstruct_split_yuv420(
       return None
     }
   }
-  let chroma_children : Array[Av1SbPartitionNode] = []
+  let chroma_children : Array[Av1SbBlock] = []
   for child in children {
-    chroma_children.push(av1_partition_node(child.row / 2, child.col / 2, 16, 32, 32))
+    chroma_children.push({ row: child.row / 2, col: child.col / 2, width: 16, height: 16 })
   }
   let u_plane : Array[Int] = Array::make(32 * 32, 128)
   let v_plane : Array[Int] = Array::make(32 * 32, 128)
@@ -394,8 +395,8 @@ pub fn av1_reconstruct_split_yuv420_with_types(
   }
   let u_plane : Array[Int] = Array::make(32 * 32, 128)
   let v_plane : Array[Int] = Array::make(32 * 32, 128)
-  let chroma_children : Array[Av1SbPartitionNode] = []
-  for child in children { chroma_children.push(av1_partition_node(child.row / 2, child.col / 2, 16, 32, 32)) }
+  let chroma_children : Array[Av1SbBlock] = []
+  for child in children { chroma_children.push({ row: child.row / 2, col: child.col / 2, width: 16, height: 16 }) }
   if u_coeffs.length() == 4 {
     if u_modes.length() != 4 || u_types.length() != 4 { return None }
     for i in 0..<4 {

@@ -506,17 +506,12 @@ pub fn av1_decode_dc_tile(
 ) -> Image? {
   if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (bit_depth != 8 && width != 64) ||
-    // The legacy single-block reader does not consume high-bit-depth AC and
-    // partition syntax. tx_mode_select uses the bounded tree reader below;
-    // keep the explicit rejection only for that legacy path.
-    (bit_depth != 8 && tile_payload.length() > 8 && !tx_mode_select) ||
     (width != 16 && width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
     (width != height && !(tx_mode_select && av1_tx_rect_supported(width, height))) ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
-    tile_payload.length() == 0 ||
-    tile_payload.length() > (if width == 64 { 255 } else { 64 }) {
+    tile_payload.length() == 0 {
     return None
   }
   // Try the bounded four-child SPLIT path before the legacy single-block path.
@@ -637,13 +632,19 @@ pub fn av1_decode_dc_tile(
     ) {
     return None
   }
+  if base_q_idx == 0 {
+    return av1_decode_lossless_intra_block(
+      decoder, width, height, y_mode_symbol, uv_mode_symbol, bit_depth,
+      full_range, matrix_coefficients,
+    )
+  }
   if tx_mode_select {
     // Keep tx_depth CDF rows and neighbour dimensions alive for the complete
     // tile traversal.  The first block has unavailable edges (context 0);
     // subsequent blocks can reuse this state when block traversal expands.
     let tx_depth_state = av1_tx_depth_state()
     let tx_traversal_state = av1_tx_traversal_state(width, height)
-    let root = { row: 0, col: 0, width, height, }
+    let root : Av1TxNode = { row: 0, col: 0, width, height, }
     let tx_depth_context = av1_tx_depth_context_for_node(tx_traversal_state, root,
     )
     let leaves = match av1_decode_tx_tree_with_state(
