@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added uniform multi-tile reduced-still frame-header parsing, checked tile
+  size-prefix extraction, and bounded raster stitching for supported intra
+  tiles. Multi-tile inputs now avoid feeding group prefixes into tile entropy.
+- Added AV1 partition CDF/MSAC decoding for NONE, HORZ, VERT, SPLIT and
+  extended geometry symbols, with recursive raster leaf output and W8–W128
+  neighbour contexts.
 - Extended the bounded tx-mode coefficient path to AV1 64x32/32x64
   rectangular leaves, including adjusted 32x32 coefficient storage, correct
   transform-size contexts, scan ordering, and 4:2:0 typed reconstruction.
