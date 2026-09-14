@@ -60,7 +60,8 @@ test "reference single-DC residual envelope is parsed" {
 test "av1 decodes a 32x32 neutral tile" {
   // Crafted with scripts/craft_av1_fixture.py (LARGEST tx mode, all-skip,
   // uv_mode read from the CFL-allowed table used for 32x32 blocks).
-  let image = av1_decode_dc_tile(32, 32, [b'\x14', b'\x80'], 80, disable_cdf_update=true).unwrap()
+  let image = av1_decode_dc_tile(32, 32, [b'\x14', b'\x80'], 80, disable_cdf_update=true,
+  ).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
   assert_eq(image.get_pixel(31, 31), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
@@ -85,7 +86,9 @@ test "av1 dc tile rejects unsupported dimensions and payload bounds" {
   assert_true(av1_decode_dc_tile(16, 16, [b'\x2E'], 43) is None)
   assert_true(av1_decode_dc_tile(32, 64, [b'\x2E'], 43) is None)
   assert_true(av1_decode_dc_tile(32, 32, [], 43) is None)
-  assert_true(av1_decode_dc_tile(32, 32, [b'\x2E', b'\x2E', b'\x2E', b'\x2E', b'\x2E'], 43) is None)
+  assert_true(av1_decode_dc_tile(32, 32, [b'\x2E', b'\x2E', b'\x2E', b'\x2E', b'\x2E'], 43,
+    ) is None,
+  )
   // qindex zero is valid for lossless/high-bit-depth constant tiles.
   assert_true(av1_decode_dc_tile(32, 32, [b'\x2B', b'\xC1'], 256) is None)
 }
@@ -97,7 +100,9 @@ test "external use128 neutral fixture" {
     b'\x00', b'\x08', b'\x32', b'\x06', b'\x17', b'\x80', b'\x00', b'\x00',
     b'\x40', b'\x2E',
   ]
-  assert_true(av1_parse_stage1_frame([b'\x17', b'\x80', b'\x00', b'\x00', b'\x40', b'\x2E'], av1_sequence_info(stream).unwrap()) is Some(_))
+  assert_true(av1_parse_stage1_frame([b'\x17', b'\x80', b'\x00', b'\x00', b'\x40', b'\x2E'], av1_sequence_info(stream).unwrap(),
+    ) is Some(_),
+  )
   let image = av1_decode(stream).unwrap()
   assert_eq(image.get_pixel(0, 0), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
@@ -115,6 +120,7 @@ test "highbd tile path normalizes a neutral 10-bit frame" {
   assert_eq(image.get_pixel(0, 0), (b'\x80', b'\x80', b'\x80', b'\xFF'))
 }
 
+///|
 test "tile group decoder stitches two neutral 64x64 tiles" {
   let image = av1_decode_tile_group(
     128,
@@ -130,15 +136,17 @@ test "tile group decoder stitches two neutral 64x64 tiles" {
   assert_eq(image.get_pixel(127, 63), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
 
-/// A complete reduced-still OBU with a 2x2 uniform tile grid.  Each tile has
+///|
+/// A crafted reduced-still OBU with a 2x2 uniform tile grid. Each tile has
 /// its own one-byte MSAC payload; decoding the four payloads independently
 /// proves that CDF state and prediction edges do not leak across tile origins.
 test "av1 decodes a 128x128 four-tile reduced-still fixture" {
   let stream : Array[Byte] = [
     b'\x12', b'\x00',
     b'\x0A', b'\x06', b'\x18', b'\x19', b'\xBF', b'\xFF',
-    b'\x00', b'\x02', b'\x32', b'\x0D',
+    b'\x00', b'\x02', b'\x32', b'\x0E',
     b'\x1C', b'\x0A', b'\xC0', b'\x00', b'\x00', b'\x00',
+    b'\x00', // Separate, byte-aligned tile-group flag and padding.
     b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x00', b'\x2E', b'\x2E',
   ]
   let image = av1_decode(stream).unwrap()
@@ -151,6 +159,7 @@ test "av1 decodes a 128x128 four-tile reduced-still fixture" {
   assert_eq(image.get_pixel(127, 127), (b'\x82', b'\x82', b'\x82', b'\xFF'))
 }
 
+///|
 test "tile group decoder stitches a 2x2 128x128 canvas" {
   let image = av1_decode_tile_group(
     128,

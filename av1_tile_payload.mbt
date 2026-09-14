@@ -20,7 +20,7 @@ pub(all) struct Av1TilePayload {
 /// Extract tile payloads from a tile-group byte range.
 ///
 /// `tile_size_bytes` is the AV1 `tile_size_bytes` value (1..4).  Every tile
-/// except the last is preceded by a big-endian `tile_size_minus_1` field of
+/// except the last is preceded by a little-endian `tile_size_minus_1` field of
 /// that width; the last tile consumes the remaining bytes.  A zero value is
 /// accepted only for a single tile and means that the caller supplied the
 /// already isolated legacy payload.  All arithmetic is checked before slicing
@@ -67,7 +67,7 @@ pub fn av1_extract_tile_payloads(
     } else {
       let mut minus_one = 0
       for i in 0..<prefix {
-        minus_one = (minus_one << 8) | payload[cursor + i].to_int()
+        minus_one = minus_one | (payload[cursor + i].to_int() << (8 * i))
       }
       // `tile_size_minus_1` is bounded by the remaining bytes before adding 1.
       if minus_one < 0 || minus_one >= payload.length() - cursor - prefix {

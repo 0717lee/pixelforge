@@ -13,7 +13,7 @@ test "av1 tile payload helper preserves the legacy one-tile boundary" {
 
 ///|
 test "av1 tile payload helper splits prefixed tiles row major" {
-  // 2x2 tiles, one-byte big-endian tile_size_minus_1 prefixes.  The first
+  // 2x2 tiles, one-byte tile_size_minus_1 prefixes. The first
   // three tiles have lengths 2, 1 and 3; the final tile consumes one byte.
   let payload : Array[Byte] = [
     b'\x01', b'\xA0', b'\xA1', b'\x00', b'\xB0', b'\x02', b'\xC0', b'\xC1', b'\xC2',
@@ -38,4 +38,32 @@ test "av1 tile payload helper rejects malformed size envelopes" {
   assert_true(av1_extract_tile_payloads([b'\xAA'], 0, 1, 1) is None)
   assert_true(av1_extract_tile_payloads([], 1, 1, 0) is None)
   assert_true(av1_extract_tile_payloads([b'\xAA'], 1, 1, 5) is None)
+}
+
+///|
+test "av1 tile sizes use little endian for two through four bytes" {
+  for prefix in 2..<5 {
+    // le(prefix) value 0x0102 means a 259-byte first tile.
+    let payload : Array[Byte] = [b'\x02', b'\x01']
+    for _ in 2..<prefix {
+      payload.push(b'\x00')
+    }
+    for _ in 0..<259 {
+      payload.push(b'\xA5')
+    }
+    payload.push(b'\x7C')
+    let tiles = av1_extract_tile_payloads(payload, 2, 1, prefix).unwrap()
+    assert_eq(tiles[0].length, 259)
+    assert_eq(tiles[1].offset, prefix + 259)
+    assert_eq(tiles[1].bytes, [b'\x7C'])
+  }
+  assert_true(
+    av1_extract_tile_payloads(
+      [b'\xFF', b'\xFF', b'\xFF', b'\xFF', b'\x00'],
+      2,
+      1,
+      4,
+    )
+    is None,
+  )
 }

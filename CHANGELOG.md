@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Corrected the standalone CDEF kernel's direction offsets, damping, signed
+  rounding, clipping and 4:2:0 chroma grid. Its 8/10/12-bit output is checked
+  against 58,632 libaom reference samples. Frame-level CDEF direction search,
+  strength selection and decoder integration are still pending.
+- Corrected frame-OBU alignment and little-endian multi-byte tile lengths.
+  Added nine unmodified libaom/dav1d fixtures covering 2x1, 1x2 and 2x2 tile
+  grids at 8/10/12-bit, with every decoded pixel compared.
+- Corrected variable-transform CDF selection, retained adaptation across
+  trees, recorded sibling transform dimensions and rejected excessive entropy
+  padding. The isolated tree API is not a complete inter-frame tile decoder.
+- Corrected rectangular coefficient size/position contexts, 1D coefficient
+  neighbours, U/V probability sharing and rectangular residual state extents.
 - Added uniform multi-tile reduced-still frame-header parsing, checked tile
   size-prefix extraction, and bounded raster stitching for supported intra
   tiles. Multi-tile inputs now avoid feeding group prefixes into tile entropy.

@@ -1,3 +1,4 @@
+///|
 /// AV1 transform-tree geometry for square and supported rectangular leaves.
 ///
 /// This stage models transform partition geometry independently from entropy
@@ -10,6 +11,7 @@ pub(all) enum Av1TxPartition {
   Av1TxVert
 }
 
+///|
 /// A rectangular transform node in pixel coordinates.
 pub(all) struct Av1TxNode {
   row : Int
@@ -18,6 +20,7 @@ pub(all) struct Av1TxNode {
   height : Int
 }
 
+///|
 /// A transform-tree leaf together with the depth selected by the frame's
 /// `tx_depth` symbol.  AV1 signals one depth for an intra block and derives
 /// the geometry by repeatedly applying the split transform size; keeping the
@@ -27,6 +30,7 @@ pub(all) struct Av1TxLeaf {
   depth : Int
 }
 
+///|
 /// Legal AV1 rectangular transform dimensions (up to a 4:1 aspect ratio).
 pub fn av1_tx_rect_supported(width : Int, height : Int) -> Bool {
   (width == 4 && height == 8) || (width == 8 && height == 4) ||
@@ -38,6 +42,7 @@ pub fn av1_tx_rect_supported(width : Int, height : Int) -> Bool {
   (width == 32 && height == 64) || (width == 64 && height == 32)
 }
 
+///|
 /// Neighbour transform dimensions collected while walking a tile in raster
 /// order.  Entries are indexed in 4x4 units; `-1` means that no block has
 /// been decoded at that edge yet.  Keeping unavailable edges explicit avoids
@@ -49,6 +54,7 @@ pub struct Av1TxTraversalState {
   left_height : Array[Int]
 }
 
+///|
 /// Create empty neighbour state for one tile.  The state is intentionally
 /// independent from the entropy CDF state so callers can reuse it across
 /// blocks without resetting tx_depth adaptation.
@@ -63,6 +69,7 @@ pub fn av1_tx_traversal_state(width : Int, height : Int) -> Av1TxTraversalState 
   }
 }
 
+///|
 /// Derive tx_depth context from dimensions of the blocks immediately above
 /// and to the left of `node`.  Missing edges remain `-1` and contribute zero.
 pub fn av1_tx_depth_context_for_node(
@@ -94,8 +101,10 @@ pub fn av1_tx_depth_context_for_node(
   av1_tx_depth_context_from_sizes(above, left, node.width, node.height)
 }
 
+///|
 /// Record a decoded block's dimensions for subsequent raster neighbours.
-pub fn av1_tx_traversal_record(state : Av1TxTraversalState, node : Av1TxNode) -> Unit {
+pub fn av1_tx_traversal_record(state : Av1TxTraversalState, node : Av1TxNode,
+) -> Unit {
   let x4 = node.col / 4
   let y4 = node.row / 4
   let w4 = if node.width > 0 { (node.width + 3) / 4 } else { 0 }
@@ -114,6 +123,7 @@ pub fn av1_tx_traversal_record(state : Av1TxTraversalState, node : Av1TxNode) ->
   }
 }
 
+///|
 /// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
 /// The context table is reduced to the three validated default rows until the
 /// full neighbour-derived 21-context table is wired into block traversal.
@@ -126,24 +136,31 @@ pub struct Av1TxDepthState {
   cdf64 : Array[Array[Int]]
 }
 
+///|
 fn av1_tx_depth_state() -> Av1TxDepthState {
   {
-    cdf16: [[12272, 30172, 32768, 0], [12272, 30172, 32768, 0], [18677, 30848, 32768, 0]],
-    cdf32: [[12986, 15180, 32768, 0], [12986, 15180, 32768, 0], [24302, 25602, 32768, 0]],
-    cdf64: [[5782, 11475, 32768, 0], [5782, 11475, 32768, 0], [16803, 22759, 32768, 0]],
+    cdf16: [[12272, 30172, 32768, 0], [12272, 30172, 32768, 0], [18677, 30848, 32768, 0],
+    ],
+    cdf32: [[12986, 15180, 32768, 0], [12986, 15180, 32768, 0], [24302, 25602, 32768, 0],
+    ],
+    cdf64: [[5782, 11475, 32768, 0], [5782, 11475, 32768, 0], [16803, 22759, 32768, 0],
+    ],
   }
 }
 
+///|
 /// Derive the reduced tx-depth context from neighbouring block depths.  The
 /// full AV1 table has 21 geometry-specific rows; this package currently uses
 /// three validated rows, where each neighbour contributes one level of split
 /// evidence.  Callers should pass -1 for an unavailable edge.
-pub fn av1_tx_depth_context_from_neighbors(above_depth : Int, left_depth : Int) -> Int {
+pub fn av1_tx_depth_context_from_neighbors(above_depth : Int, left_depth : Int,
+) -> Int {
   let above = if above_depth > 0 { 1 } else { 0 }
   let left = if left_depth > 0 { 1 } else { 0 }
   above + left
 }
 
+///|
 /// Derive the tx_depth context from the transform dimensions recorded for
 /// the neighbouring blocks (AV1 spec section 8.3).  The syntax context is a
 /// pair of independent flags: one for an above neighbour whose transform
@@ -164,6 +181,7 @@ pub fn av1_tx_depth_context_from_sizes(
   above + left
 }
 
+///|
 fn av1_decode_tx_depth_with_state(
   decoder : Av1SymbolDecoder,
   state : Av1TxDepthState,
@@ -189,14 +207,17 @@ fn av1_decode_tx_depth_with_state(
   if depth < 0 || depth > max_depth { None } else { Some(depth) }
 }
 
+///|
 fn av1_decode_tx_depth(
   decoder : Av1SymbolDecoder,
   max_size : Int,
   context : Int,
 ) -> Int? {
-  av1_decode_tx_depth_with_state(decoder, av1_tx_depth_state(), max_size, context)
+  av1_decode_tx_depth_with_state(decoder, av1_tx_depth_state(), max_size, context,
+  )
 }
 
+///|
 /// Build the leaves selected by one `tx_depth` value.  The entropy syntax
 /// carries the depth once at the block root; subsequent nodes are geometric
 /// splits and do not consume additional symbols.  This helper is deliberately
@@ -213,7 +234,7 @@ fn av1_tx_depth_leaves(
     return false
   }
   if remaining == 0 {
-    out.push({ node, depth })
+    out.push({ node, depth, })
     return true
   }
   let children = av1_tx_children(node, Av1TxSplit)
@@ -228,6 +249,7 @@ fn av1_tx_depth_leaves(
   true
 }
 
+///|
 fn av1_decode_tx_tree(
   decoder : Av1SymbolDecoder,
   root : Av1TxNode,
@@ -236,6 +258,7 @@ fn av1_decode_tx_tree(
   av1_decode_tx_tree_with_state(decoder, av1_tx_depth_state(), root, context)
 }
 
+///|
 /// Stateful variant used by tile traversal; the wrapper above remains for
 /// compatibility with existing callers and isolated tests.
 fn av1_decode_tx_tree_with_state(
@@ -254,81 +277,239 @@ fn av1_decode_tx_tree_with_state(
   if av1_tx_depth_leaves(root, depth, 0, out) { Some(out) } else { None }
 }
 
-/// CDF rows for the variable-transform split symbol (AV1 §9.3.2).  The
-/// partition reader is kept separate from the fixed tx_depth reader because
-/// intra tx_mode_select streams use the latter while inter/explicit variable
-/// transform streams signal a split at each internal node.  Keeping the
-/// twenty-one context rows here lets callers opt into the real per-node walk
-/// without changing the established fixed-depth fixture layout.
-fn av1_txfm_split_cdf(context : Int) -> Array[Int] {
+///|
+/// Mutable txfm_split CDFs, retained across every tree decoded in a tile.
+/// This state is separate from the intra tx_depth CDFs.
+priv struct Av1VarTxCdfState {
+  rows : Array[Array[Int]]
+}
+
+///|
+fn av1_vartx_cdf_state() -> Av1VarTxCdfState {
   let rows : Array[Array[Int]] = [
-    [28581, 32768, 0], [23846, 32768, 0], [20847, 32768, 0],
-    [24315, 32768, 0], [18196, 32768, 0], [12133, 32768, 0],
-    [18791, 32768, 0], [10887, 32768, 0], [11005, 32768, 0],
-    [27179, 32768, 0], [20004, 32768, 0], [11281, 32768, 0],
-    [26549, 32768, 0], [19308, 32768, 0], [14224, 32768, 0],
-    [28015, 32768, 0], [21546, 32768, 0], [14400, 32768, 0],
-    [28165, 32768, 0], [22401, 32768, 0], [16088, 32768, 0],
+    [28581, 32768, 0],
+    [23846, 32768, 0],
+    [20847, 32768, 0],
+    [24315, 32768, 0],
+    [18196, 32768, 0],
+    [12133, 32768, 0],
+    [18791, 32768, 0],
+    [10887, 32768, 0],
+    [11005, 32768, 0],
+    [27179, 32768, 0],
+    [20004, 32768, 0],
+    [11281, 32768, 0],
+    [26549, 32768, 0],
+    [19308, 32768, 0],
+    [14224, 32768, 0],
+    [28015, 32768, 0],
+    [21546, 32768, 0],
+    [14400, 32768, 0],
+    [28165, 32768, 0],
+    [22401, 32768, 0],
+    [16088, 32768, 0],
   ]
-  let row = if context < 0 { 0 } else if context >= rows.length() { rows.length() - 1 } else { context }
-  rows[row]
+  { rows, }
 }
 
-/// Context used by the variable-transform split symbol.  A neighbour whose
-/// width/height is smaller than the current node contributes one bit each;
-/// unavailable edges are represented by -1 and contribute zero.  This is the
-/// same geometry used by `tx_depth_context_from_sizes`, but retains the full
-/// 21-row table's indexing shape for future block-level traversal.
-fn av1_txfm_split_context(
-  node : Av1TxNode,
-  root : Av1TxNode,
-  depth : Int,
-) -> Int {
-  let max_tx = if root.width > root.height { root.width } else { root.height }
-  let size_class = if max_tx >= 64 { 0 } else if max_tx >= 32 { 1 } else if max_tx >= 16 { 2 } else { 3 }
-  let rect_class = if node.width == node.height { 0 } else if node.width > node.height { 1 } else { 2 }
-  let d = if depth < 0 { 0 } else if depth > 2 { 2 } else { depth }
-  // Keep the context deterministic and within the normative table.  The
-  // neighbour flags are supplied by a future block traversal; for this local
-  // tree walk the current geometry is the authoritative source.
-  (size_class * 3 + rect_class + d) % 21
+///|
+/// Per-4x4 transform dimensions within one coding block. External edge arrays
+/// contain the effective neighbour dimensions from get_above_tx_width and
+/// get_left_tx_height: 64 for unavailable edges, the coding-block dimension
+/// for skipped inter neighbours, and the transform dimension otherwise.
+/// Internal entries start at -1 and are filled as soon as a leaf is decoded.
+priv struct Av1VarTxNeighbors {
+  block : Av1TxNode
+  cols : Int
+  above_width : Array[Int]
+  left_height : Array[Int]
+  tx_width : Array[Int]
+  tx_height : Array[Int]
 }
 
-/// Decode a variable-transform tree with one `txfm_split` symbol per internal
-/// node.  Square nodes split into four raster children.  Rectangular nodes
-/// split along their long axis, yielding HORZ or VERT children and preserving
-/// the full coefficient plane layout for residual reconstruction.
-///
-/// This is an opt-in entry point: the existing fixed-depth wrapper remains
-/// unchanged for intra tx_mode_select streams whose payloads contain only a
-/// single tx_depth symbol.
+///|
+fn av1_vartx_geometry_valid(node : Av1TxNode, is_block : Bool) -> Bool {
+  let square = node.width == node.height &&
+    (
+      node.width == 4 ||
+      node.width == 8 ||
+      node.width == 16 ||
+      node.width == 32 ||
+      node.width == 64
+    )
+  let large_block = is_block &&
+    (
+      (node.width == 64 && node.height == 128) ||
+      (node.width == 128 && node.height == 64) ||
+      (node.width == 128 && node.height == 128)
+    )
+  (square || av1_tx_rect_supported(node.width, node.height) || large_block) &&
+  node.row >= 0 &&
+  node.col >= 0 &&
+  node.row % 4 == 0 &&
+  node.col % 4 == 0 &&
+  node.row <= 2147483647 - node.height &&
+  node.col <= 2147483647 - node.width
+}
+
+///|
+/// Create block-local transform state with one effective external dimension
+/// per 4x4 edge position. The caller resolves availability and skip/inter
+/// metadata before entering this standalone transform reader.
+fn av1_vartx_neighbors(
+  block : Av1TxNode,
+  above_width : Array[Int],
+  left_height : Array[Int],
+) -> Av1VarTxNeighbors? {
+  if !av1_vartx_geometry_valid(block, true) ||
+    above_width.length() != block.width / 4 ||
+    left_height.length() != block.height / 4 {
+    return None
+  }
+  for edge in [above_width, left_height] {
+    for size in edge {
+      if size < 4 || size > 128 || (size & (size - 1)) != 0 {
+        return None
+      }
+    }
+  }
+  let cols = block.width / 4
+  let cells = cols * (block.height / 4)
+  Some({
+    block,
+    cols,
+    above_width: above_width.copy(),
+    left_height: left_height.copy(),
+    tx_width: Array::make(cells, -1),
+    tx_height: Array::make(cells, -1),
+  })
+}
+
+///|
+fn av1_vartx_contains(state : Av1VarTxNeighbors, node : Av1TxNode) -> Bool {
+  av1_vartx_geometry_valid(node, false) &&
+  node.row >= state.block.row &&
+  node.col >= state.block.col &&
+  node.row - state.block.row <= state.block.height - node.height &&
+  node.col - state.block.col <= state.block.width - node.width
+}
+
+///|
+/// AV1 txfm_split CDF selection (spec section 8.3). Unlike tx_depth, each
+/// smaller neighbour contributes one; the size class comes from the coding
+/// block and the square-up size of this transform, not recursion depth.
+fn av1_txfm_split_context(state : Av1VarTxNeighbors, node : Av1TxNode) -> Int? {
+  if !av1_vartx_contains(state, node) || (node.width == 4 && node.height == 4) {
+    return None
+  }
+  let x4 = (node.col - state.block.col) / 4
+  let y4 = (node.row - state.block.row) / 4
+  let above_width = if y4 == 0 {
+    state.above_width[x4]
+  } else {
+    state.tx_width[(y4 - 1) * state.cols + x4]
+  }
+  let left_height = if x4 == 0 {
+    state.left_height[y4]
+  } else {
+    state.tx_height[y4 * state.cols + x4 - 1]
+  }
+  if above_width < 0 || left_height < 0 {
+    return None
+  }
+  let block_size = if state.block.width > state.block.height {
+    state.block.width
+  } else {
+    state.block.height
+  }
+  let max_size = if block_size > 64 { 64 } else { block_size }
+  let max_tx = av1_msac_floor_log2(max_size) - 2
+  let node_size = if node.width > node.height {
+    node.width
+  } else {
+    node.height
+  }
+  let smaller = if node_size != max_size { 3 } else { 0 }
+  let above = if above_width < node.width { 1 } else { 0 }
+  let left = if left_height < node.height { 1 } else { 0 }
+  Some(6 * (4 - max_tx) + smaller + above + left)
+}
+
+///|
+/// Record every 4x4 covered by a leaf before decoding the next sibling.
+fn av1_vartx_record(state : Av1VarTxNeighbors, node : Av1TxNode) -> Bool {
+  if !av1_vartx_contains(state, node) {
+    return false
+  }
+  let x4 = (node.col - state.block.col) / 4
+  let y4 = (node.row - state.block.row) / 4
+  for y in y4..<(y4 + node.height / 4) {
+    for x in x4..<(x4 + node.width / 4) {
+      state.tx_width[y * state.cols + x] = node.width
+      state.tx_height[y * state.cols + x] = node.height
+    }
+  }
+  true
+}
+
+///|
+/// Decode one Max_Tx_Size_Rect root using shared entropy and block state.
+/// Square transforms split into four raster children; rectangles split in
+/// two along their long axis. MAX_VARTX_DEPTH is 2. A smaller max_depth is an
+/// explicit probe limit, not the depth signalled by an AV1 coding block.
 fn av1_decode_tx_partition_tree_with_decoder(
   decoder : Av1SymbolDecoder,
+  cdf_state : Av1VarTxCdfState,
+  neighbors : Av1VarTxNeighbors,
   root : Av1TxNode,
   max_depth : Int,
 ) -> Array[Av1TxLeaf]? {
-  if root.width < 4 || root.height < 4 || max_depth < 0 || max_depth > 3 {
+  if !av1_vartx_contains(neighbors, root) || max_depth < 0 || max_depth > 2 {
+    return None
+  }
+  let root_width = if neighbors.block.width > 64 {
+    64
+  } else {
+    neighbors.block.width
+  }
+  let root_height = if neighbors.block.height > 64 {
+    64
+  } else {
+    neighbors.block.height
+  }
+  if root.width != root_width ||
+    root.height != root_height ||
+    (root.row - neighbors.block.row) % root_height != 0 ||
+    (root.col - neighbors.block.col) % root_width != 0 {
     return None
   }
   let out : Array[Av1TxLeaf] = []
   fn walk(
     decoder : Av1SymbolDecoder,
+    cdf_state : Av1VarTxCdfState,
+    neighbors : Av1VarTxNeighbors,
     node : Av1TxNode,
     depth : Int,
     max_depth : Int,
-    root : Av1TxNode,
     out : Array[Av1TxLeaf],
   ) -> Bool {
-    if node.width < 4 || node.height < 4 { return false }
     if depth >= max_depth || (node.width == 4 && node.height == 4) {
-      out.push({ node, depth })
+      if !av1_vartx_record(neighbors, node) {
+        return false
+      }
+      out.push({ node, depth, })
       return true
     }
-    let split = decoder.symbol(av1_txfm_split_cdf(
-      av1_txfm_split_context(node, root, depth),
-    ))
+    let context = match av1_txfm_split_context(neighbors, node) {
+      Some(value) => value
+      None => return false
+    }
+    let split = decoder.symbol(cdf_state.rows[context])
     if split == 0 {
-      out.push({ node, depth })
+      if !av1_vartx_record(neighbors, node) {
+        return false
+      }
+      out.push({ node, depth, })
       return true
     }
     let partition = if node.width == node.height {
@@ -341,28 +522,56 @@ fn av1_decode_tx_partition_tree_with_decoder(
     let children = av1_tx_children(node, partition)
     if children.length() == 0 { return false }
     for child in children {
-      if !walk(decoder, child, depth + 1, max_depth, root, out) { return false }
+      if !walk(decoder, cdf_state, neighbors, child, depth + 1, max_depth, out) { return false }
     }
     true
   }
-  if walk(decoder, root, 0, max_depth, root, out) { Some(out) } else { None }
+  // exit_symbol permits at most 14 implicit zero bits. SymbolMaxBits only
+  // decreases, so exceeding that bound cannot become valid later in a tile.
+  if !walk(decoder, cdf_state, neighbors, root, 0, max_depth, out) ||
+    decoder.symbol_max_bits < -14 {
+    None
+  } else { Some(out) }
 }
 
-/// Public payload wrapper for the variable-transform tree.  Keeping the MSAC
-/// state internal prevents callers from depending on the decoder's mutable
-/// implementation while still exposing the HORZ/VERT leaf geometry.
+///|
+/// Decode an isolated transform tree with fresh default CDFs and unavailable
+/// external neighbours. Internal leaf dimensions and CDF updates are retained
+/// throughout the walk. Coordinates are pixels and must be 4-pixel aligned;
+/// root geometry must be a legal AV1 transform size. max_depth accepts 0..2;
+/// use 2 for the AV1 variable-transform recursion limit.
+/// Payloads exceeding the symbol decoder's 14-bit padding budget are rejected.
+/// This probe does not parse tile syntax, resolve inter/skip edge metadata,
+/// clip frame-edge blocks, or carry CDF state across payload calls.
 pub fn av1_decode_tx_partition_tree_payload(
   payload : Array[Byte],
   root : Av1TxNode,
   max_depth : Int,
   disable_cdf_update? : Bool = false,
 ) -> Array[Av1TxLeaf]? {
-  if payload.length() == 0 { return None }
+  if payload.length() == 0 ||
+    !av1_vartx_geometry_valid(root, false) ||
+    max_depth < 0 ||
+    max_depth > 2 {
+    return None
+  }
+  let neighbors = match
+    av1_vartx_neighbors(
+      root,
+      Array::make(root.width / 4, 64),
+      Array::make(root.height / 4, 64),
+    ) {
+    Some(value) => value
+    None => return None }
   av1_decode_tx_partition_tree_with_decoder(
-    av1_msac_new(payload, !disable_cdf_update), root, max_depth,
+    av1_msac_new(payload, !disable_cdf_update),
+    av1_vartx_cdf_state(),
+    neighbors,
+    root, max_depth,
   )
 }
 
+///|
 /// Read one leaf's coefficients while sharing one mutable MSAC reader and
 /// coefficient CDF context. `scan_class` selects the coefficient scan ordered
 /// by the leaf's transform type; `dc_sign_ctx` is the neighbour dc-sign
@@ -386,17 +595,7 @@ fn av1_tx_decode_leaf_nodes(
       return None
     }
     let leaf_coeffs = if av1_tx_rect_supported(side, height) {
-      context.tx_ctx = if side >= 64 || height >= 64 {
-        4
-      } else if side >= 32 || height >= 32 {
-        3
-      } else if side >= 16 || height >= 16 {
-        2
-      } else if side >= 8 || height >= 8 {
-        1
-      } else {
-        0
-      }
+      context.tx_ctx = av1_tx_size_ctx_rect(side, height)
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~, height~,
       )
@@ -601,8 +800,10 @@ fn av1_tx_scan_class(tx_type : Av1TxType) -> Int {
   }
 }
 
+///|
 /// Return valid children for one transform-tree partition.
-pub fn av1_tx_children(node : Av1TxNode, partition : Av1TxPartition) -> Array[Av1TxNode] {
+pub fn av1_tx_children(node : Av1TxNode, partition : Av1TxPartition,
+) -> Array[Av1TxNode] {
   if node.row < 0 || node.col < 0 || node.width < 4 || node.height < 4 {
     return []
   }
@@ -615,39 +816,49 @@ pub fn av1_tx_children(node : Av1TxNode, partition : Av1TxPartition) -> Array[Av
       if node.width % 2 != 0 || node.height % 2 != 0 || half_w < 4 || half_h < 4 {
         return []
       }
-      out.push({ row: node.row, col: node.col, width: half_w, height: half_h })
-      out.push({ row: node.row, col: node.col + half_w, width: half_w, height: half_h })
-      out.push({ row: node.row + half_h, col: node.col, width: half_w, height: half_h })
-      out.push({ row: node.row + half_h, col: node.col + half_w, width: half_w, height: half_h })
+      out.push({ row: node.row, col: node.col, width: half_w, height: half_h, })
+      out.push({ row: node.row, col: node.col + half_w, width: half_w, height: half_h,
+      })
+      out.push({ row: node.row + half_h, col: node.col, width: half_w, height: half_h,
+      })
+      out.push({ row: node.row + half_h, col: node.col + half_w, width: half_w, height: half_h,
+      })
     }
     Av1TxHorz => {
       if node.height % 2 != 0 || half_h < 4 { return [] }
-      out.push({ row: node.row, col: node.col, width: node.width, height: half_h })
-      out.push({ row: node.row + half_h, col: node.col, width: node.width, height: half_h })
+      out.push({ row: node.row, col: node.col, width: node.width, height: half_h,
+      })
+      out.push({ row: node.row + half_h, col: node.col, width: node.width, height: half_h,
+      })
     }
     Av1TxVert => {
       if node.width % 2 != 0 || half_w < 4 { return [] }
-      out.push({ row: node.row, col: node.col, width: half_w, height: node.height })
-      out.push({ row: node.row, col: node.col + half_w, width: half_w, height: node.height })
+      out.push({ row: node.row, col: node.col, width: half_w, height: node.height,
+      })
+      out.push({ row: node.row, col: node.col + half_w, width: half_w, height: node.height,
+      })
     }
   }
   out
 }
 
+///|
 /// Walk a transform tree and return its leaf nodes in raster order.
 pub fn av1_tx_leaves(
   root : Av1TxNode,
   partitions : Array[Av1TxPartition],
 ) -> Array[Av1TxNode]? {
   let cursor = 0
-  fn walk(node : Av1TxNode, parts : Array[Av1TxPartition], cursor : Ref[Int], out : Array[Av1TxNode]) -> Bool {
+  fn walk(node : Av1TxNode, parts : Array[Av1TxPartition], cursor : Ref[Int], out : Array[Av1TxNode],
+  ) -> Bool {
     if cursor.val >= parts.length() { return false }
     let partition = parts[cursor.val]
     cursor.val = cursor.val + 1
     let children = av1_tx_children(node, partition)
     if children.length() == 0 { return false }
     match partition {
-      Av1TxNone => { out.push(node); true }
+      Av1TxNone => { out.push(node)
+        true }
       _ => {
         for child in children {
           if !walk(child, parts, cursor, out) { return false }
@@ -657,9 +868,10 @@ pub fn av1_tx_leaves(
     }
   }
   let out : Array[Av1TxNode] = []
-  if walk(root, partitions, { val: cursor }, out) { Some(out) } else { None }
+  if walk(root, partitions, { val: cursor, }, out) { Some(out) } else { None }
 }
 
+///|
 /// Decode square coefficient blocks at transform-tree leaves while sharing
 /// one mutable MSAC reader and coefficient CDF context.
 fn av1_tx_decode_coeff_leaves(
@@ -681,26 +893,18 @@ fn av1_tx_decode_coeff_leaves(
       return None
     }
     let coeffs = if av1_tx_rect_supported(leaf.width, leaf.height) {
-      context.tx_ctx = if leaf.width >= 64 || leaf.height >= 64 {
-        4
-      } else if leaf.width >= 32 || leaf.height >= 32 {
-        3
-      } else if leaf.width >= 16 || leaf.height >= 16 {
-        2
-      } else if leaf.width >= 8 || leaf.height >= 8 {
-        1
-      } else {
-        0
-      }
+      context.tx_ctx = av1_tx_size_ctx_rect(leaf.width, leaf.height)
       av1_decode_coeffs_leaf_with_decoder(
-        decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth, height=leaf.height,
+        decoder, base_q_idx, context, leaf.width, bit_depth~, height=leaf.height,
       ).map(fn(value) { value.coeffs })
     } else if leaf.width <= 16 {
       context.tx_ctx = if leaf.width == 16 { 2 } else if leaf.width == 8 { 1 } else { 0 }
-      av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth)
+      av1_decode_coeffs_small_with_decoder(decoder, base_q_idx, context, leaf.width, bit_depth~,
+      )
     } else {
       context.tx_ctx = if leaf.width == 64 { 4 } else { 3 }
-      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth=bit_depth)
+      av1_decode_coeffs_square_with_decoder(decoder, base_q_idx, context, bit_depth~,
+      )
     }
     let coeffs = match coeffs {
       Some(value) => value
@@ -714,9 +918,9 @@ fn av1_tx_decode_coeff_leaves(
 ///|
 test "transform tree emits four raster leaves" {
   let leaves = av1_tx_leaves(
-    { row: 0, col: 0, width: 32, height: 32 },
-    [Av1TxSplit, Av1TxNone, Av1TxNone, Av1TxNone, Av1TxNone],
-  ).unwrap()
+    { row: 0, col: 0, width: 32, height: 32, },
+    [Av1TxSplit, Av1TxNone, Av1TxNone, Av1TxNone, Av1TxNone,
+  ]).unwrap()
   assert_eq(leaves.length(), 4)
   assert_eq((leaves[1].row, leaves[1].col), (0, 16))
   assert_eq((leaves[3].row, leaves[3].col), (16, 16))
@@ -725,17 +929,19 @@ test "transform tree emits four raster leaves" {
 ///|
 test "transform tree walks smaller AV1 leaf sizes" {
   let leaves = av1_tx_leaves(
-    { row: 0, col: 0, width: 8, height: 8 },
-    [Av1TxSplit, Av1TxNone, Av1TxNone, Av1TxNone, Av1TxNone],
-  ).unwrap()
+    { row: 0, col: 0, width: 8, height: 8, },
+    [Av1TxSplit, Av1TxNone, Av1TxNone, Av1TxNone, Av1TxNone,
+  ]).unwrap()
   assert_eq(leaves.length(), 4)
   assert_eq((leaves[0].width, leaves[0].height), (4, 4))
 }
 
 ///|
 test "transform tree rejects odd and undersized splits" {
-  assert_eq(av1_tx_children({ row: 0, col: 0, width: 7, height: 8 }, Av1TxSplit).length(), 0)
-  assert_eq(av1_tx_children({ row: 0, col: 0, width: 4, height: 4 }, Av1TxSplit).length(), 0)
+  assert_eq(av1_tx_children({ row: 0, col: 0, width: 7, height: 8, }, Av1TxSplit).length(), 0,
+  )
+  assert_eq(av1_tx_children({ row: 0, col: 0, width: 4, height: 4, }, Av1TxSplit).length(), 0,
+  )
 }
 
 ///|
@@ -745,7 +951,7 @@ test "transform tree coefficient walk rejects truncated entropy" {
     decoder,
     0,
     av1_coeff_context(0, 3, 0),
-    { row: 0, col: 0, width: 32, height: 32 },
+    { row: 0, col: 0, width: 32, height: 32, },
     [Av1TxNone],
     8,
   )
@@ -759,6 +965,7 @@ test "tx depth reader bounds frame transform depth" {
   assert_true(av1_decode_tx_depth(decoder, 4, 0) is Some(_))
 }
 
+///|
 test "4x4 tx depth is implied without entropy read" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   let before = decoder.bit_pos
@@ -766,6 +973,7 @@ test "4x4 tx depth is implied without entropy read" {
   assert_eq(decoder.bit_pos, before)
 }
 
+///|
 test "tx depth CDF state adapts across blocks" {
   let decoder = av1_msac_new(Array::make(16, b'\x00'), true)
   let state = av1_tx_depth_state()
@@ -775,12 +983,14 @@ test "tx depth CDF state adapts across blocks" {
   assert_true(state.cdf32[0][3] > before)
 }
 
+///|
 test "tx depth context derives from neighbours" {
   assert_eq(av1_tx_depth_context_from_neighbors(-1, -1), 0)
   assert_eq(av1_tx_depth_context_from_neighbors(1, -1), 1)
   assert_eq(av1_tx_depth_context_from_neighbors(2, 3), 2)
 }
 
+///|
 test "tx depth context derives from neighbour transform sizes" {
   // Unavailable edges and transforms smaller than the root do not contribute.
   assert_eq(av1_tx_depth_context_from_sizes(-1, -1, 32, 32), 0)
@@ -794,23 +1004,26 @@ test "tx depth context derives from neighbour transform sizes" {
 ///|
 test "tx traversal state keeps unavailable edges explicit" {
   let state = av1_tx_traversal_state(64, 64)
-  let first = { row: 0, col: 0, width: 32, height: 32 }
+  let first = { row: 0, col: 0, width: 32, height: 32, }
   assert_eq(av1_tx_depth_context_for_node(state, first), 0)
   av1_tx_traversal_record(state, first)
   // A block to the right sees the recorded left height; a block below sees
   // the recorded above width.  No dimensions are invented for other edges.
   assert_eq(
-    av1_tx_depth_context_for_node(state, { row: 0, col: 32, width: 32, height: 32 }),
+    av1_tx_depth_context_for_node(state, { row: 0, col: 32, width: 32, height: 32,
+    }),
     1,
   )
   assert_eq(
-    av1_tx_depth_context_for_node(state, { row: 32, col: 0, width: 32, height: 32 }),
+    av1_tx_depth_context_for_node(state, { row: 32, col: 0, width: 32, height: 32,
+    }),
     1,
   )
-  av1_tx_traversal_record(state, { row: 0, col: 32, width: 32, height: 32 })
-  av1_tx_traversal_record(state, { row: 32, col: 0, width: 32, height: 32 })
+  av1_tx_traversal_record(state, { row: 0, col: 32, width: 32, height: 32, })
+  av1_tx_traversal_record(state, { row: 32, col: 0, width: 32, height: 32, })
   assert_eq(
-    av1_tx_depth_context_for_node(state, { row: 32, col: 32, width: 32, height: 32 }),
+    av1_tx_depth_context_for_node(state, { row: 32, col: 32, width: 32, height: 32,
+    }),
     2,
   )
 }
@@ -820,7 +1033,7 @@ test "tx depth entropy walker emits root leaf for zero depth" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   let leaves = av1_decode_tx_tree(
     decoder,
-    { row: 0, col: 0, width: 4, height: 4 },
+    { row: 0, col: 0, width: 4, height: 4, },
     0,
   ).unwrap()
   assert_eq(leaves.length(), 1)
@@ -832,11 +1045,12 @@ test "tx depth entropy walker emits root leaf for zero depth" {
 test "tx depth walker rejects a split below minimum geometry" {
   let out : Array[Av1TxLeaf] = []
   assert_false(
-    av1_tx_depth_leaves({ row: 0, col: 0, width: 4, height: 4 }, 1, 0, out),
+    av1_tx_depth_leaves({ row: 0, col: 0, width: 4, height: 4, }, 1, 0, out),
   )
   assert_eq(out.length(), 0)
 }
 
+///|
 test "intra tx type reader gates on qindex and transform set" {
   let decoder = av1_msac_new(Array::make(8, b'\x00'), true)
   // Zero qindex implies DCT_DCT without consuming a symbol.
@@ -847,8 +1061,7 @@ test "intra tx type reader gates on qindex and transform set" {
   // 32x32 leaves are DCT-only for intra frames.
   assert_true(
     av1_decode_intra_tx_type(
-      decoder, av1_tx_ent_tables(128), 32, 0, false, 128,
-    )
+      decoder, av1_tx_ent_tables(128), 32, 0, false, 128)
     is Some(Av1TxDctDct),
   )
   // Non-zero qindex with 4x4/16x16 leaves consumes one symbol; all-zero
@@ -893,7 +1106,8 @@ test "tx type inverse sets reject out-of-range symbols" {
 ///|
 test "tx depth entropy recursively emits transform leaves" {
   let decoder = av1_msac_new(Array::make(32, b'\x00'), true)
-  let leaves = av1_decode_tx_tree(decoder, { row: 0, col: 0, width: 16, height: 16 }, 0).unwrap()
+  let leaves = av1_decode_tx_tree(decoder, { row: 0, col: 0, width: 16, height: 16, }, 0,
+  ).unwrap()
   assert_true(leaves.length() >= 1)
 }
 
@@ -904,7 +1118,7 @@ test "transform tree decodes a small zero-EOB coefficient leaf" {
     decoder,
     0,
     av1_coeff_context(0, 0, 0),
-    { row: 0, col: 0, width: 4, height: 4 },
+    { row: 0, col: 0, width: 4, height: 4, },
     [Av1TxNone],
     8,
   ).unwrap()
@@ -917,10 +1131,11 @@ test "transform tree decodes a small zero-EOB coefficient leaf" {
 test "transform tree decodes multiple leaves with one CDF context" {
   let decoder = av1_msac_new(Array::make(128, b'\x00'), true)
   let leaves : Array[Av1TxLeaf] = [
-    { node: { row: 0, col: 0, width: 4, height: 4 }, depth: 1 },
-    { node: { row: 0, col: 4, width: 4, height: 4 }, depth: 1 },
+    { node: { row: 0, col: 0, width: 4, height: 4, }, depth: 1, },
+    { node: { row: 0, col: 4, width: 4, height: 4, }, depth: 1, },
   ]
-  let result = av1_tx_decode_leaf_nodes(decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8)
+  let result = av1_tx_decode_leaf_nodes(decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,
+  )
   assert_true(result is Some(_))
 }
 
@@ -928,7 +1143,7 @@ test "transform tree decodes multiple leaves with one CDF context" {
 test "transform tree decodes 32x16 rectangular coefficient leaf" {
   let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
   let leaves : Array[Av1TxLeaf] = [
-    { node: { row: 0, col: 0, width: 32, height: 16 }, depth: 0 },
+    { node: { row: 0, col: 0, width: 32, height: 16, }, depth: 0, },
   ]
   let result = av1_tx_decode_leaf_nodes(
     decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,
@@ -942,7 +1157,7 @@ test "transform tree decodes 32x16 rectangular coefficient leaf" {
 test "transform tree decodes the transposed 16x32 rectangular leaf" {
   let decoder = av1_msac_new(Array::make(64, b'\x00'), true)
   let leaves : Array[Av1TxLeaf] = [
-    { node: { row: 0, col: 0, width: 16, height: 32 }, depth: 0 },
+    { node: { row: 0, col: 0, width: 16, height: 32, }, depth: 0, },
   ]
   let result = av1_tx_decode_leaf_nodes(
     decoder, 0, av1_coeff_context(0, 0, 0), leaves, 8,

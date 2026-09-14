@@ -123,7 +123,11 @@ fn av1_coeff_scan_32() -> Array[Int] {
 /// Transform scan classes: the default diagonal, or the 1D vertical and
 /// horizontal scans selected by V_/H_ transform types (AV1 spec §5.11.34).
 const AV1_SCAN_DEFAULT : Int = 0
+
+///|
 const AV1_SCAN_VERT : Int = 1
+
+///|
 const AV1_SCAN_HORZ : Int = 2
 
 ///|
@@ -133,7 +137,7 @@ fn av1_coeff_scan_square(side : Int, scan_class : Int) -> Array[Int] {
   if scan_class == AV1_SCAN_VERT {
     let out : Array[Int] = []
     for k in 0..<(side * side) {
-      out.push((k % side) * side + k / side)
+      out.push(k % side * side + k / side)
     }
     return out
   }
@@ -156,12 +160,14 @@ fn av1_coeff_scan_square(side : Int, scan_class : Int) -> Array[Int] {
   av1_coeff_scan_32()
 }
 
+///|
 /// Scans for rectangular transforms.  The default diagonal scan is the AV1
 /// adjusted order; large rectangles (64x32/32x64) use the adjusted 32x32
 /// coefficient domain, while 32x16/16x32 use the 32x16 domain.  One-
 /// dimensional transform classes use the corresponding row- or column-major
 /// order over the same adjusted rectangle.
-fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int) -> Array[Int] {
+fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int,
+) -> Array[Int] {
   let out : Array[Int] = []
   if scan_class == AV1_SCAN_VERT {
     for c in 0..<width { for r in 0..<height { out.push(r * width + c) } }
@@ -184,24 +190,30 @@ fn av1_coeff_scan_rect(width : Int, height : Int, scan_class : Int) -> Array[Int
     // domains alternate diagonal direction.
     if width > height || (width == height && (d & 1) == 0) {
       let mut r = hi
-      while r >= lo { out.push(r * width + (d - r)); r = r - 1 }
+      while r >= lo { out.push(r * width + (d - r))
+        r = r - 1 }
     } else {
       let mut r = lo
-      while r <= hi { out.push(r * width + (d - r)); r = r + 1 }
+      while r <= hi { out.push(r * width + (d - r))
+        r = r + 1 }
     }
   }
   out
 }
 
+///|
 fn av1_coeff_log2(value : Int) -> Int {
   if value <= 4 { 2 } else if value <= 8 { 3 } else if value <= 16 { 4 } else { 5 }
 }
 
+///|
 /// Rectangular counterpart of get_coeff_base_ctx/get_coeff_br_ctx.  `width`
 /// and `height` are the adjusted coefficient dimensions (at most 32).
 fn av1_coeff_base_ctx_rect(
   quant : Array[Int], pos : Int, c : Int, is_eob : Bool,
-  width : Int, height : Int, size_row : Int, scan_class : Int,
+  width : Int, height : Int,
+  tx_width : Int,
+  tx_height : Int, scan_class : Int,
 ) -> Int {
   let area = width * height
   if is_eob {
@@ -234,9 +246,20 @@ fn av1_coeff_base_ctx_rect(
     return ctx + 26 + 5 * (if idx < 2 { idx } else { 2 })
   }
   if row == 0 && col == 0 { return 0 }
-  ctx + av1_coeff_base_ctx_offset[size_row][if row < 4 { row } else { 4 }][if col < 4 { col } else { 4 }]
+  // Original transform dimensions select the positional offset, including
+  // 32x64 and 64x32 whose adjusted coefficient domains are both square.
+  // Tall rectangles differ in the first two rows; wide rectangles in the
+  // first two columns. Remaining reachable entries match the square table.
+  if tx_width < tx_height && row < 2 {
+    return ctx + 11
+  }
+  if tx_width > tx_height && col < 2 {
+    return ctx + 16
+  }
+  ctx + av1_coeff_base_ctx_offset[1][if row < 4 { row } else { 4 }][if col < 4 { col } else { 4 }]
 }
 
+///|
 fn av1_coeff_br_ctx_rect(
   quant : Array[Int], pos : Int, width : Int, height : Int, scan_class : Int,
 ) -> Int {
@@ -317,7 +340,13 @@ fn av1_coeff_base_ctx_square(
   }
   let row = pos >> log2_side
   let col = pos - (row << log2_side)
-  let refs : Array[Array[Int]] = [[0, 1], [1, 0], [1, 1], [0, 2], [2, 0]]
+  let refs : Array[Array[Int]] = if scan_class == AV1_SCAN_VERT {
+    [[0, 1], [1, 0], [2, 0], [3, 0], [4, 0]]
+  } else if scan_class == AV1_SCAN_HORZ {
+    [[0, 1], [1, 0], [0, 2], [0, 3], [0, 4]]
+  } else {
+    [[0, 1], [1, 0], [1, 1], [0, 2], [2, 0]]
+  }
   let mut mag = 0
   for delta in refs {
     let rr = row + delta[0]
@@ -366,7 +395,13 @@ fn av1_coeff_br_ctx_square(
   }
   let row = pos >> log2_side
   let col = pos - (row << log2_side)
-  let refs : Array[Array[Int]] = [[0, 1], [1, 0], [1, 1]]
+  let refs : Array[Array[Int]] = if scan_class == AV1_SCAN_VERT {
+    [[0, 1], [1, 0], [2, 0]]
+  } else if scan_class == AV1_SCAN_HORZ {
+    [[0, 1], [1, 0], [0, 2]]
+  } else {
+    [[0, 1], [1, 0], [1, 1]]
+  }
   let mut mag = 0
   for delta in refs {
     let rr = row + delta[0]
@@ -394,8 +429,10 @@ fn av1_coeff_br_ctx_square(
   }
 }
 
+///|
 /// Apply dequantisation while retaining the full Int64 product until clip.
-fn av1_dequant_clip(value : Int, q : Int, denom : Int64, bit_depth : Int) -> Int {
+fn av1_dequant_clip(value : Int, q : Int, denom : Int64, bit_depth : Int,
+) -> Int {
   let scaled = value.to_int64() * q.to_int64() / denom
   let limit = 1 << (7 + bit_depth)
   let clipped = if scaled < (-limit).to_int64() {
@@ -558,7 +595,9 @@ fn av1_decode_coeffs_leaf_with_decoder(
     let pos = scan[c]
     let ctx = if rectangular {
       av1_coeff_base_ctx_rect(
-        quant, pos, c, c == eob - 1, domain_width, domain_height, size_row, scan_class,
+        quant, pos, c, c == eob - 1, domain_width, domain_height,
+        side,
+        actual_height, scan_class,
       )
     } else {
       av1_coeff_base_ctx_square(
@@ -579,7 +618,8 @@ fn av1_decode_coeffs_leaf_with_decoder(
           let br = decoder.symbol(
             context.br[if context.tx_ctx > 3 { 3 } else { context.tx_ctx }][
               if rectangular {
-                av1_coeff_br_ctx_rect(quant, pos, domain_width, domain_height, scan_class)
+                av1_coeff_br_ctx_rect(quant, pos, domain_width, domain_height, scan_class,
+              )
               } else {
                 av1_coeff_br_ctx_square(quant, pos, domain, scan_class)
               }
@@ -669,12 +709,12 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     for i in 0..<area {
       let q = if i == 0 { dc_q } else { ac_q }
-      out[(i / domain) * side + (i % domain)] = av1_dequant_clip(
+      out[i / domain * side + i % domain] = av1_dequant_clip(
         quant[i], q, denom, bit_depth,
       )
     }
   }
-  Some({ coeffs: out, cul_level, dc_category })
+  Some({ coeffs: out, cul_level, dc_category, })
 }
 
 ///|
@@ -717,6 +757,7 @@ fn av1_decode_coeffs_small_with_decoder(
   }
 }
 
+///|
 /// High-bit-depth dequantisation must clip after the full product, without a
 /// 24-bit wraparound.  This value exceeds 2^24 and would previously decode to
 /// a small unrelated coefficient.

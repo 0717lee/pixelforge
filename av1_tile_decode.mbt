@@ -97,11 +97,11 @@ fn av1_tx_size_ctx(side : Int) -> Int {
   }
 }
 
-/// Transform-size context for rectangular leaves.  AV1's Tx_Size_Sqr context
-/// follows the larger transform axis, so 64x32 and 32x64 use the 64-wide row.
+///|
+/// Coefficient/all_zero context: rounded-up average of the square-down and
+/// square-up transform size classes (AV1 coeffs syntax).
 fn av1_tx_size_ctx_rect(width : Int, height : Int) -> Int {
-  let max_side = if width > height { width } else { height }
-  av1_tx_size_ctx(max_side)
+  (av1_tx_size_ctx(width) + av1_tx_size_ctx(height) + 1) >> 1
 }
 
 ///|
@@ -130,7 +130,8 @@ fn av1_txb_skip_ctx_luma(top : Int, left : Int, whole : Bool) -> Int {
 ///|
 /// Chroma all_zero context (AV1 spec §8.3): 7 plus one per non-empty
 /// neighbour side, plus 3 when the residual block exceeds the transform.
-fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bool) -> Int {
+fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bool,
+) -> Int {
   let ctx = 7 +
     (if above_nonzero { 1 } else { 0 }) +
     (if left_nonzero { 1 } else { 0 })
@@ -143,7 +144,8 @@ fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bo
 
 ///|
 /// dc_sign context from the neighbour dc categories (AV1 spec §8.3).
-fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, width_units : Int, height_units? : Int = 0) -> Int {
+fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, width_units : Int, height_units? : Int = 0,
+) -> Int {
   let h_units = if height_units > 0 { height_units } else { width_units }
   let mut score = 0
   for k in 0..<width_units {
@@ -220,18 +222,20 @@ fn av1_decode_tx_mode_residuals(
   uv_mode : Int,
   bit_depth : Int,
   reduced_tx_set : Bool,
-) -> (Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Av1TxType], Array[Av1TxType], Array[Av1TxType], Array[Av1TxLeaf])? {
+) -> (Array[Array[Int]], Array[Array[Int]], Array[Array[Int]], Array[Av1TxType], Array[Av1TxType], Array[Av1TxType], Array[Av1TxLeaf],
+)? {
   // Keep every transform-size CDF row alive in one context object.  The
   // selected row changes with each tx leaf (tx_depth can produce 8/16/32
   // leaves), while the arrays themselves must remain shared for adaptation.
   let y_context = av1_coeff_context(base_q_idx, 3, 0)
   let y_coeff_results : Array[Av1LeafCoeffs] = []
   let y_types : Array[Av1TxType] = []
-  let units = width / 4
-  let above_level : Array[Int] = Array::make(units, 0)
-  let left_level : Array[Int] = Array::make(units, 0)
-  let above_dc : Array[Int] = Array::make(units, 0)
-  let left_dc : Array[Int] = Array::make(units, 0)
+  let width_units = width / 4
+  let height_units = height / 4
+  let above_level : Array[Int] = Array::make(width_units, 0)
+  let left_level : Array[Int] = Array::make(height_units, 0)
+  let above_dc : Array[Int] = Array::make(width_units, 0)
+  let left_dc : Array[Int] = Array::make(height_units, 0)
   for leaf in leaves {
     let side = leaf.node.width
     let leaf_height = leaf.node.height
@@ -243,7 +247,7 @@ fn av1_decode_tx_mode_residuals(
     let y4 = leaf.node.row / 4
     let w4 = side / 4
     let h4 = leaf_height / 4
-    if x4 + w4 > units || y4 + h4 > units {
+    if x4 < 0 || y4 < 0 || x4 + w4 > width_units || y4 + h4 > height_units {
       return None
     }
     let mut top = 0
@@ -260,7 +264,8 @@ fn av1_decode_tx_mode_residuals(
     }
     let whole = side == width && leaf_height == height
     let ctx = av1_txb_skip_ctx_luma(top, left, whole)
-    let y_zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx])
+    let y_zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx],
+    )
     if y_zero > 1 {
       return None
     }
@@ -284,11 +289,13 @@ fn av1_decode_tx_mode_residuals(
       y_types.push(Av1TxDctDct)
     } else {
       let tx_type = match
-        av1_decode_intra_tx_type(decoder, tables, side, y_mode, reduced_tx_set, base_q_idx) {
+        av1_decode_intra_tx_type(decoder, tables, side, y_mode, reduced_tx_set, base_q_idx,
+        ) {
         Some(value) => value
         None => return None
       }
-      let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4, height_units=h4)
+      let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4, height_units=h4,
+      )
       y_context.tx_ctx = av1_tx_size_ctx_rect(side, leaf_height)
       let decoded = match
         av1_tx_decode_leaf_nodes(
@@ -364,20 +371,18 @@ fn av1_decode_tx_mode_residuals(
   let v_type = u_type
   let mut u_results : Array[Av1LeafCoeffs] = []
   let mut v_results : Array[Av1LeafCoeffs] = []
+  // U and V share AV1's chroma probability rows, while each plane keeps
+  // independent above/left level and sign state.
+  let context = av1_coeff_context(
+    base_q_idx,
+    av1_tx_size_ctx_rect(chroma_tx_width, chroma_tx_height),
+    1,
+  )
   for plane in 0..<2 {
-    // AV1's coefficient CDF tables use one shared chroma plane row for U/V;
-    // the plane loop still keeps independent mutable contexts for each plane.
-    let plane_idx = 1
-    let context = av1_coeff_context(
-      base_q_idx,
-      if chroma_tx_width >= 32 { 3 } else { 2 },
-      plane_idx,
-    )
-    let units = chroma_width / 4
-    let above_level : Array[Int] = Array::make(units, 0)
-    let left_level : Array[Int] = Array::make(units, 0)
-    let above_dc : Array[Int] = Array::make(units, 0)
-    let left_dc : Array[Int] = Array::make(units, 0)
+    let above_level : Array[Int] = Array::make(chroma_width / 4, 0)
+    let left_level : Array[Int] = Array::make(chroma_height / 4, 0)
+    let above_dc : Array[Int] = Array::make(chroma_width / 4, 0)
+    let left_dc : Array[Int] = Array::make(chroma_height / 4, 0)
     let results : Array[Av1LeafCoeffs] = []
     for leaf in chroma_leaves {
       let side = leaf.node.width
@@ -392,13 +397,16 @@ fn av1_decode_tx_mode_residuals(
         if above_level[x4 + i] > 0 {
           above_nonzero = true
         }
-        if left_level[y4 + (if i < h4 { i } else { h4 - 1 })] > 0 {
+      }
+      for j in 0..<h4 {
+        if left_level[y4 + j] > 0 {
           left_nonzero = true
         }
       }
       let whole = side == chroma_width && leaf_height == chroma_height
       let ctx = av1_txb_skip_ctx_chroma(above_nonzero, left_nonzero, whole)
-      let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx])
+      let zero = decoder.symbol(tables.txb_skip[av1_tx_size_ctx_rect(side, leaf_height)][ctx],
+      )
       if zero > 1 {
         return None
       }
@@ -420,7 +428,9 @@ fn av1_decode_tx_mode_residuals(
       } else {
         let tx_type = if plane == 0 { u_type } else { v_type }
         let scan_class = av1_tx_scan_class(tx_type)
-        let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4)
+        let dsc = av1_dc_sign_ctx_from(above_dc, left_dc, x4, y4, w4,
+          height_units=h4,
+        )
         let decoded = match
           av1_tx_decode_leaf_nodes(
             decoder,
@@ -623,7 +633,8 @@ pub fn av1_decode_dc_tile(
     }
   }
   // filter_intra_mode_info is part of the block mode info for both tx modes.
-  if !av1_read_filter_intra_bits(decoder, width, y_mode_symbol, enable_filter_intra) {
+  if !av1_read_filter_intra_bits(decoder, width, y_mode_symbol, enable_filter_intra,
+    ) {
     return None
   }
   if tx_mode_select {
@@ -632,8 +643,9 @@ pub fn av1_decode_dc_tile(
     // subsequent blocks can reuse this state when block traversal expands.
     let tx_depth_state = av1_tx_depth_state()
     let tx_traversal_state = av1_tx_traversal_state(width, height)
-    let root = { row: 0, col: 0, width, height }
-    let tx_depth_context = av1_tx_depth_context_for_node(tx_traversal_state, root)
+    let root = { row: 0, col: 0, width, height, }
+    let tx_depth_context = av1_tx_depth_context_for_node(tx_traversal_state, root,
+    )
     let leaves = match av1_decode_tx_tree_with_state(
       decoder,
       tx_depth_state,
@@ -757,8 +769,7 @@ pub fn av1_decode_dc_tile(
       }
     } else {
       let residual = match av1_decode_single_dc(
-        decoder, base_q_idx, 3, uv_dc, bit_depth~,
-      ) {
+        decoder, base_q_idx, 3, uv_dc, bit_depth~) {
         Some(value) => value
         None => return None
       }
@@ -787,8 +798,7 @@ pub fn av1_decode_dc_tile(
       }
     } else {
       let residual = match av1_decode_single_dc(
-        decoder, base_q_idx, 3, uv_dc, bit_depth~,
-      ) {
+        decoder, base_q_idx, 3, uv_dc, bit_depth~) {
         Some(value) => value
         None => return None
       }
@@ -820,6 +830,7 @@ pub fn av1_decode_dc_tile(
   )
 }
 
+///|
 /// Decode a complete tile group into a raster image when every tile is a
 /// bounded intra tile supported by the current pixel path. Tile-local MSAC
 /// state is reset for each payload, then the decoded images are stitched in
@@ -841,7 +852,6 @@ pub fn av1_decode_tile_group(
   tx_mode_select? : Bool = false,
   reduced_tx_set? : Bool = false,
   enable_filter_intra? : Bool = false,
-  tx_partition_tree? : Bool = false,
 ) -> Image? {
   if width <= 0 || height <= 0 || tile_cols <= 0 || tile_rows <= 0 ||
     width % tile_cols != 0 || height % tile_rows != 0 {
@@ -881,13 +891,15 @@ pub fn av1_decode_tile_group(
     for y in 0..<tile_height {
       for x in 0..<tile_width {
         let p = image.get_pixel(x, y)
-        output.set_pixel(tile.col * tile_width + x, tile.row * tile_height + y, p.0, p.1, p.2, p.3)
+        output.set_pixel(tile.col * tile_width + x, tile.row * tile_height + y, p.0, p.1, p.2, p.3,
+        )
       }
     }
   }
   Some(output)
 }
 
+///|
 /// Decode and stitch tiles whose superblock boundaries are explicitly known.
 /// This is the pixel entry used for non-uniform tile_info() layouts; tiles
 /// wider than the bounded intra decoder are rejected safely.
@@ -993,13 +1005,17 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
   let header = av1_parse_stage1_frame(frames[0], seq, allow_highbd=true)
   match header {
     None => None
-    Some(frame) => {
+    Some(frame) =>
       av1_decode_tile_group_with_boundaries(
         seq.width,
         seq.height,
         frame.tile_col_starts_sb,
         frame.tile_row_starts_sb,
-        if seq.use_128x128_superblock { 128 } else { 64 },
+        if seq.use_128x128_superblock {
+          128
+        } else {
+          64
+        },
         frame.tile_payload,
         frame.tile_size_bytes,
         frame.base_q_idx,
@@ -1013,7 +1029,6 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
         reduced_tx_set=frame.reduced_tx_set,
         enable_filter_intra=seq.enable_filter_intra,
       )
-    }
   }
 }
 
@@ -1026,13 +1041,17 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
   let input = avif_stage1_input(data)
   match input {
     None => None
-    Some(value) => {
+    Some(value) =>
       av1_decode_tile_group_with_boundaries(
         value.width,
         value.height,
         value.tile_col_starts_sb,
         value.tile_row_starts_sb,
-        if value.use_128x128_superblock { 128 } else { 64 },
+        if value.use_128x128_superblock {
+          128
+        } else {
+          64
+        },
         value.tile_payload,
         value.tile_size_bytes,
         value.base_q_idx,
@@ -1046,7 +1065,6 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         reduced_tx_set=value.reduced_tx_set,
         enable_filter_intra=value.enable_filter_intra,
       )
-    }
   }
 }
 

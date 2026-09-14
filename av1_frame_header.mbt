@@ -61,15 +61,17 @@ fn Av1FrameBits::signed(self : Av1FrameBits, count : Int) -> Int? {
   }
 }
 
+///|
 /// ceil(log2(target / block_size)), matching AV1 tile_log2().
 fn av1_tile_log2(block_size : Int, target : Int) -> Int {
   let mut out = 0
-  while (block_size << out) < target {
+  while block_size << out < target {
     out = out + 1
   }
   out
 }
 
+///|
 /// AV1 `ns(n)` descriptor from §4. The result is in [0, n); malformed or
 /// truncated input returns None. `n == 1` consumes no bits as required by the
 /// descriptor.
@@ -102,48 +104,38 @@ fn Av1FrameBits::ns(self : Av1FrameBits, n : Int) -> Int? {
   }
 }
 
+///|
 /// Consume the tile-group header and return the byte-aligned tile data.
 ///
-/// A reduced frame carries a complete tile group in the frame OBU.  A ranged
-/// tile group is accepted only when it explicitly covers every tile; partial
-/// groups need frame-level state and are kept outside this bounded API.
+/// OBU_FRAME aligns the frame header before reading the tile-group header.
+/// Its tile_start_and_end_present_flag must be zero (AV1 section 6.10.1).
 fn av1_frame_tile_group_payload(
   frame_payload : Array[Byte],
   bit_pos : Int,
   tile_cols : Int,
   tile_rows : Int,
-  tile_cols_log2 : Int,
-  tile_rows_log2 : Int,
 ) -> (Int, Array[Byte])? {
   let reader : Av1FrameBits = { data: frame_payload, bit_pos, }
   let tile_count = tile_cols * tile_rows
   if tile_count <= 0 {
     return None
   }
-  if tile_count > 1 {
-    let has_range = match reader.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    if has_range {
-      let range_bits = tile_cols_log2 + tile_rows_log2
-      if range_bits <= 0 {
-        return None
-      }
-      let start = match reader.take(range_bits) {
-        Some(v) => v
-        None => return None
-      }
-      let end = match reader.take(range_bits) {
-        Some(v) => v
-        None => return None
-      }
-      if start != 0 || end != tile_count - 1 || start > end {
-        return None
-      }
+  while (reader.bit_pos & 7) != 0 {
+    if reader.take(1) != Some(0) {
+      return None
     }
   }
-  let offset = (reader.bit_pos + 7) / 8
+  if tile_count > 1 {
+    if reader.take(1) != Some(0) {
+      return None
+    }
+  }
+  while (reader.bit_pos & 7) != 0 {
+    if reader.take(1) != Some(0) {
+      return None
+    }
+  }
+  let offset = reader.bit_pos / 8
   if offset >= frame_payload.length() {
     return None
   }
@@ -344,9 +336,8 @@ pub fn av1_parse_stage1_frame(
     if max_area_sb < 1 {
       max_area_sb = 1
     }
-    let mut max_height_sb = max_area_sb / {
-      if widest_tile_sb > 0 { widest_tile_sb } else { 1 }
-    }
+    let mut max_height_sb = max_area_sb /
+      (if widest_tile_sb > 0 { widest_tile_sb } else { 1 })
     if max_height_sb < 1 {
       max_height_sb = 1
     }
@@ -548,8 +539,6 @@ pub fn av1_parse_stage1_frame(
       r.bit_pos,
       tile_cols,
       tile_rows,
-      tile_cols_log2,
-      tile_rows_log2,
     ) {
       Some(value) => value
       None => return None
@@ -580,8 +569,6 @@ pub fn av1_parse_stage1_frame(
       r.bit_pos,
       tile_cols,
       tile_rows,
-      tile_cols_log2,
-      tile_rows_log2,
     ) {
       Some(value) => value
       None => return None
@@ -606,6 +593,7 @@ pub fn av1_parse_stage1_frame(
   }
 }
 
+///|
 /// Return validated tile payload slices for a parsed frame header. The frame
 /// parser has already consumed the optional tile-group range header; this
 /// boundary applies the checked size-prefix handling to the remaining bytes.
