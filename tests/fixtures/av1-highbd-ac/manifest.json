@@ -7,7 +7,7 @@
   "format": "untouched aomenc low-overhead OBU; planar raw reference YUV",
   "generation_command": [
     "D:\\ProgramData\\anaconda3\\python.exe",
-    "scripts/generate-av1-highbd-ac-reference.py"
+    "scripts\\generate-av1-highbd-ac-reference.py"
   ],
   "encoder_version": "AOMedia Project AV1 Encoder v3.6.0 (default)",
   "ffmpeg_version": [
@@ -25,9 +25,9 @@
     "Exiting with exit code 0"
   ],
   "decoder_version": "libdav1d 1.5.4-0-g54706fc6",
-  "generated_test": "av1_highbd_ac_reference_test.mbt",
-  "generated_test_sha256": "afc65507a300188f7fb58717cb6d968a23d5365d0e2d298d80c6c5f625e51595",
-  "reference_test_encoding": "lossless value/count RLE of every decoded sample, expanded before color conversion",
+  "generated_test": "av1_highbd_ac_reference_wbtest.mbt",
+  "generated_test_sha256": "5bc137afbe70741f1741d1565176180e2a05d0834a32f0747c18696531b3b0f9",
+  "reference_test_encoding": "lossless value/count RLE; every coded-depth YUV sample and public RGBA pixel is compared by av1_reference_planes_wbtest.mbt",
   "fixtures": [
     {
       "name": "y_cosine_8bit_q30",

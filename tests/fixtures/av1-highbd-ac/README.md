@@ -15,7 +15,7 @@ and `moonfmt` available:
 
 ```sh
 python scripts/generate-av1-highbd-ac-reference.py
-moon test av1_highbd_ac_reference_test.mbt --target js
+moon test av1_highbd_ac_reference_wbtest.mbt --target js
 ```
 
 The generator also accepts `--aomenc`, `--ffmpeg`, `--moonfmt`, `--out`, and
@@ -33,8 +33,10 @@ loop-filter syntax is valid.
 header checks, byte offsets, and SHA-256 hashes. This generation used libaom
 3.6.0 and libdav1d 1.5.4-0-g54706fc6 through FFmpeg 9.0.1.
 
-The generated MoonBit test expands lossless value/count pairs back into the
-complete reference planes and calls the existing YUV-to-RGBA helper. It then
-requires `av1_decode` to succeed and compares every output pixel. Using the same
-color conversion isolates reconstruction differences from FFmpeg's independent
-RGB conversion and rounding.
+The generated white-box tests call the shared `av1_reference_planes_wbtest.mbt`
+helper. It expands the complete reference planes, parses the original sequence
+and frame, requires one tile, and compares every coded-depth YUV sample with the
+cropped internal decoder planes. It also requires public `av1_decode` to succeed
+and compares every RGBA pixel after applying the existing color converter to the
+reference. The sample comparison retains 10/12-bit precision that RGBA could
+otherwise hide; using the same converter avoids unrelated FFmpeg RGB rounding.

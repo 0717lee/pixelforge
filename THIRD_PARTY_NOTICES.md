@@ -2,8 +2,8 @@
 
 ## go-av1 reference tables
 
-The AV1 default CDF and 8-bit DC quantizer tables in
-`av1_dc_coeff_tables.mbt` were transcribed from the corresponding tables in
+The AV1 default CDF and quantizer tables in the `av1_*tables.mbt` files,
+including the intra-mode tables, were transcribed from corresponding tables in
 the `github.com/mgvs/go-av1` project. They are distributed under the BSD
 2-Clause License:
 

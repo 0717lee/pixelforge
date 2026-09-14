@@ -19,6 +19,7 @@ English | [简体中文](README.md)
 
 ## ✨ Features
 
+- **AVIF/AV1 decoding**: a pure MoonBit 8/10/12-bit 4:2:0 path with shared entropy state across superblocks, multiple tiles, square/rectangular coding blocks with axes from 8 to 64 pixels, DCT/ADST residuals, transform-size selection and lossless 4×4 WHT. DC, zero-angle V/H, SMOOTH variants and PAETH are supported. Forty-five unmodified libaom/dav1d fixtures compare every coded-depth YUV sample and output RGBA pixel. Nonzero angles, diagonal prediction, frame-level loop filtering and general inter-frame syntax remain in development.
 - **A broad set of filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear/bicubic (Catmull-Rom) resize.
 - **Morphology**: 3×3 erode / dilate / open / close.
 - **Image codecs**: PNG (8-bit grayscale, grayscale+alpha, palette, RGB/RGBA and `tRNS`; self-implemented full DEFLATE inflate, adaptive row filters and fixed-Huffman encoding with CRC-32/Adler-32 verification), GIF decoding (variable-width LZW, interlacing, transparency), QOI (complete spec, lossless round trip) and BMP (uncompressed 24/32-bit) — all in pure MoonBit.

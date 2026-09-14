@@ -131,25 +131,35 @@ test "one dimensional coefficient contexts use axis specific neighbours" {
 test "rectangular residual traversal keeps independent horizontal and vertical extents" {
   for size in [(16, 64), (64, 16), (32, 64), (64, 32)] {
     let (width, height) = size
-    // All-one syntax skips residual leaves. This checks the geometry and
-    // neighbour state boundary, not a complete AV1 frame bitstream.
-    let decoded = av1_decode_tx_mode_residuals(
-      av1_msac_new(Array::make(64, b'\xFF'), false),
-      av1_tx_ent_tables(64),
-      width,
-      height,
-      [{ node: { row: 0, col: 0, width, height, }, depth: 0, }],
-      64,
-      0,
-      0,
-      10,
-      true,
-    ).unwrap()
-    let (ys, us, vs, _, _, _, _) = decoded
-    assert_eq(ys.length(), 1)
-    assert_eq(ys[0], Array::make(width * height, 0))
-    assert_eq(us[0], Array::make(width * height / 4, 0))
-    assert_eq(vs[0], Array::make(width * height / 4, 0))
+    // A skipped block reconstructs prediction without consuming coefficients.
+    // Check both axes using the same plane state as the live tile decoder.
+    let state = av1_intra_state(
+      width, height, 64, 10, true, false, false, false,
+    )
+    let decoder = av1_msac_new([b'\x00'], false)
+    let before = decoder.bit_pos
+    for plane in 0..<3 {
+      let divisor = if plane == 0 { 1 } else { 2 }
+      let pw = width / divisor
+      let ph = height / divisor
+      assert_true(
+        av1_intra_transform(
+          decoder,
+          state,
+          plane,
+          AV1_INTRA_DC,
+          0,
+          0,
+          pw,
+          ph,
+          pw,
+          ph,
+          1,
+        ),
+      )
+      assert_eq(state.planes[plane].pixels, Array::make(pw * ph, 512))
+    }
+    assert_eq(decoder.bit_pos, before)
   }
   assert_eq(
     av1_dc_sign_ctx_from([0, 0], [0, 0, 1, 1], 0, 0, 2, height_units=4),

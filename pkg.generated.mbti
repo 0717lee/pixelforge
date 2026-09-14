@@ -386,6 +386,7 @@ pub(all) struct Av1TilePayload {
 }
 
 pub struct Av1TxDepthState {
+  cdf8 : Array[Array[Int]]
   cdf16 : Array[Array[Int]]
   cdf32 : Array[Array[Int]]
   cdf64 : Array[Array[Int]]

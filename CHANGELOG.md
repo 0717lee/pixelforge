@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Replaced speculative single-block tile probes with a shared MSAC traversal
+  that decodes modes and residuals in partition order across superblocks.
+  Supported coding blocks span 8..64 pixels per axis, including rectangles.
+- Integrated intra transform-depth selection, including 8x8 signalling,
+  16x16 depth-two transforms, rectangular splitting and neighbour updates.
+- Added tile decoding for V/H with zero angle delta, SMOOTH, SMOOTH_V/H and
+  PAETH, with complete adaptive Y/UV mode rows and mode-derived transforms.
+- Added 45 libaom/dav1d reference cases with exact coded-depth YUV comparisons
+  and public RGBA comparisons, including real tx_mode_select bitstreams.
+- Corrected ADST/FLIPADST axis dispatch, identity axes, rectangular transform
+  normalization and wide multiplication for high-bit-depth ADST4/identity.
 - Removed the obsolete eight-byte high-bit-depth residual limit. Real
   8/10/12-bit luma cosine, two-dimensional gradient and mixed-YUV AC fixtures
   now exercise the shared coefficient decoder against full dav1d references.
@@ -13,7 +24,6 @@
   only SPLIT recurses, and the internal tile walker invokes each block's
   decoder before reading later partition symbols. Standalone partition
   probes remain separate from the complete tile syntax.
-
 - Corrected the standalone CDEF kernel's direction offsets, damping, signed
   rounding, clipping and 4:2:0 chroma grid. Its 8/10/12-bit output is checked
   against 58,632 libaom reference samples. Frame-level CDEF direction search,

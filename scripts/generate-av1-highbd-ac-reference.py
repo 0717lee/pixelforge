@@ -113,38 +113,7 @@ def generated_test(cases: list[dict[str, object]]) -> str:
 /// Real libaom OBU streams and full dav1d planar references, stored losslessly
 /// as value/count pairs. One 64x64 coding block uses DCT at q30 or 4x4 WHT
 /// transforms for lossless q0; every decoded reference sample is retained.
-fn av1_highbd_ac_expand(runs : Array[Int]) -> Array[Int] {
-  let samples : Array[Int] = []
-  for pair in 0..<(runs.length() / 2) {
-    for _ in 0..<runs[pair * 2 + 1] {
-      samples.push(runs[pair * 2])
-    }
-  }
-  samples
-}
-
-///|
-fn av1_highbd_ac_compare(
-  stream : Array[Byte], bit_depth : Int, y_runs : Array[Int],
-  u_runs : Array[Int], v_runs : Array[Int],
-) -> Unit raise {
-  let y_plane = av1_highbd_ac_expand(y_runs)
-  let u_plane = av1_highbd_ac_expand(u_runs)
-  let v_plane = av1_highbd_ac_expand(v_runs)
-  assert_eq(y_plane.length(), 4096)
-  assert_eq(u_plane.length(), 1024)
-  assert_eq(v_plane.length(), 1024)
-  let expected = av1_yuv420_highbd_to_rgba(
-    64, 64, y_plane, u_plane, v_plane, bit_depth,
-    full_range=false, matrix_coefficients=2,
-  ).unwrap()
-  let actual = av1_decode(stream).unwrap()
-  for y in 0..<64 {
-    for x in 0..<64 {
-      assert_eq(actual.get_pixel(x, y), expected.get_pixel(x, y))
-    }
-  }
-}
+/// The shared white-box helper compares every YUV sample and public RGBA pixel.
 """
     for case in cases:
         stream = case["stream"]
@@ -154,14 +123,14 @@ fn av1_highbd_ac_compare(
         source += "  let stream : Array[Byte] = [\n" + "\n".join(rows) + "\n  ]\n"
         for plane, samples in zip(("y", "u", "v"), case["planes"]):
             source += f"  let {plane}_runs : Array[Int] = " + array(rle(samples)) + "\n"
-        source += f'  av1_highbd_ac_compare(stream, {case["bit_depth"]}, y_runs, u_runs, v_runs)\n}}\n'
+        source += f'  av1_reference_planes_compare(stream, 64, 64, {case["bit_depth"]}, y_runs, u_runs, v_runs)\n}}\n'
     return source
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("tests/fixtures/av1-highbd-ac"))
-    parser.add_argument("--test", type=Path, default=Path("av1_highbd_ac_reference_test.mbt"))
+    parser.add_argument("--test", type=Path, default=Path("av1_highbd_ac_reference_wbtest.mbt"))
     parser.add_argument("--aomenc", default=shutil.which("aomenc") or "aomenc")
     parser.add_argument("--ffmpeg", default=shutil.which("ffmpeg") or "ffmpeg")
     parser.add_argument("--moonfmt", default=shutil.which("moonfmt") or "moonfmt")
@@ -309,7 +278,7 @@ def main() -> int:
         "encoder_version": encoder_version.group(0), "ffmpeg_version": ffmpeg_version,
         "decoder_version": f"libdav1d {dav1d_version}",
         "generated_test": str(args.test), "generated_test_sha256": sha256(args.test.read_bytes()),
-        "reference_test_encoding": "lossless value/count RLE of every decoded sample, expanded before color conversion",
+        "reference_test_encoding": "lossless value/count RLE; every coded-depth YUV sample and public RGBA pixel is compared by av1_reference_planes_wbtest.mbt",
         "fixtures": records,
     }
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")

@@ -59,8 +59,8 @@ pub struct Av1TxTraversalState {
 /// independent from the entropy CDF state so callers can reuse it across
 /// blocks without resetting tx_depth adaptation.
 pub fn av1_tx_traversal_state(width : Int, height : Int) -> Av1TxTraversalState {
-  let cols = if width > 0 { (width + 3) / 4 } else { 0 }
-  let rows = if height > 0 { (height + 3) / 4 } else { 0 }
+  let cols = if width > 0 { (width - 1) / 4 + 1 } else { 0 }
+  let rows = if height > 0 { (height - 1) / 4 + 1 } else { 0 }
   {
     cols,
     rows,
@@ -70,67 +70,82 @@ pub fn av1_tx_traversal_state(width : Int, height : Int) -> Av1TxTraversalState 
 }
 
 ///|
-/// Derive tx_depth context from dimensions of the blocks immediately above
-/// and to the left of `node`.  Missing edges remain `-1` and contribute zero.
+/// Derive tx_depth context at the immediate above/left 4x4 positions of this
+/// coding block. Recorded dimensions are effective neighbour sizes: transform
+/// sizes for intra neighbours, coding-block sizes for inter neighbours.
+/// Coordinates are tile-local; missing edges contribute zero.
 pub fn av1_tx_depth_context_for_node(
   state : Av1TxTraversalState,
   node : Av1TxNode,
 ) -> Int {
+  if !av1_tx_block_geometry_valid(node.width, node.height) ||
+    node.row < 0 || node.col < 0 || node.row % 4 != 0 || node.col % 4 != 0 {
+    return 0
+  }
   let x4 = node.col / 4
   let y4 = node.row / 4
-  let w4 = if node.width > 0 { (node.width + 3) / 4 } else { 0 }
-  let h4 = if node.height > 0 { (node.height + 3) / 4 } else { 0 }
-  let mut above = -1
-  if y4 > 0 {
-    for i in 0..<w4 {
-      let x = x4 + i
-      if x >= 0 && x < state.cols && state.above_width[x] > above {
-        above = state.above_width[x]
-      }
-    }
+  if x4 >= state.cols || y4 >= state.rows { return 0 }
+  let above = if y4 > 0 && x4 >= 0 && x4 < state.cols {
+    state.above_width[x4]
+  } else {
+    -1
   }
-  let mut left = -1
-  if x4 > 0 {
-    for i in 0..<h4 {
-      let y = y4 + i
-      if y >= 0 && y < state.rows && state.left_height[y] > left {
-        left = state.left_height[y]
-      }
-    }
+  let left = if x4 > 0 && y4 >= 0 && y4 < state.rows {
+    state.left_height[y4]
+  } else {
+    -1
   }
-  av1_tx_depth_context_from_sizes(above, left, node.width, node.height)
+  let max_width = if node.width > 64 { 64 } else { node.width }
+  let max_height = if node.height > 64 { 64 } else { node.height }
+  av1_tx_depth_context_from_sizes(above, left, max_width, max_height)
 }
 
 ///|
-/// Record a decoded block's dimensions for subsequent raster neighbours.
+/// Record a decoded block's effective dimensions for subsequent neighbours.
 pub fn av1_tx_traversal_record(state : Av1TxTraversalState, node : Av1TxNode,
 ) -> Unit {
-  let x4 = node.col / 4
-  let y4 = node.row / 4
-  let w4 = if node.width > 0 { (node.width + 3) / 4 } else { 0 }
-  let h4 = if node.height > 0 { (node.height + 3) / 4 } else { 0 }
+  av1_tx_traversal_record_size(state, node, node.width, node.height)
+}
+
+/// Record one selected transform size over the coding block's entire edge
+/// footprint. This keeps later tx_depth queries independent of the number of
+/// transform leaves in the block. Inter callers may pass coding-block sizes.
+fn av1_tx_traversal_record_size(
+  state : Av1TxTraversalState,
+  block : Av1TxNode,
+  tx_width : Int,
+  tx_height : Int,
+) -> Unit {
+  if !av1_tx_block_geometry_valid(block.width, block.height) ||
+    !av1_tx_block_geometry_valid(tx_width, tx_height) ||
+    tx_width > block.width || tx_height > block.height ||
+    block.row < 0 || block.col < 0 || block.row % 4 != 0 || block.col % 4 != 0 {
+    return
+  }
+  let x4 = block.col / 4
+  let y4 = block.row / 4
+  let w4 = block.width / 4
+  let h4 = block.height / 4
   for i in 0..<w4 {
     let x = x4 + i
     if x >= 0 && x < state.cols {
-      state.above_width[x] = node.width
+      state.above_width[x] = tx_width
     }
   }
   for i in 0..<h4 {
     let y = y4 + i
     if y >= 0 && y < state.rows {
-      state.left_height[y] = node.height
+      state.left_height[y] = tx_height
     }
   }
 }
 
 ///|
-/// Decode the bounded tx_depth symbol used when frame tx_mode_select is set.
-/// The context table is reduced to the three validated default rows until the
-/// full neighbour-derived 21-context table is wired into block traversal.
-/// Mutable tx-depth CDFs retained for the lifetime of a tile.  AV1 adapts
-/// these rows after every symbol; keeping them in a caller-owned state avoids
-/// resetting adaptation for each block.
+/// Mutable intra tx_depth CDFs retained for the lifetime of a tile. Each of
+/// the four maximum-depth categories has three neighbour contexts; these
+/// tables are independent of the inter variable-transform split contexts.
 pub struct Av1TxDepthState {
+  cdf8 : Array[Array[Int]]
   cdf16 : Array[Array[Int]]
   cdf32 : Array[Array[Int]]
   cdf64 : Array[Array[Int]]
@@ -139,6 +154,7 @@ pub struct Av1TxDepthState {
 ///|
 fn av1_tx_depth_state() -> Av1TxDepthState {
   {
+    cdf8: [[19968, 32768, 0], [19968, 32768, 0], [24320, 32768, 0]],
     cdf16: [[12272, 30172, 32768, 0], [12272, 30172, 32768, 0], [18677, 30848, 32768, 0],
     ],
     cdf32: [[12986, 15180, 32768, 0], [12986, 15180, 32768, 0], [24302, 25602, 32768, 0],
@@ -149,10 +165,9 @@ fn av1_tx_depth_state() -> Av1TxDepthState {
 }
 
 ///|
-/// Derive the reduced tx-depth context from neighbouring block depths.  The
-/// full AV1 table has 21 geometry-specific rows; this package currently uses
-/// three validated rows, where each neighbour contributes one level of split
-/// evidence.  Callers should pass -1 for an unavailable edge.
+/// Legacy coarse depth-flag helper. The normative tx_depth context requires
+/// effective neighbour dimensions and is computed by the size-based helpers;
+/// neighbour depths alone do not determine the AV1 CDF context.
 pub fn av1_tx_depth_context_from_neighbors(above_depth : Int, left_depth : Int,
 ) -> Int {
   let above = if above_depth > 0 { 1 } else { 0 }
@@ -182,29 +197,110 @@ pub fn av1_tx_depth_context_from_sizes(
 }
 
 ///|
+fn av1_tx_block_geometry_valid(width : Int, height : Int) -> Bool {
+  let max_size = if width > height { width } else { height }
+  let min_size = if width < height { width } else { height }
+  width >= 4 && height >= 4 && width <= 128 && height <= 128 &&
+  (width & (width - 1)) == 0 && (height & (height - 1)) == 0 &&
+  max_size <= min_size * 4 && (max_size != 128 || min_size >= 64)
+}
+
+///|
+fn av1_tx_depth_node_valid(node : Av1TxNode) -> Bool {
+  av1_tx_block_geometry_valid(node.width, node.height) &&
+  node.row >= 0 && node.col >= 0 && node.row % 4 == 0 && node.col % 4 == 0 &&
+  node.row <= 2147483647 - node.height && node.col <= 2147483647 - node.width
+}
+
+/// Split_Tx_Size halves both axes for squares and only the long axis for
+/// rectangles. Callers supply a legal transform larger than 4x4.
+fn av1_tx_split_dimensions(width : Int, height : Int) -> (Int, Int) {
+  if width > height {
+    (width / 2, height)
+  } else if height > width {
+    (width, height / 2)
+  } else {
+    (width / 2, height / 2)
+  }
+}
+
+/// Max_Tx_Depth is the number of Split_Tx_Size steps from the coding block's
+/// Max_Tx_Size_Rect to 4x4. It selects the CDF category, not the largest
+/// signalled depth: tx_depth itself is limited to 0..2.
+fn av1_tx_depth_category(block_width : Int, block_height : Int) -> Int? {
+  if !av1_tx_block_geometry_valid(block_width, block_height) { return None }
+  let mut width = if block_width > 64 { 64 } else { block_width }
+  let mut height = if block_height > 64 { 64 } else { block_height }
+  let mut category = 0
+  while width != 4 || height != 4 {
+    let (next_width, next_height) = av1_tx_split_dimensions(width, height)
+    width = next_width
+    height = next_height
+    category = category + 1
+  }
+  Some(category)
+}
+
+/// Read intra tx_depth for a legal coding-block geometry with tile-owned
+/// adaptive CDFs. The caller handles Lossless, allowSelect and TxMode gating.
+/// Only a 4x4 coding block implies depth zero without consuming a symbol.
+fn av1_decode_tx_depth_for_block(
+  decoder : Av1SymbolDecoder,
+  state : Av1TxDepthState,
+  block_width : Int,
+  block_height : Int,
+  context : Int,
+) -> Int? {
+  let category = match av1_tx_depth_category(block_width, block_height) {
+    Some(value) => value
+    None => return None
+  }
+  if context < 0 || context > 2 { return None }
+  if category == 0 { return Some(0) }
+  let cdf = match category {
+    1 => state.cdf8[context]
+    2 => state.cdf16[context]
+    3 => state.cdf32[context]
+    _ => state.cdf64[context]
+  }
+  let depth = decoder.symbol(cdf)
+  if depth < 0 || depth > 2 || depth > category || decoder.symbol_max_bits < -14 {
+    None
+  } else {
+    Some(depth)
+  }
+}
+
+/// Derive the selected transform dimensions without reading entropy. A
+/// coding-block axis above 64 is capped by Max_Tx_Size_Rect before splitting.
+fn av1_tx_size_from_depth(
+  block_width : Int,
+  block_height : Int,
+  depth : Int,
+) -> (Int, Int)? {
+  let category = match av1_tx_depth_category(block_width, block_height) {
+    Some(value) => value
+    None => return None
+  }
+  if depth < 0 || depth > 2 || depth > category { return None }
+  let mut width = if block_width > 64 { 64 } else { block_width }
+  let mut height = if block_height > 64 { 64 } else { block_height }
+  for _ in 0..<depth {
+    let (next_width, next_height) = av1_tx_split_dimensions(width, height)
+    width = next_width
+    height = next_height
+  }
+  Some((width, height))
+}
+
+/// Square-block compatibility wrapper around the geometry-aware reader.
 fn av1_decode_tx_depth_with_state(
   decoder : Av1SymbolDecoder,
   state : Av1TxDepthState,
   max_size : Int,
   context : Int,
 ) -> Int? {
-  // 4x4 roots have no tx_depth syntax; depth zero is implied by geometry.
-  if max_size < 16 {
-    return Some(0)
-  }
-  let ctx = if context < 0 { 0 } else if context > 2 { 2 } else { context }
-  let cdf : Array[Int] = if max_size >= 64 {
-    state.cdf64[ctx]
-  } else if max_size >= 32 {
-    state.cdf32[ctx]
-  } else if max_size >= 16 {
-    state.cdf16[ctx]
-  } else {
-    [19968, 32768, 0]
-  }
-  let depth = decoder.symbol(cdf)
-  let max_depth = if max_size >= 64 { 3 } else if max_size >= 32 { 2 } else if max_size >= 16 { 1 } else { 0 }
-  if depth < 0 || depth > max_depth { None } else { Some(depth) }
+  av1_decode_tx_depth_for_block(decoder, state, max_size, max_size, context)
 }
 
 ///|
@@ -218,32 +314,34 @@ fn av1_decode_tx_depth(
 }
 
 ///|
-/// Build the leaves selected by one `tx_depth` value.  The entropy syntax
-/// carries the depth once at the block root; subsequent nodes are geometric
-/// splits and do not consume additional symbols.  This helper is deliberately
-/// separate from coefficient decoding so callers can traverse the same leaf
-/// order for prediction, residuals and context updates.
+/// Fill a coding block in raster order with the uniform transform size
+/// selected by one tx_depth symbol. This is geometry only; it does not model
+/// the plane/chunk ordering of a complete residual syntax walk.
 fn av1_tx_depth_leaves(
   node : Av1TxNode,
   remaining : Int,
   depth : Int,
   out : Array[Av1TxLeaf],
 ) -> Bool {
-  if node.row < 0 || node.col < 0 || node.width < 4 || node.height < 4 ||
-    remaining < 0 || depth < 0 {
+  if !av1_tx_depth_node_valid(node) || remaining < 0 || remaining > 2 ||
+    depth < 0 || depth > 2 || remaining > 2 - depth {
     return false
   }
-  if remaining == 0 {
-    out.push({ node, depth, })
-    return true
+  let (tx_width, tx_height) = match av1_tx_size_from_depth(node.width, node.height, remaining) {
+    Some(value) => value
+    None => return false
   }
-  let children = av1_tx_children(node, Av1TxSplit)
-  if children.length() != 4 {
-    return false
-  }
-  for child in children {
-    if !av1_tx_depth_leaves(child, remaining - 1, depth + 1, out) {
-      return false
+  for y in 0..<(node.height / tx_height) {
+    for x in 0..<(node.width / tx_width) {
+      out.push({
+        node: {
+          row: node.row + y * tx_height,
+          col: node.col + x * tx_width,
+          width: tx_width,
+          height: tx_height,
+        },
+        depth: depth + remaining,
+      })
     }
   }
   true
@@ -267,8 +365,10 @@ fn av1_decode_tx_tree_with_state(
   root : Av1TxNode,
   context : Int,
 ) -> Array[Av1TxLeaf]? {
-  let max_size = if root.width > root.height { root.width } else { root.height }
-  let depth = match av1_decode_tx_depth_with_state(decoder, state, max_size, context) {
+  if !av1_tx_depth_node_valid(root) { return None }
+  let depth = match av1_decode_tx_depth_for_block(
+    decoder, state, root.width, root.height, context,
+  ) {
     Some(value) => value
     None => return None
   }
