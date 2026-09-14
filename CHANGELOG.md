@@ -20,7 +20,8 @@
 - Wired the normative integer inverse-DCT path into the bounded single-DC
   reconstruction and accepted 128x128-superblock 64x64 frames.
 - Added `avif_stage1_input()` for validated AVIF-to-tile handoff; general block
-  partitioning, directional prediction, alpha, and high bit depth remain staged work.
+  partitioning and inter-frame syntax remain staged work while bounded alpha
+  and high-bit-depth reconstruction are available.
 - Added an explicit 8-bit full-range YUV420→RGBA conversion path and threaded
   the sequence `color_range` flag through the bounded decoder.
 - Added 32x32 single-tile neutral DC reconstruction with the W32 and chroma
@@ -29,8 +30,8 @@
 - Added a normative integer AV1 inverse-transform module for DCT and lossless
   4x4 WHT paths, plus reproducible libaom/dav1d AV1 and AVIF reference fixtures.
 - Added single-DC chroma residual decoding for the bounded AV1 tile path.
-- Added bounded pure MoonBit validation for AVIF auxiliary alpha items (`auxl`/
-  `auxC`) and their `iloc` extents; alpha pixel reconstruction remains staged.
+- Added bounded pure MoonBit validation and reconstruction for AVIF auxiliary
+  alpha items (`auxl`/`auxC`) and their `iloc` extents.
 - Added pure MoonBit monochrome 8-bit alpha tile decoding and four-block plane
   reconstruction helpers for the next AV1 partition stage.
 - Added validated 10-bit reduced-still frame-envelope parsing; high-bit-depth
