@@ -223,8 +223,7 @@ pub fn av1_reconstruct_tx_rgba(
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
-  if (width != height && !((width == 32 && height == 16) || (width == 16 && height == 32) ||
-    (width == 64 && height == 32) || (width == 32 && height == 64))) ||
+  if (width != height && !av1_tx_rect_supported(width, height)) ||
     (width != 32 && width != 64 && width != 16) ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
     return None
@@ -576,6 +575,21 @@ test "typed transform planes compose 64x32 rectangular geometry" {
   ).unwrap()
   assert_eq((image.width, image.height), (64, 32))
   assert_eq(image.get_pixel(63, 31).3, b'\xFF')
+}
+
+/// The transposed 16x64 form maps to an 8x32 4:2:0 chroma plane.
+test "typed transform planes compose 16x64 rectangular geometry" {
+  let y_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 16, height: 64 }, depth: 0 }]
+  let c_leaf : Array[Av1TxLeaf] = [{ node: { row: 0, col: 0, width: 8, height: 32 }, depth: 0 }]
+  let y = Array::make(16 * 64, 0)
+  let c = Array::make(8 * 32, 0)
+  let image = av1_reconstruct_tx_rgba(
+    16, 64, y_leaf, [y], c_leaf, [c.copy()], c_leaf, [c.copy()],
+    AV1_INTRA_DC, AV1_INTRA_DC,
+    [Av1TxDctDct], [Av1TxDctDct], [Av1TxDctDct], 8,
+  ).unwrap()
+  assert_eq((image.width, image.height), (16, 64))
+  assert_eq(image.get_pixel(15, 63).3, b'\xFF')
 }
 
 ///|

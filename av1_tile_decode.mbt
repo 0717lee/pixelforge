@@ -236,9 +236,7 @@ fn av1_decode_tx_mode_residuals(
     let side = leaf.node.width
     let leaf_height = leaf.node.height
     if side < 4 || side > 64 || leaf_height < 4 || leaf_height > 64 ||
-      !(side == leaf_height || (side == 32 && leaf_height == 16) ||
-        (side == 16 && leaf_height == 32) || (side == 64 && leaf_height == 32) ||
-        (side == 32 && leaf_height == 64)) {
+      !(side == leaf_height || av1_tx_rect_supported(side, leaf_height)) {
       return None
     }
     let x4 = leaf.node.col / 4
@@ -343,9 +341,7 @@ fn av1_decode_tx_mode_residuals(
         chroma_tx_height
       }
       if leaf_width < 4 || leaf_height < 4 ||
-        !((leaf_width == leaf_height) || (leaf_width == 32 && leaf_height == 16) ||
-          (leaf_width == 16 && leaf_height == 32) || (leaf_width == 64 && leaf_height == 32) ||
-          (leaf_width == 32 && leaf_height == 64)) {
+        !(leaf_width == leaf_height || av1_tx_rect_supported(leaf_width, leaf_height)) {
         return None
       }
       chroma_leaves.push({
@@ -495,9 +491,7 @@ pub fn av1_decode_dc_tile(
     (bit_depth != 8 && tile_payload.length() > 8 && !tx_mode_select) ||
     (width != 16 && width != 32 && width != 64) ||
     (use_128x128_superblock && width != 64) ||
-    (width != height && !(tx_mode_select && ((width == 32 && height == 16) ||
-      (width == 16 && height == 32) || (width == 64 && height == 32) ||
-      (width == 32 && height == 64)))) ||
+    (width != height && !(tx_mode_select && av1_tx_rect_supported(width, height))) ||
     base_q_idx < 0 ||
     base_q_idx > 255 ||
     tile_payload.length() == 0 ||

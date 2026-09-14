@@ -1,5 +1,5 @@
 ///|
-/// AV1 coefficient decoder for square and 32x16/16x32 transform blocks.
+/// AV1 coefficient decoder for square and rectangular transform blocks.
 ///
 /// AV1 addresses 32x32 and 64x64 coefficients in the adjusted 32x32 domain.
 /// This module keeps the entropy walk stateful (the caller may pass an
@@ -430,16 +430,12 @@ fn av1_decode_coeffs_leaf_with_decoder(
     return None
   }
   let actual_height = if height > 0 { height } else { side }
-  // AV1 caps coded coefficients for the large rectangular transforms at the
-  // adjusted 32x32 domain, just as it does for 64x64.  Keep the smaller
-  // 32x16/16x32 pair on the 512-coefficient eob_pt table.
-  let rectangular_small = (side == 32 && actual_height == 16) ||
-    (side == 16 && actual_height == 32)
-  let rectangular_large = (side == 64 && actual_height == 32) ||
-    (side == 32 && actual_height == 64)
-  let rectangular = rectangular_small || rectangular_large
+  // AV1 caps every dimension above 32 at the adjusted coefficient domain.
+  // The caller validates legal Tx_Size pairs; this layer handles their
+  // adjusted coefficient area and full-transform expansion uniformly.
+  let rectangular = actual_height != side
   if !rectangular && actual_height != side { return None }
-  let large = side == 32 || side == 64
+  let large = side >= 32 || actual_height >= 32
   let domain_width = if side > 32 { 32 } else { side }
   let domain_height = if actual_height > 32 { 32 } else { actual_height }
   let domain = if large && !rectangular { 32 } else { side }
@@ -450,7 +446,18 @@ fn av1_decode_coeffs_leaf_with_decoder(
   // End-of-block position by transform-area class (AV1 spec §5.11.39).
   let log2_domain = av1_coeff_log2(domain_width)
   let mut eob = 0
-  if rectangular_small {
+  let area_class = if area <= 16 {
+    0
+  } else if area <= 32 {
+    1
+  } else if area <= 64 {
+    2
+  } else if area <= 128 {
+    3
+  } else {
+    4
+  }
+  if area == 512 {
     let eob_pt = decoder.symbol(context.eob512) + 1
     if eob_pt < 1 || eob_pt > 11 { return None }
     eob = eob_pt
@@ -464,7 +471,7 @@ fn av1_decode_coeffs_leaf_with_decoder(
       }
     }
     if eob < 1 || eob > area { return None }
-  } else if large {
+  } else if area >= 1024 {
     let eob_pt = decoder.symbol(context.eob) + 1
     if eob_pt < 1 || eob_pt > 11 {
       return None
@@ -491,7 +498,7 @@ fn av1_decode_coeffs_leaf_with_decoder(
       return None
     }
   } else {
-    let multisize = log2_domain + log2_domain - 4
+    let multisize = if rectangular { area_class } else { log2_domain + log2_domain - 4 }
     let pt_ctx = if scan_class == AV1_SCAN_DEFAULT { 0 } else { 1 }
     let eob_pt = decoder.symbol(context.eob_small[multisize * 2 + pt_ctx]) + 1
     if eob_pt < 1 || eob_pt > 11 {
@@ -526,10 +533,14 @@ fn av1_decode_coeffs_leaf_with_decoder(
   } else {
     av1_coeff_scan_square(domain, scan_class)
   }
-  let size_row = if rectangular_large {
+  let size_row = if side >= 64 || actual_height >= 64 {
     4
-  } else if rectangular_small {
+  } else if side >= 32 || actual_height >= 32 {
     3
+  } else if side >= 16 || actual_height >= 16 {
+    2
+  } else if side >= 8 || actual_height >= 8 {
+    1
   } else if domain == 4 {
     0
   } else if domain == 8 {

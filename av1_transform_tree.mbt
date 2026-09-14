@@ -27,6 +27,17 @@ pub(all) struct Av1TxLeaf {
   depth : Int
 }
 
+/// Legal AV1 rectangular transform dimensions (up to a 4:1 aspect ratio).
+pub fn av1_tx_rect_supported(width : Int, height : Int) -> Bool {
+  (width == 4 && height == 8) || (width == 8 && height == 4) ||
+  (width == 8 && height == 16) || (width == 16 && height == 8) ||
+  (width == 4 && height == 16) || (width == 16 && height == 4) ||
+  (width == 8 && height == 32) || (width == 32 && height == 8) ||
+  (width == 16 && height == 32) || (width == 32 && height == 16) ||
+  (width == 16 && height == 64) || (width == 64 && height == 16) ||
+  (width == 32 && height == 64) || (width == 64 && height == 32)
+}
+
 /// Neighbour transform dimensions collected while walking a tile in raster
 /// order.  Entries are indexed in 4x4 units; `-1` means that no block has
 /// been decoded at that edge yet.  Keeping unavailable edges explicit avoids
@@ -262,13 +273,21 @@ fn av1_tx_decode_leaf_nodes(
     let side = leaf.node.width
     let height = leaf.node.height
     if !((side == height && (side == 4 || side == 8 || side == 16 || side == 32 || side == 64)) ||
-      (side == 32 && height == 16) || (side == 16 && height == 32) ||
-      (side == 64 && height == 32) || (side == 32 && height == 64)) {
+      av1_tx_rect_supported(side, height)) {
       return None
     }
-    let leaf_coeffs = if (side == 32 && height == 16) || (side == 16 && height == 32) ||
-      (side == 64 && height == 32) || (side == 32 && height == 64) {
-      context.tx_ctx = if side == 64 || height == 64 { 4 } else { 3 }
+    let leaf_coeffs = if av1_tx_rect_supported(side, height) {
+      context.tx_ctx = if side >= 64 || height >= 64 {
+        4
+      } else if side >= 32 || height >= 32 {
+        3
+      } else if side >= 16 || height >= 16 {
+        2
+      } else if side >= 8 || height >= 8 {
+        1
+      } else {
+        0
+      }
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, side, bit_depth~, scan_class~, dc_sign_ctx~, height~,
       )
@@ -549,14 +568,21 @@ fn av1_tx_decode_coeff_leaves(
   let out : Array[Array[Int]] = []
   for leaf in leaves {
     if !((leaf.width == leaf.height && (leaf.width == 4 || leaf.width == 8 || leaf.width == 16 ||
-      leaf.width == 32 || leaf.width == 64)) ||
-      (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) ||
-      (leaf.width == 64 && leaf.height == 32) || (leaf.width == 32 && leaf.height == 64)) {
+      leaf.width == 32 || leaf.width == 64)) || av1_tx_rect_supported(leaf.width, leaf.height)) {
       return None
     }
-    let coeffs = if (leaf.width == 32 && leaf.height == 16) || (leaf.width == 16 && leaf.height == 32) ||
-      (leaf.width == 64 && leaf.height == 32) || (leaf.width == 32 && leaf.height == 64) {
-      context.tx_ctx = if leaf.width == 64 || leaf.height == 64 { 4 } else { 3 }
+    let coeffs = if av1_tx_rect_supported(leaf.width, leaf.height) {
+      context.tx_ctx = if leaf.width >= 64 || leaf.height >= 64 {
+        4
+      } else if leaf.width >= 32 || leaf.height >= 32 {
+        3
+      } else if leaf.width >= 16 || leaf.height >= 16 {
+        2
+      } else if leaf.width >= 8 || leaf.height >= 8 {
+        1
+      } else {
+        0
+      }
       av1_decode_coeffs_leaf_with_decoder(
         decoder, base_q_idx, context, leaf.width, bit_depth=bit_depth, height=leaf.height,
       ).map(fn(value) { value.coeffs })

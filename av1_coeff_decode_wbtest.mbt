@@ -79,3 +79,22 @@ test "large rectangular coefficient decoder expands adjusted domain" {
     for col in 0..<32 { assert_eq(vertical.coeffs[row * 32 + col], 0) }
   }
 }
+
+test "small rectangular coefficient decoder uses area-class EOB tables" {
+  let a = av1_decode_coeffs_leaf_with_decoder(
+    av1_msac_new([b'\x00', b'\x00', b'\x00'], false),
+    33,
+    av1_coeff_context(33, 1, 0),
+    4,
+    height=8,
+  ).unwrap()
+  assert_eq(a.coeffs.length(), 32)
+  let b = av1_decode_coeffs_leaf_with_decoder(
+    av1_msac_new([b'\x00', b'\x00', b'\x00', b'\x00'], false),
+    33,
+    av1_coeff_context(33, 4, 0),
+    16,
+    height=64,
+  ).unwrap()
+  assert_eq(b.coeffs.length(), 16 * 64)
+}
