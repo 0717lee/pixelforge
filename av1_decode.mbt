@@ -57,6 +57,7 @@ pub(all) struct Av1Stage1Input {
   tx_mode_select : Bool
   reduced_tx_set : Bool
   cdef : Av1CdefConfig?
+  loop_filter : Av1LoopFilterConfig?
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
@@ -72,7 +73,6 @@ pub(all) struct Av1Stage1Input {
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
 }
-
 ///|
 /// Small AV1 MSAC boolean decoder. It is kept independent from frame syntax so
 /// the tile decoder can adopt it without changing the public image API.
@@ -592,13 +592,15 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         Some(value) => value
       }
       if (c.bit_depth != 8 && c.bit_depth != 10 && c.bit_depth != 12) ||
-        c.bit_depth != seq.bit_depth || c.monochrome != seq.monochrome ||
+        c.bit_depth != seq.bit_depth ||
+        c.monochrome != seq.monochrome ||
         (!c.monochrome && !c.yuv420) {
         return None
       }
       if c.width != seq.width ||
         c.height != seq.height ||
-        (!seq.monochrome &&
+        (
+          !seq.monochrome &&
           seq.matrix_coefficients != 1 &&
           seq.matrix_coefficients != 2 &&
           seq.matrix_coefficients != 5 &&
@@ -611,7 +613,10 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         return None
       }
       let header = av1_parse_stage1_frame(
-        frames[0], seq, allow_monochrome=true, allow_highbd=true,
+        frames[0],
+        seq,
+        allow_monochrome=true,
+        allow_highbd=true,
       )
       match header {
         None => None
@@ -628,6 +633,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             tx_mode_select: frame.tx_mode_select,
             reduced_tx_set: frame.reduced_tx_set,
             cdef: frame.cdef,
+            loop_filter: frame.loop_filter,
             tile_cols: frame.tile_cols,
             tile_rows: frame.tile_rows,
             tile_cols_log2: frame.tile_cols_log2,

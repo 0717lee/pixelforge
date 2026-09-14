@@ -99,7 +99,7 @@ fn av1_frame_tile_starts(
 fn av1_frame_pixel_starts_valid(
   starts : Array[Int],
   length : Int,
-  cdef_enabled : Bool,
+  frame_filters : Bool,
 ) -> Bool {
   if starts.length() < 2 ||
     starts.length() > 1025 ||
@@ -112,17 +112,16 @@ fn av1_frame_pixel_starts_valid(
       return false
     }
     if i + 1 < starts.length() &&
-      (starts[i] % 8 != 0 || (cdef_enabled && starts[i] % 64 != 0)) {
+      (starts[i] % 8 != 0 || (frame_filters && starts[i] % 64 != 0)) {
       return false
     }
   }
   true
 }
-
 ///|
-/// Entropy and prediction stay tile-local. Filtering reads a snapshot of the
-/// complete frame, so taps may cross tile boundaries without observing an
-/// already-filtered neighbour. There is no intermediate RGB conversion.
+/// Entropy and prediction stay tile-local. Deblocking updates the assembled
+/// native frame vertically then horizontally; CDEF reads that completed result.
+/// Cropping and color conversion follow the frame filters.
 fn av1_decode_tile_planes(
   width : Int,
   height : Int,
@@ -143,18 +142,40 @@ fn av1_decode_tile_planes(
   cdef : Av1CdefConfig?,
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
+  loop_filter? : Av1LoopFilterConfig? = None,
 ) -> Av1FramePlanes? {
   if width <= 0 ||
     height <= 0 ||
     width > MAX_IMAGE_PIXELS / height ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
-    !av1_frame_pixel_starts_valid(col_starts, width, cdef is Some(_)) ||
-    !av1_frame_pixel_starts_valid(row_starts, height, cdef is Some(_)) {
+    !av1_frame_pixel_starts_valid(
+      col_starts,
+      width,
+      cdef is Some(_) || loop_filter is Some(_),
+    ) ||
+    !av1_frame_pixel_starts_valid(
+      row_starts,
+      height,
+      cdef is Some(_) || loop_filter is Some(_),
+    ) {
     return None
   }
   if cdef is Some(config) {
     if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
       return None
+    }
+  }
+  let mut filter_active = false
+  if loop_filter is Some(config) {
+    if base_q_idx == 0 || !av1_loop_filter_config_valid(config) {
+      return None
+    }
+    for plane in 0..<(if monochrome { 1 } else { 3 }) {
+      for direction in 0..<2 {
+        if av1_loop_filter_intra_level(config, plane, direction).unwrap() > 0 {
+          filter_active = true
+        }
+      }
     }
   }
   let coded_width = av1_partition_coded_extent(width)
@@ -176,6 +197,15 @@ fn av1_decode_tile_planes(
   if !monochrome {
     planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
     planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
+  }
+  let tx_sizes : Array[Array[Int]] = []
+  if filter_active {
+    for plane in 0..<planes.length() {
+      let divisor = if plane == 0 { 1 } else { 2 }
+      tx_sizes.push(
+        Array::make(coded_width / divisor / 4 * (coded_height / divisor / 4), 0),
+      )
+    }
   }
   let mi_cols = coded_width / 4
   let skips = Array::make(mi_cols * (coded_height / 4), 0)
@@ -202,6 +232,7 @@ fn av1_decode_tile_planes(
         cdef~,
         monochrome~,
         enable_intra_edge_filter~,
+        track_loop_filter=filter_active,
       ) {
       Some(value) => value
       None => return None
@@ -210,6 +241,17 @@ fn av1_decode_tile_planes(
       let divisor = if p == 0 { 1 } else { 2 }
       let source = state.planes[p]
       let stride = coded_width / divisor
+      if filter_active {
+        let source_cols = source.width / 4
+        let target_cols = coded_width / divisor / 4
+        for row in 0..<(source.height / 4) {
+          for col in 0..<source_cols {
+            tx_sizes[p][(top / divisor / 4 + row) * target_cols +
+            left / divisor / 4 +
+            col] = source.tx_sizes[row * source_cols + col]
+          }
+        }
+      }
       for row in 0..<source.height {
         for col in 0..<source.width {
           planes[p][(top / divisor + row) * stride + left / divisor + col] = source.pixels[row *
@@ -233,6 +275,19 @@ fn av1_decode_tile_planes(
         i % tile_cdef_cols] = state.cdef_indices[i]
       }
     }
+  }
+  if filter_active &&
+    !av1_loop_filter_frame(
+      loop_filter.unwrap(),
+      width,
+      height,
+      coded_width,
+      coded_height,
+      bit_depth,
+      planes,
+      tx_sizes,
+    ) {
+    return None
   }
   let filtered = match cdef {
     None => planes
@@ -311,5 +366,6 @@ fn av1_decode_frame_planes(
     frame.cdef,
     monochrome=seq.monochrome,
     enable_intra_edge_filter=seq.enable_intra_edge_filter,
+    loop_filter=frame.loop_filter,
   )
 }

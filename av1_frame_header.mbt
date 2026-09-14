@@ -24,10 +24,10 @@ pub(all) struct Av1FrameHeaderInfo {
   reduced_tx_set : Bool
   coded_lossless : Bool
   cdef : Av1CdefConfig?
+  loop_filter : Av1LoopFilterConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
-
 ///|
 priv struct Av1FrameBits {
   data : Array[Byte]
@@ -205,8 +205,9 @@ pub fn av1_parse_stage1_frame(
 ) -> Av1FrameHeaderInfo? {
   if (
       sequence.profile != 0 &&
-      !(allow_highbd && sequence.profile == 2 &&
-        (sequence.bit_depth == 10 || sequence.bit_depth == 12))
+      !(allow_highbd &&
+      sequence.profile == 2 &&
+      (sequence.bit_depth == 10 || sequence.bit_depth == 12))
     ) ||
     (sequence.bit_depth != 8 && !allow_highbd) ||
     (sequence.monochrome && !allow_monochrome) ||
@@ -288,7 +289,11 @@ pub fn av1_parse_stage1_frame(
   let total_sb = sb_cols * sb_rows
   let min_log2_tiles = {
     let area_log2 = av1_tile_log2(max_tile_area_sb, total_sb)
-    if min_log2_tile_cols > area_log2 { min_log2_tile_cols } else { area_log2 }
+    if min_log2_tile_cols > area_log2 {
+      min_log2_tile_cols
+    } else {
+      area_log2
+    }
   }
   if min_log2_tile_cols > max_log2_tile_cols {
     return None
@@ -313,7 +318,11 @@ pub fn av1_parse_stage1_frame(
     }
     let min_log2_tile_rows = {
       let value = min_log2_tiles - tile_cols_log2
-      if value > 0 { value } else { 0 }
+      if value > 0 {
+        value
+      } else {
+        0
+      }
     }
     if min_log2_tile_rows > max_log2_tile_rows {
       return None
@@ -329,10 +338,8 @@ pub fn av1_parse_stage1_frame(
       }
       tile_rows_log2 = tile_rows_log2 + 1
     }
-    let tile_width_sb =
-      (sb_cols + (1 << tile_cols_log2) - 1) >> tile_cols_log2
-    let tile_height_sb =
-      (sb_rows + (1 << tile_rows_log2) - 1) >> tile_rows_log2
+    let tile_width_sb = (sb_cols + (1 << tile_cols_log2) - 1) >> tile_cols_log2
+    let tile_height_sb = (sb_rows + (1 << tile_rows_log2) - 1) >> tile_rows_log2
     let mut start_sb = 0
     while start_sb < sb_cols {
       tile_col_starts_sb.push(start_sb)
@@ -507,39 +514,19 @@ pub fn av1_parse_stage1_frame(
 
   let coded_lossless = base_q_idx == 0
   if !coded_lossless {
-    let lf0 = match r.take(6) {
-      Some(v) => v
+    let loop_filter = match
+      av1_parse_loop_filter_config(r, sequence.monochrome) {
+      Some(config) => config
       None => return None
-    }
-    let lf1 = match r.take(6) {
-      Some(v) => v
-      None => return None
-    }
-    if lf0 != 0 || lf1 != 0 {
-      return None
-    }
-    if r.take(3) is None {
-      return None
-    }
-    let delta_enabled = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    if delta_enabled {
-      let delta_update = match r.take(1) {
-        Some(v) => v == 1
-        None => return None
-      }
-      if delta_update {
-        return None
-      }
     }
     let cdef = if sequence.enable_cdef {
       match av1_parse_cdef_config(r, sequence.monochrome) {
         Some(config) => Some(config)
         None => return None
       }
-    } else { None }
+    } else {
+      None
+    }
     if sequence.enable_restoration {
       let num_planes = if sequence.monochrome { 1 } else { 3 }
       for _ in 0..<num_planes {
@@ -561,12 +548,13 @@ pub fn av1_parse_stage1_frame(
       Some(v) => v == 1
       None => return None
     }
-    let (offset, tile_payload) = match av1_frame_tile_group_payload(
-      frame_payload,
-      r.bit_pos,
-      tile_cols,
-      tile_rows,
-    ) {
+    let (offset, tile_payload) = match
+      av1_frame_tile_group_payload(
+        frame_payload,
+        r.bit_pos,
+        tile_cols,
+        tile_rows,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -585,6 +573,7 @@ pub fn av1_parse_stage1_frame(
       reduced_tx_set,
       coded_lossless,
       cdef,
+      loop_filter: Some(loop_filter),
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,
     })
@@ -592,12 +581,13 @@ pub fn av1_parse_stage1_frame(
     if r.take(1) is None {
       return None
     }
-    let (offset, tile_payload) = match av1_frame_tile_group_payload(
-      frame_payload,
-      r.bit_pos,
-      tile_cols,
-      tile_rows,
-    ) {
+    let (offset, tile_payload) = match
+      av1_frame_tile_group_payload(
+        frame_payload,
+        r.bit_pos,
+        tile_cols,
+        tile_rows,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -616,12 +606,12 @@ pub fn av1_parse_stage1_frame(
       reduced_tx_set: false,
       coded_lossless,
       cdef: None,
+      loop_filter: None,
       disable_cdf_update,
       allow_screen_content_tools: allow_tools,
     })
   }
 }
-
 ///|
 /// Return validated tile payload slices for a parsed frame header. The frame
 /// parser has already consumed the optional tile-group range header; this

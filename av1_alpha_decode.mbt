@@ -14,7 +14,7 @@ fn av1_alpha_samples_to_bytes(
 }
 ///|
 /// Decode a complete monochrome intra tile, including AC, lossless transforms
-/// and supported intra modes. CDEF runs before quantizing alpha to eight bits.
+/// and supported intra modes. Frame filters run before quantizing alpha to eight bits.
 pub fn av1_decode_alpha_tile(
   width : Int,
   height : Int,
@@ -29,6 +29,7 @@ pub fn av1_decode_alpha_tile(
   enable_filter_intra? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
+  loop_filter? : Av1LoopFilterConfig? = None,
 ) -> Array[Byte]? {
   let frame = match
     av1_decode_tile_planes(
@@ -51,6 +52,7 @@ pub fn av1_decode_alpha_tile(
       cdef,
       monochrome=true,
       enable_intra_edge_filter~,
+      loop_filter~,
     ) {
     Some(value) => value
     None => return None

@@ -190,7 +190,36 @@ pub fn av1_decode_dc_tile(
   enable_filter_intra? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
+  loop_filter? : Av1LoopFilterConfig? = None,
 ) -> Image? {
+  if loop_filter is Some(_) {
+    let frame = match
+      av1_decode_tile_planes(
+        width,
+        height,
+        [0, width],
+        [0, height],
+        tile_payload,
+        0,
+        base_q_idx,
+        disable_cdf_update,
+        allow_screen_content_tools,
+        full_range,
+        matrix_coefficients,
+        use_128x128_superblock,
+        bit_depth,
+        reduced_tx_set,
+        enable_filter_intra,
+        tx_mode_select,
+        cdef,
+        enable_intra_edge_filter~,
+        loop_filter~,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    return av1_frame_to_rgba(frame)
+  }
   av1_decode_intra_tile(
     width,
     height,
@@ -233,6 +262,7 @@ pub fn av1_decode_tile_group(
   enable_filter_intra? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
+  loop_filter? : Av1LoopFilterConfig? = None,
 ) -> Image? {
   if width <= 0 ||
     height <= 0 ||
@@ -250,15 +280,30 @@ pub fn av1_decode_tile_group(
   if tile_width < 16 || tile_width > 64 || tile_height < 16 || tile_height > 64 {
     return None
   }
-  if cdef is Some(_) {
+  if cdef is Some(_) || loop_filter is Some(_) {
     let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
     let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
     let frame = match
       av1_decode_tile_planes(
-        width, height, cols, rows, tile_payload, tile_size_bytes, base_q_idx, disable_cdf_update,
-        allow_screen_content_tools, full_range, matrix_coefficients, use_128x128_superblock,
-        bit_depth, reduced_tx_set, enable_filter_intra, tx_mode_select, cdef,
+        width,
+        height,
+        cols,
+        rows,
+        tile_payload,
+        tile_size_bytes,
+        base_q_idx,
+        disable_cdf_update,
+        allow_screen_content_tools,
+        full_range,
+        matrix_coefficients,
+        use_128x128_superblock,
+        bit_depth,
+        reduced_tx_set,
+        enable_filter_intra,
+        tx_mode_select,
+        cdef,
         enable_intra_edge_filter~,
+        loop_filter~,
       ) {
       Some(value) => value
       None => return None
@@ -290,6 +335,7 @@ pub fn av1_decode_tile_group(
         reduced_tx_set~,
         enable_filter_intra~,
         enable_intra_edge_filter~,
+        loop_filter~,
       ) {
       Some(value) => value
       None => return None
@@ -334,6 +380,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   enable_filter_intra? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
+  loop_filter? : Av1LoopFilterConfig? = None,
   monochrome? : Bool = false,
 ) -> Image? {
   if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
@@ -370,6 +417,7 @@ pub fn av1_decode_tile_group_with_boundaries(
       cdef,
       monochrome~,
       enable_intra_edge_filter~,
+      loop_filter~,
     ) {
     Some(value) => value
     None => return None
@@ -419,6 +467,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         enable_filter_intra=value.enable_filter_intra,
         enable_intra_edge_filter=value.enable_intra_edge_filter,
         cdef=value.cdef,
+        loop_filter=value.loop_filter,
         monochrome=value.monochrome,
       )
   }

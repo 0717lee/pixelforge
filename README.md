@@ -27,7 +27,7 @@
 - **流式遍历**：`for_each_tile()` / `for_each_row()` 提供不复制像素缓冲的分块与逐行访问；需要独立图像时再调用 tile 的 `copy()`。
 - **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 编码/解码（单帧 GIF89a 编码、变长 LZW、交错、透明索引）、QOI、BMP 与 TIFF（多条带、分块、PackBits/LZW/Deflate、Predictor=2、有限 BigTIFF）解码；JPEG 编解码、WebP Lossless 编解码和 JS 目标 AVIF 编码通过纯 MoonBit/`mizchi/image` 适配。
 - **WebP Lossless**：纯 MoonBit VP8L 解码覆盖 LZ77、色彩缓存、空间变化 Huffman 分组，以及 Predictor、Cross-Color、Subtract Green 和 Color Indexing 变换。
-- **AVIF/AV1 解码**：纯 MoonBit 路径支持 8/10/12-bit 4:2:0 与单色、跨 superblock 的共享熵状态、单/多 tile、4–128 像素轴长的全部 22 种方形与矩形分块、DCT/ADST 残差、`tx_mode_select` 和 4×4 WHT 无损重建。已接入 DC、带角度增量的八种方向预测、SMOOTH 系列、PAETH 和 CfL 色度预测，以及跨 tile 的整帧 CDEF 方向搜索、强度选择和滤波。真实 libaom 样本及构造的符合语法的码流由 dav1d 独立验证原始位深 YUV，再核对公开 RGBA 入口；覆盖小块色度归属、横纵 tile 接缝和奇数尺寸裁剪。单色灰度与辅助 alpha 已复用该路径，高位深透明度按 UNORM 四舍五入到 8 位，并由实际 alpha 容器核对。方向预测包含按分区顺序确定的参考边缘、边缘滤波与上采样。去块效应与环路恢复滤波及通用帧间语法仍在实现中。
+- **AVIF/AV1 解码**：纯 MoonBit 路径支持 8/10/12-bit 4:2:0 与单色、跨 superblock 的共享熵状态、单/多 tile、4–128 像素轴长的全部 22 种方形与矩形分块、DCT/ADST 残差、`tx_mode_select` 和 4×4 WHT 无损重建。已接入 DC、带角度增量的八种方向预测、SMOOTH 系列、PAETH 和 CfL 色度预测，以及跨 tile 的整帧去块滤波和 CDEF 方向搜索、强度选择与滤波。真实 libaom 样本及构造的符合语法的码流由 dav1d 独立验证原始位深 YUV，再核对公开 RGBA 入口；覆盖小块色度归属、横纵 tile 接缝和奇数尺寸裁剪。单色灰度与辅助 alpha 已复用该路径，高位深透明度按 UNORM 四舍五入到 8 位，并由实际 alpha 容器核对。方向预测包含按分区顺序确定的参考边缘、边缘滤波与上采样。去块滤波保留原始位深并先于 CDEF 执行；环路恢复滤波及通用帧间语法仍在实现中。
 - **AVIF 容器与合成**：校验主图项、`iloc` 数据范围、辅助 alpha 的 `auxl`/`auxC` 关系、`av1C`/`ispe`/`nclx` 和 AV1 OBU；`avif_decode_rgba` 可自动合成受支持的 monochrome alpha 样本及 alpha 网格，支持主图与 alpha 分别采用 grid 或 av01 的组合。`avif_decode` 和 `avif_decode_grid_auto` 按主图项与 `dimg` 顺序自动解码网格，校验格子尺寸、输出覆盖和色度对齐；`avif_decode_animation` 和 `avif_animation_frame_at` 提供受支持样本的动画帧解码与时间选择。`av1_decode_partition_leaves` 是独立分区探针，实际 tile 解码会按语法顺序交错处理分区与块内数据。
 - **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
 - **格式探测**：`detect_image_format()` 与 `image_metadata()` 可在不解码像素的情况下识别 PNG/GIF/QOI/BMP/JPEG/WebP/AVIF/TIFF，并读取常见容器的尺寸与 GIF 动画标记。
@@ -198,7 +198,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 
 ### 错误与边界
 
-- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode`、`avif_decode` 对格式错误或不支持的输入返回 `None`；AVIF 的复杂高位深残差和未覆盖的通用分区同样拒绝输出，避免生成错误像素。浏览器 Playground 继续通过 `web/codecs.js` 提供浏览器支持的 WebP/AVIF 解码。
+- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode`、`avif_decode` 对格式错误或不支持的输入返回 `None`；AVIF 尚未接入的编码工具和帧间语法同样拒绝输出，避免生成错误像素。浏览器 Playground 继续通过 `web/codecs.js` 提供浏览器支持的 WebP/AVIF 解码。
 - `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
 - 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
 - Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。

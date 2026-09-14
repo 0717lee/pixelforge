@@ -6,6 +6,7 @@ priv struct Av1IntraPlane {
   width : Int
   height : Int
   pixels : Array[Int]
+  tx_sizes : Array[Int]
   above_level : Array[Int]
   left_level : Array[Int]
   above_dc : Array[Int]
@@ -13,11 +14,21 @@ priv struct Av1IntraPlane {
 }
 
 ///|
-fn av1_intra_plane(width : Int, height : Int, bit_depth : Int) -> Av1IntraPlane {
+fn av1_intra_plane(
+  width : Int,
+  height : Int,
+  bit_depth : Int,
+  track_loop_filter? : Bool = false,
+) -> Av1IntraPlane {
   {
     width,
     height,
     pixels: Array::make(width * height, 1 << (bit_depth - 1)),
+    tx_sizes: if track_loop_filter {
+      Array::make(width / 4 * (height / 4), 0)
+    } else {
+      []
+    },
     above_level: Array::make(width / 4, 0),
     left_level: Array::make(height / 4, 0),
     above_dc: Array::make(width / 4, 0),
@@ -80,6 +91,7 @@ fn av1_intra_state(
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   superblock_size? : Int = 64,
+  track_loop_filter? : Bool = false,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -93,10 +105,10 @@ fn av1_intra_state(
   for probability in [31676, 31912, 31823, 32030, 32309, 32265, 32450] {
     palette_y.push([probability, 32768, 0])
   }
-  let planes = [av1_intra_plane(width, height, bit_depth)]
+  let planes = [av1_intra_plane(width, height, bit_depth, track_loop_filter~)]
   if !monochrome {
-    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth))
-    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth))
+    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~))
+    planes.push(av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~))
   }
   {
     cols: width / 4,
@@ -557,6 +569,14 @@ fn av1_intra_transform(
       plane.left_dc[y4 + i] = dc_category
     }
   }
+  if !plane.tx_sizes.is_empty() {
+    let packed = tx_width | (tx_height << 8)
+    for row in y4..<(if y4 + h4 < rows { y4 + h4 } else { rows }) {
+      for col in x4..<(if x4 + w4 < cols { x4 + w4 } else { cols }) {
+        plane.tx_sizes[row * cols + col] = packed
+      }
+    }
+  }
   true
 }
 
@@ -951,6 +971,7 @@ fn av1_decode_intra_tile_state(
   cdef? : Av1CdefConfig? = None,
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
+  track_loop_filter? : Bool = false,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -987,6 +1008,7 @@ fn av1_decode_intra_tile_state(
     monochrome~,
     enable_intra_edge_filter~,
     superblock_size=if use_128x128_superblock { 128 } else { 64 },
+    track_loop_filter~,
   )
   let neighbors = match
     av1_partition_neighbor_state(

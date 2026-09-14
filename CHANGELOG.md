@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added native-depth frame deblocking before CDEF, including cross-tile edges,
+  per-plane transform-size maps, full four-sample lanes at cropped edges and
+  the 4/6/8/14-tap scalar kernels. Transform maps are allocated only when an
+  effective loop-filter level is nonzero.
+- Parsed all four loop-filter levels, sharpness and signed reference/mode delta
+  updates, with intra-specific strength and plane gates. Raw AV1, AVIF, alpha
+  and isolated/grouped tile entry points propagate the parsed configuration.
+- Verified 1,776 scalar edges and 512 threshold combinations against original
+  libaom C. Eighteen dual-dav1d frame cases cover all depths, color/mono,
+  CDEF composition, seams, crops and signed updates; varying mode deltas alone
+  leaves intra output unchanged. Eleven cases preserve complete original
+  libaom streams, while seven explicitly reconstruct only filter headers.
+
 - Added all eight directional intra predictors, independent Y/UV angle deltas,
   integer interpolation, edge filtering and edge upsampling at 8/10/12 bits.
   The sequence's edge-filter flag now reaches every raw AV1/AVIF/tile entry.

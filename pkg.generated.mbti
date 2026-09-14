@@ -40,9 +40,9 @@ pub fn av1_decode(Array[Byte]) -> Image?
 
 pub fn av1_decode_alpha(Array[Byte]) -> Array[Byte]?
 
-pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?) -> Array[Byte]?
+pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?) -> Array[Byte]?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?) -> Image?
 
 pub fn av1_decode_partition_leaves(Array[Byte], Int, Int, disable_cdf_update? : Bool, use_128x128_superblock? : Bool) -> Array[Av1SbBlock]?
 
@@ -50,9 +50,9 @@ pub fn av1_decode_show_existing_frame(Array[Byte], Av1ReferenceState, Av1ShowExi
 
 pub fn av1_decode_split_tile_64x64(Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool) -> Image?
 
-pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?) -> Image?
+pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?) -> Image?
 
-pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, monochrome? : Bool) -> Image?
+pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, monochrome? : Bool) -> Image?
 
 pub fn av1_decode_tx_partition_tree_payload(Array[Byte], Av1TxNode, Int, disable_cdf_update? : Bool) -> Array[Av1TxLeaf]?
 
@@ -273,6 +273,7 @@ pub(all) struct Av1FrameHeaderInfo {
   reduced_tx_set : Bool
   coded_lossless : Bool
   cdef : Av1CdefConfig?
+  loop_filter : Av1LoopFilterConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
@@ -281,6 +282,14 @@ pub(all) struct Av1FrameInfo {
   key_frame : Bool
   show_frame : Bool
   payload_size : Int
+}
+
+pub(all) struct Av1LoopFilterConfig {
+  levels : Array[Int]
+  sharpness : Int
+  delta_enabled : Bool
+  ref_deltas : Array[Int]
+  mode_deltas : Array[Int]
 }
 
 pub(all) struct Av1ReferenceState {
@@ -374,6 +383,7 @@ pub(all) struct Av1Stage1Input {
   tx_mode_select : Bool
   reduced_tx_set : Bool
   cdef : Av1CdefConfig?
+  loop_filter : Av1LoopFilterConfig?
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
