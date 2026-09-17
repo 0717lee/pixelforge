@@ -78,7 +78,9 @@ priv struct Av1IntraState {
   tx_mode_select : Bool
   tx_depth : Av1TxDepthState
   tx_neighbors : Av1TxTraversalState
+  restoration_units : Array[Av1RestorationUnitRecord]
 }
+
 ///|
 fn av1_intra_state(
   width : Int,
@@ -151,8 +153,10 @@ fn av1_intra_state(
     tx_mode_select,
     tx_depth: av1_tx_depth_state(),
     tx_neighbors: av1_tx_traversal_state(width, height),
+    restoration_units: [],
   }
 }
+
 ///|
 /// AV1 BLOCK_* indices for every legal coding-block geometry.
 fn av1_intra_block_index(width : Int, height : Int) -> Int? {
@@ -664,6 +668,7 @@ fn av1_intra_transform(
   }
   true
 }
+
 ///|
 /// All eight directional modes signal angle_delta for BLOCK indices >=
 /// BLOCK_8X8, including 4x16/16x4. Smaller indices and nondirectional modes
@@ -909,6 +914,7 @@ fn av1_intra_palette_maps(
   }
   true
 }
+
 ///|
 fn av1_intra_block(
   decoder : Av1SymbolDecoder,
@@ -1084,6 +1090,7 @@ fn av1_intra_block(
   )
   decoder.symbol_max_bits >= -14
 }
+
 ///|
 fn av1_intra_crop(
   plane : Av1IntraPlane,
@@ -1122,6 +1129,9 @@ fn av1_decode_intra_tile_state(
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   track_loop_filter? : Bool = false,
+  restoration_layout? : Av1RestorationLayout? = None,
+  tile_origin_row_mi? : Int = 0,
+  tile_origin_col_mi? : Int = 0,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -1172,10 +1182,44 @@ fn av1_decode_intra_tile_state(
   let decoder = av1_msac_new(payload, !disable_cdf_update)
   let cdfs = av1_partition_cdf_state()
   let sb_size = if use_128x128_superblock { 128 } else { 64 }
+  // Per-tile loop-restoration entropy state: the mode CDF rows adapt
+  // across every superblock of this tile and the coefficient references
+  // survive SB rows. Reset once per tile, never per SB.
+  let lr_tile_state = match restoration_layout {
+    Some(layout) =>
+      Some(av1_restoration_tile_state_new(layout.config.modes.length()))
+    None => None
+  }
   let mut row = 0
   while row < coded_height {
     let mut col = 0
     while col < coded_width {
+      // Loop-restoration unit parameters precede this root SB's first
+      // partition symbol on the shared tile entropy decoder (AV1 spec
+      // §5.11.57). The SB's global coded MI rectangle, including its
+      // full nominal size at the frame edge, owns the units whose
+      // top-left corners fall inside it.
+      match lr_tile_state {
+        Some(lr_state) =>
+          match restoration_layout {
+            Some(layout) => {
+              if !av1_restoration_read_sb(
+                  decoder,
+                  lr_state,
+                  layout,
+                  tile_origin_col_mi + col / 4,
+                  tile_origin_row_mi + row / 4,
+                  sb_size,
+                  subsampling_x=!monochrome,
+                  subsampling_y=!monochrome,
+                ) {
+                return None
+              }
+            }
+            None => ()
+          }
+        None => ()
+      }
       if !av1_walk_partition_tree_context(
           decoder,
           cdfs,
@@ -1190,6 +1234,14 @@ fn av1_decode_intra_tile_state(
       col = col + sb_size
     }
     row = row + sb_size
+  }
+  match lr_tile_state {
+    Some(lr_state) => {
+      for record in lr_state.units {
+        state.restoration_units.push(record)
+      }
+    }
+    None => ()
   }
   Some(state)
 }

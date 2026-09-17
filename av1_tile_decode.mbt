@@ -204,9 +204,10 @@ pub fn av1_decode_dc_tile(
   loop_filter? : Av1LoopFilterConfig? = None,
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
+  superres_denom? : Int = 8,
 ) -> Image? {
   if loop_filter is Some(_) || restoration is Some(_) || upscaled_width != 0 {
-    let frame = match
+    let (frame, _stripe_store) = match
       av1_decode_tile_planes(
         width,
         height,
@@ -229,6 +230,7 @@ pub fn av1_decode_dc_tile(
         loop_filter~,
         restoration~,
         upscaled_width~,
+        superres_denom~,
       ) {
       Some(value) => value
       None => return None
@@ -281,6 +283,7 @@ pub fn av1_decode_tile_group(
   loop_filter? : Av1LoopFilterConfig? = None,
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
+  superres_denom? : Int = 8,
 ) -> Image? {
   if width <= 0 ||
     height <= 0 ||
@@ -304,7 +307,7 @@ pub fn av1_decode_tile_group(
     upscaled_width != 0 {
     let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
     let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
-    let frame = match
+    let (frame, _stripe_store) = match
       av1_decode_tile_planes(
         width,
         height,
@@ -327,6 +330,7 @@ pub fn av1_decode_tile_group(
         loop_filter~,
         restoration~,
         upscaled_width~,
+        superres_denom~,
       ) {
       Some(value) => value
       None => return None
@@ -410,6 +414,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
   monochrome? : Bool = false,
+  superres_denom? : Int = 8,
 ) -> Image? {
   if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
     return None
@@ -424,7 +429,7 @@ pub fn av1_decode_tile_group_with_boundaries(
     Some(value) => value
     None => return None
   }
-  let frame = match
+  let (frame, _stripe_store) = match
     av1_decode_tile_planes(
       width,
       height,
@@ -440,18 +445,19 @@ pub fn av1_decode_tile_group_with_boundaries(
       use_128x128_superblock,
       bit_depth,
       reduced_tx_set,
-      enable_filter_intra,
-      tx_mode_select,
-      cdef,
-      monochrome~,
-      enable_intra_edge_filter~,
-      loop_filter~,
-      restoration~,
-      upscaled_width~,
-    ) {
-    Some(value) => value
-    None => return None
-  }
+        enable_filter_intra,
+        tx_mode_select,
+        cdef,
+        monochrome~,
+        enable_intra_edge_filter~,
+        loop_filter~,
+        restoration~,
+        upscaled_width~,
+        superres_denom~,
+      ) {
+      Some(value) => value
+      None => return None
+    }
   av1_frame_to_rgba(frame)
 }
 
@@ -503,6 +509,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         restoration=value.restoration,
         upscaled_width=value.width,
         monochrome=value.monochrome,
+        superres_denom=value.superres_denom,
       )
   }
 }

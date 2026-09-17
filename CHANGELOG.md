@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Added the AV1 loop-restoration decode pipeline. The entropy layer grows
+  `read_literal`, the finite-alphabet `ns(n)` decoder and the `subexp(n,k)`
+  reader with the inverse recentering, all on the arithmetic decoder;
+  per-superblock unit reads fill a per-tile LR entropy state before each
+  root superblock and feed the frame-level unit grid. Deblocked rows are
+  snapshotted at every internal stripe boundary (64 luma, 8 chroma, halved
+  for 4:2:0) into a stripe store that the source view reads with
+  top/bottom pairing and frame-edge replication, and the scalar Wiener and
+  SGR-projection filters apply on the upscaled post-CDEF frame at native
+  8/10/12-bit depth. Wiener uses the per-depth round0/inter-round pair, the
+  symmetric seven-tap layout and an intermediate clamp that never touches
+  legal samples; SGR runs both box passes with the cdef-domain intermediate,
+  the r0=0 self-replacement branch, the xqd offset clamps and the a2/b2
+  index rounding. All-None planes and None units bypass filtering entirely.
+- Verified the filters against dav1d pixel ground truth: one 97x65 10-bit
+  4:2:0 restoration frame decoded with and without the filters is
+  byte-identical to the dav1d CLI, cross-checked against FFmpeg's libdav1d,
+  matching all 9,539 decoded samples (9,429 of which the restoration changes
+  relative to the no-restoration control). Forty-six new tests cover the
+  entropy readers, the pre-superblock unit syntax, the stripe store and
+  source view, and the Wiener/SGR kernels against hand-computed values and a
+  standalone Python reference simulator over four 120x16 planes. Full suite:
+  1052/1052.
+
 - Added AV1 loop-restoration header parsing, configuration validation and
   unit-grid layout. The uncompressed header reads per-plane lr_type codes in
   Y/U/V order (`00` None, `01` Switchable, `10` Wiener, `11` Sgrproj), the

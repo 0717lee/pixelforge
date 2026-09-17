@@ -35,7 +35,7 @@ pub fn av1_decode_alpha_tile(
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
 ) -> Array[Byte]? {
-  let frame = match
+  let (frame, _stripe_store) = match
     av1_decode_tile_planes(
       width,
       height,

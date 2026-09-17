@@ -147,7 +147,8 @@ fn av1_decode_tile_planes(
   loop_filter? : Av1LoopFilterConfig? = None,
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
-) -> Av1FramePlanes? {
+  superres_denom? : Int = 8,
+) -> (Av1FramePlanes, Av1RestorationStripeStore?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
   if width <= 0 ||
     height <= 0 ||
@@ -225,6 +226,36 @@ fn av1_decode_tile_planes(
   let skips = Array::make(mi_cols * (coded_height / 4), 0)
   let cdef_cols = (coded_width + 63) / 64
   let indices = Array::make(cdef_cols * ((coded_height + 63) / 64), -1)
+  // Global loop-restoration unit grid, computed once for the frame. The
+  // entropy ownership uses the unshifted grid against the upscaled
+  // visible geometry; filtering later shifts vertical boundaries.
+  let lr_layout = match restoration {
+    Some(config) =>
+      av1_restoration_layout(
+        config,
+        width,
+        output_width,
+        height,
+        monochrome,
+        !monochrome,
+        !monochrome,
+        superres_denom,
+      )
+    None => None
+  }
+  // Per-plane unit map indexed by unit_row * unit_cols + unit_col. None
+  // marks an unread grid position, distinct from a decoded-None unit.
+  let lr_units : Array[Array[Av1RestorationUnit?]] = []
+  match lr_layout {
+    Some(layout) => {
+      for plane in 0..<layout.config.modes.length() {
+        let count = layout.unit_cols[plane] * layout.unit_rows[plane]
+        let column : Array[Av1RestorationUnit?] = Array::make(count, None)
+        lr_units.push(column)
+      }
+    }
+    None => ()
+  }
   for tile in tiles {
     let left = col_starts[tile.col]
     let top = row_starts[tile.row]
@@ -247,6 +278,9 @@ fn av1_decode_tile_planes(
         monochrome~,
         enable_intra_edge_filter~,
         track_loop_filter=filter_active,
+        restoration_layout=lr_layout,
+        tile_origin_row_mi=top / 4,
+        tile_origin_col_mi=left / 4,
       ) {
       Some(value) => value
       None => return None
@@ -289,6 +323,30 @@ fn av1_decode_tile_planes(
         i % tile_cdef_cols] = state.cdef_indices[i]
       }
     }
+    if lr_layout is Some(_) {
+      for record in state.restoration_units {
+        let cols = lr_layout.unwrap().unit_cols[record.plane]
+        let index = record.unit_row * cols + record.unit_col
+        if lr_units[record.plane][index] is Some(_) {
+          return None
+        }
+        lr_units[record.plane][index] = Some(record.unit)
+      }
+    }
+  }
+  // Every active plane's unit grid must be fully covered; an unread
+  // position means missing syntax, not a decoded-None unit.
+  if lr_layout is Some(layout) {
+    for plane in 0..<lr_units.length() {
+      if layout.config.modes[plane] is Av1RestorationNone {
+        continue
+      }
+      for entry in lr_units[plane] {
+        if entry is None {
+          return None
+        }
+      }
+    }
   }
   if filter_active &&
     !av1_loop_filter_frame(
@@ -303,6 +361,32 @@ fn av1_decode_tile_planes(
     ) {
     return None
   }
+  // Save the deblocked rows at every internal stripe boundary before
+  // CDEF modifies them: loop restoration reads these rows instead of
+  // the neighbouring stripe's post-CDEF output. Only active when some
+  // plane carries a non-None restoration mode; a failed save aborts the
+  // decode because the boundary context would be lost.
+  let stripe_store : Av1RestorationStripeStore? = match restoration {
+    Some(config) =>
+      if av1_restoration_active(config) {
+        match
+          av1_restoration_save_stripes(
+            planes,
+            coded_width,
+            width,
+            output_width,
+            height,
+            bit_depth,
+            monochrome,
+          ) {
+          Some(value) => Some(value)
+          None => return None
+        }
+      } else {
+        None
+      }
+    None => None
+  }
   let filtered = match cdef {
     None => planes
     Some(config) =>
@@ -314,7 +398,7 @@ fn av1_decode_tile_planes(
         None => return None
       }
   }
-  let frame : Av1FramePlanes = {
+  let base : Av1FramePlanes = {
     width,
     height,
     coded_width,
@@ -323,11 +407,60 @@ fn av1_decode_tile_planes(
     matrix_coefficients,
     planes: filtered,
   }
-  if output_width == width {
-    Some(frame)
+  let frame = if output_width == width {
+    base
   } else {
-    av1_frame_upscale(frame, output_width)
+    match av1_frame_upscale(base, output_width) {
+      Some(value) => value
+      None => return None
+    }
   }
+  // Apply loop restoration on the upscaled post-CDEF frame. The source
+  // view keeps the saved deblocked rows and the unit parameters come
+  // from the per-tile entropy state; an active configuration always
+  // has a saved store, and filtering failure aborts the decode.
+  let frame = match (stripe_store, lr_layout) {
+    (Some(store), Some(layout)) => {
+      let strides : Array[Int] = Array::makei(
+        frame.planes.length(),
+        fn(i) { frame.coded_width / (if i == 0 { 1 } else { 2 }) },
+      )
+      let view : Av1RestorationSourceView = {
+        store,
+        frame: frame.planes,
+        frame_strides: strides,
+      }
+      match
+        av1_restoration_filter_frame(
+          view,
+          lr_units,
+          layout,
+          bit_depth,
+          monochrome,
+          subsampling_x=!monochrome,
+          subsampling_y=!monochrome,
+        ) {
+        Some(value) => {
+          let planes = frame.planes
+          for plane in 0..<value.length() {
+            planes[plane] = value[plane]
+          }
+          {
+            width: frame.width,
+            height: frame.height,
+            coded_width: frame.coded_width,
+            bit_depth: frame.bit_depth,
+            full_range: frame.full_range,
+            matrix_coefficients: frame.matrix_coefficients,
+            planes,
+          }
+        }
+        None => return None
+      }
+    }
+    _ => frame
+  }
+  Some((frame, stripe_store))
 }
 
 ///|
@@ -417,28 +550,34 @@ fn av1_decode_frame_planes(
     Some(value) => value
     None => return None
   }
-  av1_decode_tile_planes(
-    frame.frame_width,
-    seq.height,
-    cols,
-    rows,
-    frame.tile_payload,
-    frame.tile_size_bytes,
-    frame.base_q_idx,
-    frame.disable_cdf_update,
-    frame.allow_screen_content_tools,
-    seq.full_range,
-    seq.matrix_coefficients,
-    seq.use_128x128_superblock,
-    seq.bit_depth,
-    frame.reduced_tx_set,
-    seq.enable_filter_intra,
-    frame.tx_mode_select,
-    frame.cdef,
-    monochrome=seq.monochrome,
-    enable_intra_edge_filter=seq.enable_intra_edge_filter,
-    loop_filter=frame.loop_filter,
-    restoration=frame.restoration,
-    upscaled_width=frame.upscaled_width,
-  )
+  let (frame, _stripe_store) = match
+    av1_decode_tile_planes(
+      frame.frame_width,
+      seq.height,
+      cols,
+      rows,
+      frame.tile_payload,
+      frame.tile_size_bytes,
+      frame.base_q_idx,
+      frame.disable_cdf_update,
+      frame.allow_screen_content_tools,
+      seq.full_range,
+      seq.matrix_coefficients,
+      seq.use_128x128_superblock,
+      seq.bit_depth,
+      frame.reduced_tx_set,
+      seq.enable_filter_intra,
+      frame.tx_mode_select,
+      frame.cdef,
+      monochrome=seq.monochrome,
+      enable_intra_edge_filter=seq.enable_intra_edge_filter,
+      loop_filter=frame.loop_filter,
+      restoration=frame.restoration,
+      upscaled_width=frame.upscaled_width,
+      superres_denom=frame.superres_denom,
+    ) {
+    Some(value) => value
+    None => return None
+  }
+  Some(frame)
 }
