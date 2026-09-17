@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "0717lee/pixelforge"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub const AV1_INTRA_DC : Int = 0
 
@@ -40,9 +44,9 @@ pub fn av1_decode(Array[Byte]) -> Image?
 
 pub fn av1_decode_alpha(Array[Byte]) -> Array[Byte]?
 
-pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, upscaled_width? : Int) -> Array[Byte]?
+pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Array[Byte]?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, upscaled_width? : Int) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Image?
 
 pub fn av1_decode_partition_leaves(Array[Byte], Int, Int, disable_cdf_update? : Bool, use_128x128_superblock? : Bool) -> Array[Av1SbBlock]?
 
@@ -50,9 +54,9 @@ pub fn av1_decode_show_existing_frame(Array[Byte], Av1ReferenceState, Av1ShowExi
 
 pub fn av1_decode_split_tile_64x64(Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool) -> Image?
 
-pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, upscaled_width? : Int) -> Image?
+pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Image?
 
-pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, upscaled_width? : Int, monochrome? : Bool) -> Image?
+pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, monochrome? : Bool) -> Image?
 
 pub fn av1_decode_tx_partition_tree_payload(Array[Byte], Av1TxNode, Int, disable_cdf_update? : Bool) -> Array[Av1TxLeaf]?
 
@@ -107,6 +111,8 @@ pub fn av1_reference_show_existing(Av1ReferenceState, Av1ShowExistingFrameEnvelo
 pub fn av1_reference_state() -> Av1ReferenceState
 
 pub fn av1_reference_store(Av1ReferenceState, Int, Image, Int) -> Bool
+
+pub fn av1_restoration_active(Av1RestorationConfig) -> Bool
 
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
@@ -277,6 +283,7 @@ pub(all) struct Av1FrameHeaderInfo {
   coded_lossless : Bool
   cdef : Av1CdefConfig?
   loop_filter : Av1LoopFilterConfig?
+  restoration : Av1RestorationConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
@@ -299,6 +306,28 @@ pub(all) struct Av1ReferenceState {
   images : Array[Image?]
   frame_types : Array[Int]
 }
+
+pub(all) struct Av1RestorationConfig {
+  modes : Array[Av1RestorationType]
+  unit_sizes : Array[Int]
+}
+
+pub(all) struct Av1RestorationLayout {
+  config : Av1RestorationConfig
+  frame_width : Int
+  upscaled_width : Int
+  frame_height : Int
+  superres_denom : Int
+  unit_cols : Array[Int]
+  unit_rows : Array[Int]
+}
+
+pub(all) enum Av1RestorationType {
+  Av1RestorationNone
+  Av1RestorationWiener
+  Av1RestorationSgrproj
+  Av1RestorationSwitchable
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Av1SbBlock {
   row : Int
@@ -389,6 +418,7 @@ pub(all) struct Av1Stage1Input {
   reduced_tx_set : Bool
   cdef : Av1CdefConfig?
   loop_filter : Av1LoopFilterConfig?
+  restoration : Av1RestorationConfig?
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int

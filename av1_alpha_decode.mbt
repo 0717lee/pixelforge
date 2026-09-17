@@ -32,6 +32,7 @@ pub fn av1_decode_alpha_tile(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
 ) -> Array[Byte]? {
   let frame = match
@@ -56,6 +57,7 @@ pub fn av1_decode_alpha_tile(
       monochrome=true,
       enable_intra_edge_filter~,
       loop_filter~,
+      restoration~,
       upscaled_width~,
     ) {
     Some(value) => value

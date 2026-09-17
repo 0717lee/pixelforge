@@ -28,12 +28,44 @@ fn av1_superres_header_test_sequence(
 }
 
 ///|
-/// Lossless-transform header with screen tools, optional scaling and NONE LR.
-/// The marker is tile data only; these tests do not claim entropy decoding.
+/// Loop-restoration header fields for a superres frame: the two-bit mode
+/// codes per plane, then the unit-size bits that follow whenever any plane
+/// is active. `luma_bits` are the SB64/SB128 unit header bits in order; a
+/// negative `chroma_bit` omits the 4:2:0 halving bit.
+fn av1_superres_header_test_lr_fields(
+  lr_types : Array[Int],
+  luma_bits : Array[Int],
+  chroma_bit : Int,
+) -> Array[(Int, Int)] {
+  let fields : Array[(Int, Int)] = []
+  for lr_type in lr_types {
+    fields.push((lr_type, 2))
+  }
+  let mut active = false
+  for lr_type in lr_types {
+    if lr_type != 0 {
+      active = true
+    }
+  }
+  if active {
+    for bit in luma_bits {
+      fields.push((bit, 1))
+    }
+    if chroma_bit >= 0 {
+      fields.push((chroma_bit, 1))
+    }
+  }
+  fields
+}
+
+///|
+/// Lossless-transform header with screen tools, optional scaling and
+/// configurable LR syntax. The marker is tile data only; these tests do not
+/// claim entropy decoding.
 fn av1_superres_header_test_payload(
   active : Bool,
   monochrome : Bool,
-  lr_type : Int,
+  lr_fields : Array[(Int, Int)],
 ) -> Array[Byte] {
   let fields = [(0, 1), (1, 1), (1, 1), (if active { 1 } else { 0 }, 1)]
   if active {
@@ -53,12 +85,10 @@ fn av1_superres_header_test_payload(
   fields.push((0, 1)) // qmatrix.
   fields.push((0, 1)) // segmentation.
   // CodedLossless skips delta-Q, loop filter, CDEF and tx_mode syntax.
-  // AllLossless is false with scaling, so LR types are still present.
+  // AllLossless is false with scaling, so LR syntax is still present.
   if active {
-    fields.push((lr_type, 2))
-    if !monochrome {
-      fields.push((0, 2))
-      fields.push((0, 2))
+    for field in lr_fields {
+      fields.push(field)
     }
   }
   fields.push((1, 1)) // reduced_tx_set is always present.
@@ -70,7 +100,12 @@ fn av1_superres_header_test_payload(
 ///|
 test "superres q0 header uses coded tile width and still reads restoration" {
   for monochrome in [false, true] {
-    let payload = av1_superres_header_test_payload(true, monochrome, 0)
+    let lr_fields = if monochrome {
+      av1_superres_header_test_lr_fields([0], [], -1)
+    } else {
+      av1_superres_header_test_lr_fields([0, 0, 0], [], -1)
+    }
+    let payload = av1_superres_header_test_payload(true, monochrome, lr_fields)
     let header = av1_parse_stage1_frame(
       payload,
       av1_superres_header_test_sequence(128, monochrome),
@@ -91,15 +126,12 @@ test "superres q0 header uses coded tile width and still reads restoration" {
     )
     assert_false(header.tx_mode_select)
     assert_true(header.cdef is None && header.loop_filter is None)
-    // Active LR is still rejected until its unit syntax is integrated.
-    assert_true(
-      av1_parse_stage1_frame(
-        av1_superres_header_test_payload(true, monochrome, 1),
-        av1_superres_header_test_sequence(128, monochrome),
-        allow_monochrome=true,
-      )
-      is None,
-    )
+    // All-None LR still stores a configuration with the implicit U256.
+    let config = header.restoration.unwrap()
+    assert_false(av1_restoration_active(config))
+    for size in config.unit_sizes {
+      assert_eq(size, 256)
+    }
   }
 }
 
@@ -107,7 +139,7 @@ test "superres q0 header uses coded tile width and still reads restoration" {
 test "superres disabled header retains intrabc bit and omits all lossless LR" {
   for monochrome in [false, true] {
     let header = av1_parse_stage1_frame(
-      av1_superres_header_test_payload(false, monochrome, 0),
+      av1_superres_header_test_payload(false, monochrome, []),
       av1_superres_header_test_sequence(64, monochrome),
       allow_monochrome=true,
     ).unwrap()
@@ -117,12 +149,15 @@ test "superres disabled header retains intrabc bit and omits all lossless LR" {
     )
     assert_eq(header.tile_payload, [b'\xa5'])
     assert_true(header.coded_lossless && header.reduced_tx_set)
+    // An all-lossless frame omits restoration syntax entirely.
+    assert_true(header.restoration is None)
   }
 }
 
 ///|
 test "superres header rejects dimensions without per plane growth or valid bounds" {
-  let payload = av1_superres_header_test_payload(true, false, 0)
+  let lr_fields = av1_superres_header_test_lr_fields([0, 0, 0], [], -1)
+  let payload = av1_superres_header_test_payload(true, false, lr_fields)
   for width in [0, 1, 2, 65537, 2147483647] {
     assert_true(
       av1_parse_stage1_frame(

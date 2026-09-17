@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Added AV1 loop-restoration header parsing, configuration validation and
+  unit-grid layout. The uncompressed header reads per-plane lr_type codes in
+  Y/U/V order (`00` None, `01` Switchable, `10` Wiener, `11` Sgrproj), the
+  luma unit-size bits under SB64/SB128 and the 4:2:0 lr_uv_shift halving;
+  all-None configurations take the implicit U256 without size bits, and the
+  CodedLossless versus AllLossless gates stay distinct. The optional
+  `Av1RestorationConfig` propagates through every decode entry point, and the
+  grid layout mirrors `av1_alloc_restoration_struct` on the upscaled plane
+  dimensions with the `av1_lr_count_units` tail rule.
+- Verified against one untouched libaom encode with active Wiener on every
+  plane (97x65 10-bit 4:2:0, superres denominator 12): the deterministic
+  noise fixture regenerates byte-identically and its FFmpeg trace_headers
+  transcript locks the parsed sequence, frame, CDEF, tx-mode and restoration
+  fields. The trace's tx_mode ordinal uses FFmpeg's ONLY_4X4/LARGEST/SELECT
+  numbering, where ordinal 1 is TX_MODE_LARGEST and the expected
+  tx_mode_select is false; CDEF secondary strengths keep the parse-time remap
+  of coded 3 to 4. Full suite: 1006/1006.
+
 - Added normative AV1 horizontal super-resolution decoding at 8/10/12 bits.
   The header parses use_superres plus the coded denominator (nine through
   sixteen), derives the entropy-coded frame_width against the display width

@@ -202,9 +202,10 @@ pub fn av1_decode_dc_tile(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
 ) -> Image? {
-  if loop_filter is Some(_) || upscaled_width != 0 {
+  if loop_filter is Some(_) || restoration is Some(_) || upscaled_width != 0 {
     let frame = match
       av1_decode_tile_planes(
         width,
@@ -226,6 +227,7 @@ pub fn av1_decode_dc_tile(
         cdef,
         enable_intra_edge_filter~,
         loop_filter~,
+        restoration~,
         upscaled_width~,
       ) {
       Some(value) => value
@@ -277,6 +279,7 @@ pub fn av1_decode_tile_group(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
 ) -> Image? {
   if width <= 0 ||
@@ -295,7 +298,10 @@ pub fn av1_decode_tile_group(
   if tile_width < 16 || tile_width > 64 || tile_height < 16 || tile_height > 64 {
     return None
   }
-  if cdef is Some(_) || loop_filter is Some(_) || upscaled_width != 0 {
+  if cdef is Some(_) ||
+    loop_filter is Some(_) ||
+    restoration is Some(_) ||
+    upscaled_width != 0 {
     let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
     let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
     let frame = match
@@ -319,6 +325,7 @@ pub fn av1_decode_tile_group(
         cdef,
         enable_intra_edge_filter~,
         loop_filter~,
+        restoration~,
         upscaled_width~,
       ) {
       Some(value) => value
@@ -400,6 +407,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
   monochrome? : Bool = false,
 ) -> Image? {
@@ -438,6 +446,7 @@ pub fn av1_decode_tile_group_with_boundaries(
       monochrome~,
       enable_intra_edge_filter~,
       loop_filter~,
+      restoration~,
       upscaled_width~,
     ) {
     Some(value) => value
@@ -491,6 +500,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         enable_intra_edge_filter=value.enable_intra_edge_filter,
         cdef=value.cdef,
         loop_filter=value.loop_filter,
+        restoration=value.restoration,
         upscaled_width=value.width,
         monochrome=value.monochrome,
       )

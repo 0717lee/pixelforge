@@ -8,7 +8,9 @@ and rules in `av1_intra_edges.mbt`, and the deblocking kernels and traversal in
 `av1_loop_filter.mbt` and `av1_loop_filter_frame.mbt`, and filter-intra prediction
 in `av1_filter_intra.mbt`, and palette syntax and probability tables in
 `av1_palette.mbt` and `av1_palette_index.mbt`, and the horizontal
-super-resolution filter table and scalar convolution in `av1_superres.mbt`
+super-resolution filter table and scalar convolution in `av1_superres.mbt`,
+and the loop-restoration unit-count rule, configuration validation and grid
+layout in `av1_restoration_config.mbt`
 are transcribed from libaom at revision
 `8e7b6a567df174d795479b92b4ac766d271add73`. The original source is available
 at <https://aomedia.googlesource.com/aom/>. It uses the following BSD 2-Clause

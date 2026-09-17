@@ -58,6 +58,7 @@ pub(all) struct Av1Stage1Input {
   reduced_tx_set : Bool
   cdef : Av1CdefConfig?
   loop_filter : Av1LoopFilterConfig?
+  restoration : Av1RestorationConfig?
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
@@ -637,6 +638,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             reduced_tx_set: frame.reduced_tx_set,
             cdef: frame.cdef,
             loop_filter: frame.loop_filter,
+            restoration: frame.restoration,
             tile_cols: frame.tile_cols,
             tile_rows: frame.tile_rows,
             tile_cols_log2: frame.tile_cols_log2,

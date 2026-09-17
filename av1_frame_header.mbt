@@ -30,6 +30,9 @@ pub(all) struct Av1FrameHeaderInfo {
   coded_lossless : Bool
   cdef : Av1CdefConfig?
   loop_filter : Av1LoopFilterConfig?
+  /// Loop-restoration modes and unit sizes, or None when the frame omitted
+  /// the syntax (all-lossless, disabled sequence tool or intrabc).
+  restoration : Av1RestorationConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
@@ -112,6 +115,107 @@ fn av1_parse_cdef_config(
     }
   }
   Some({ bits, damping, y_primary, y_secondary, uv_primary, uv_secondary, })
+}
+
+///|
+/// Parse loop-restoration modes and unit sizes from the uncompressed header,
+/// in the AV1 §5.9.11 position between CDEF and tx_mode. Two header bits per
+/// actual plane select the mode in Y, U, V order (`00` None, `01` Switchable,
+/// `10` Wiener, `11` Sgrproj); monochrome omits UV. When any plane is active
+/// the luma unit size follows the superblock size with one bit (SB64) or two
+/// bits (SB128 keeps its size above 64, halving only through chroma), and
+/// 4:2:0 chroma may halve that size with one final bit. All planes None emits
+/// no size bits and receives the implicit U256.
+fn av1_parse_restoration_config(
+  reader : Av1FrameBits,
+  monochrome : Bool,
+  use_128x128_superblock : Bool,
+  subsampling_x : Bool,
+  subsampling_y : Bool,
+) -> Av1RestorationConfig? {
+  let num_planes = if monochrome { 1 } else { 3 }
+  let modes : Array[Av1RestorationType] = []
+  let mut all_none = true
+  let mut chroma_none = true
+  for plane in 0..<num_planes {
+    let mode = match av1_restoration_header_mode(reader) {
+      Some(value) => value
+      None => return None
+    }
+    modes.push(mode)
+    if mode is Av1RestorationNone {
+      continue
+    }
+    all_none = false
+    chroma_none = chroma_none && plane == 0
+  }
+  let unit_sizes : Array[Int] = []
+  if all_none {
+    // libaom assigns RESTORATION_UNITSIZE_MAX without signalling any bits.
+    for _ in 0..<num_planes {
+      unit_sizes.push(256)
+    }
+  } else {
+    let sb_size = if use_128x128_superblock { 128 } else { 64 }
+    let mut luma_unit = sb_size
+    if sb_size == 64 {
+      let bit = match reader.take(1) {
+        Some(value) => value
+        None => return None
+      }
+      luma_unit = luma_unit << bit
+    }
+    if luma_unit > 64 {
+      let bit = match reader.take(1) {
+        Some(value) => value
+        None => return None
+      }
+      luma_unit = luma_unit << bit
+    }
+    if !monochrome {
+      let s = if subsampling_x && subsampling_y { 1 } else { 0 }
+      let uv_unit = if s != 0 && !chroma_none {
+        let bit = match reader.take(1) {
+          Some(value) => value
+          None => return None
+        }
+        luma_unit >> (bit * s)
+      } else {
+        luma_unit
+      }
+      unit_sizes.push(luma_unit)
+      unit_sizes.push(uv_unit)
+      unit_sizes.push(uv_unit)
+    } else {
+      unit_sizes.push(luma_unit)
+    }
+  }
+  Some({ modes, unit_sizes, })
+}
+
+///|
+/// Two header bits map to the internal restoration enum. The integer is not
+/// the internal code: `01` is Switchable and `10` is Wiener.
+fn av1_restoration_header_mode(reader : Av1FrameBits) -> Av1RestorationType? {
+  let first = match reader.take(1) {
+    Some(value) => value
+    None => return None
+  }
+  let second = match reader.take(1) {
+    Some(value) => value
+    None => return None
+  }
+  if first == 0 {
+    Some(
+      if second == 0 {
+        Av1RestorationNone
+      } else {
+        Av1RestorationSwitchable
+      },
+    )
+  } else {
+    Some(if second == 0 { Av1RestorationWiener } else { Av1RestorationSgrproj })
+  }
 }
 
 ///|
@@ -564,17 +668,21 @@ pub fn av1_parse_stage1_frame(
   // Superres changes samples even when every transform is lossless. Such a
   // frame still carries restoration syntax, unlike an all-lossless frame.
   let all_lossless = coded_lossless && frame_width == upscaled_width
-  if !all_lossless && sequence.enable_restoration {
-    let num_planes = if sequence.monochrome { 1 } else { 3 }
-    for _ in 0..<num_planes {
-      let lr_type = match r.take(2) {
-        Some(value) => value
-        None => return None
-      }
-      if lr_type != 0 {
-        return None
-      }
+  let restoration : Av1RestorationConfig? = if !all_lossless &&
+    sequence.enable_restoration {
+    match
+      av1_parse_restoration_config(
+        r,
+        sequence.monochrome,
+        sequence.use_128x128_superblock,
+        sequence.subsampling_x,
+        sequence.subsampling_y,
+      ) {
+      Some(config) => Some(config)
+      None => return None
     }
+  } else {
+    None
   }
   let tx_mode_select = if coded_lossless {
     false
@@ -613,6 +721,7 @@ pub fn av1_parse_stage1_frame(
     coded_lossless,
     cdef,
     loop_filter,
+    restoration,
     disable_cdf_update,
     allow_screen_content_tools: allow_tools,
   })

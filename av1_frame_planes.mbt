@@ -145,6 +145,7 @@ fn av1_decode_tile_planes(
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   loop_filter? : Av1LoopFilterConfig? = None,
+  restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
 ) -> Av1FramePlanes? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
@@ -170,6 +171,11 @@ fn av1_decode_tile_planes(
   }
   if cdef is Some(config) {
     if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
+      return None
+    }
+  }
+  if restoration is Some(config) {
+    if !av1_restoration_config_valid(config, monochrome~) {
       return None
     }
   }
@@ -432,6 +438,7 @@ fn av1_decode_frame_planes(
     monochrome=seq.monochrome,
     enable_intra_edge_filter=seq.enable_intra_edge_filter,
     loop_filter=frame.loop_filter,
+    restoration=frame.restoration,
     upscaled_width=frame.upscaled_width,
   )
 }
