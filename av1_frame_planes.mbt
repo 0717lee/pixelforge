@@ -58,6 +58,7 @@ fn av1_frame_to_rgba(frame : Av1FramePlanes) -> Image? {
     matrix_coefficients=frame.matrix_coefficients,
   )
 }
+
 ///|
 /// Validate superblock boundaries before multiplying untrusted coordinates.
 /// The final boundary covers exactly the frame's superblock count; only its
@@ -118,6 +119,7 @@ fn av1_frame_pixel_starts_valid(
   }
   true
 }
+
 ///|
 /// Entropy and prediction stay tile-local. Deblocking updates the assembled
 /// native frame vertically then horizontally; CDEF reads that completed result.
@@ -143,20 +145,26 @@ fn av1_decode_tile_planes(
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   loop_filter? : Av1LoopFilterConfig? = None,
+  upscaled_width? : Int = 0,
 ) -> Av1FramePlanes? {
+  let output_width = if upscaled_width == 0 { width } else { upscaled_width }
   if width <= 0 ||
     height <= 0 ||
     width > MAX_IMAGE_PIXELS / height ||
+    output_width < width ||
+    output_width > 65536 ||
+    output_width > MAX_IMAGE_PIXELS / height ||
+    output_width > width * 2 ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     !av1_frame_pixel_starts_valid(
       col_starts,
       width,
-      cdef is Some(_) || loop_filter is Some(_),
+      cdef is Some(_) || loop_filter is Some(_) || output_width != width,
     ) ||
     !av1_frame_pixel_starts_valid(
       row_starts,
       height,
-      cdef is Some(_) || loop_filter is Some(_),
+      cdef is Some(_) || loop_filter is Some(_) || output_width != width,
     ) {
     return None
   }
@@ -300,7 +308,7 @@ fn av1_decode_tile_planes(
         None => return None
       }
   }
-  Some({
+  let frame : Av1FramePlanes = {
     width,
     height,
     coded_width,
@@ -308,8 +316,65 @@ fn av1_decode_tile_planes(
     full_range,
     matrix_coefficients,
     planes: filtered,
+  }
+  if output_width == width {
+    Some(frame)
+  } else {
+    av1_frame_upscale(frame, output_width)
+  }
+}
+
+///|
+/// Upscale complete native rows after deblocking and CDEF. Source MI padding
+/// participates in the horizontal taps; output padding is only buffer layout.
+fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
+  let coded_width = av1_partition_coded_extent(width)
+  let coded_height = av1_partition_coded_extent(frame.height)
+  if coded_width > MAX_IMAGE_PIXELS / coded_height {
+    return None
+  }
+  let planes : Array[Array[Int]] = []
+  for plane in 0..<frame.planes.length() {
+    let divisor = if plane == 0 { 1 } else { 2 }
+    let source_width = (frame.width + divisor - 1) / divisor
+    let target_width = (width + divisor - 1) / divisor
+    let height = (frame.height + divisor - 1) / divisor
+    let stride = coded_width / divisor
+    let samples = match
+      av1_superres_upscale_plane(
+        frame.planes[plane],
+        frame.coded_width / divisor,
+        frame.coded_width / divisor,
+        source_width,
+        target_width,
+        height,
+        frame.bit_depth,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    let padded = Array::makei(stride * (coded_height / divisor), i => {
+      let row = if i / stride < height { i / stride } else { height - 1 }
+      let col = if i % stride < target_width {
+        i % stride
+      } else {
+        target_width - 1
+      }
+      samples[row * target_width + col]
+    })
+    planes.push(padded)
+  }
+  Some({
+    width,
+    height: frame.height,
+    coded_width,
+    planes,
+    bit_depth: frame.bit_depth,
+    full_range: frame.full_range,
+    matrix_coefficients: frame.matrix_coefficients,
   })
 }
+
 ///|
 fn av1_decode_frame_planes(
   data : Array[Byte],
@@ -337,7 +402,7 @@ fn av1_decode_frame_planes(
   }
   let sb_size = if seq.use_128x128_superblock { 128 } else { 64 }
   let cols = match
-    av1_frame_tile_starts(frame.tile_col_starts_sb, sb_size, seq.width) {
+    av1_frame_tile_starts(frame.tile_col_starts_sb, sb_size, frame.frame_width) {
     Some(value) => value
     None => return None
   }
@@ -347,7 +412,7 @@ fn av1_decode_frame_planes(
     None => return None
   }
   av1_decode_tile_planes(
-    seq.width,
+    frame.frame_width,
     seq.height,
     cols,
     rows,
@@ -367,5 +432,6 @@ fn av1_decode_frame_planes(
     monochrome=seq.monochrome,
     enable_intra_edge_filter=seq.enable_intra_edge_filter,
     loop_filter=frame.loop_filter,
+    upscaled_width=frame.upscaled_width,
   )
 }

@@ -5,6 +5,11 @@
 
 ///|
 pub(all) struct Av1FrameHeaderInfo {
+  /// Visible entropy-coded width, before superres horizontal upscaling.
+  frame_width : Int
+  upscaled_width : Int
+  /// Eight disables superres; active denominators are nine through sixteen.
+  superres_denom : Int
   header_bytes : Int
   tile_payload : Array[Byte]
   base_q_idx : Int
@@ -28,6 +33,7 @@ pub(all) struct Av1FrameHeaderInfo {
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
 }
+
 ///|
 priv struct Av1FrameBits {
   data : Array[Byte]
@@ -105,7 +111,7 @@ fn av1_parse_cdef_config(
       uv_secondary.push(if secondary == 3 { 4 } else { secondary })
     }
   }
-  Some({ bits, damping, y_primary, y_secondary, uv_primary, uv_secondary })
+  Some({ bits, damping, y_primary, y_secondary, uv_primary, uv_secondary, })
 }
 
 ///|
@@ -203,7 +209,12 @@ pub fn av1_parse_stage1_frame(
   allow_monochrome? : Bool = false,
   allow_highbd? : Bool = false,
 ) -> Av1FrameHeaderInfo? {
-  if (
+  if sequence.width <= 0 ||
+    sequence.width > 65536 ||
+    sequence.height <= 0 ||
+    sequence.height > 65536 ||
+    sequence.width > MAX_IMAGE_PIXELS / sequence.height ||
+    (
       sequence.profile != 0 &&
       !(allow_highbd &&
       sequence.profile == 2 &&
@@ -234,14 +245,35 @@ pub fn av1_parse_stage1_frame(
   if allow_tools && r.take(1) is None {
     return None
   } // force_integer_mv
-  if sequence.enable_superres {
+  let superres_denom = if sequence.enable_superres {
     let use_superres = match r.take(1) {
       Some(v) => v == 1
       None => return None
     }
     if use_superres {
-      return None
+      match r.take(3) {
+        Some(value) => value + 9
+        None => return None
+      }
+    } else {
+      8
     }
+  } else {
+    8
+  }
+  let upscaled_width = sequence.width
+  let frame_width = (upscaled_width * 8 + superres_denom / 2) / superres_denom
+  // Active superres must increase every plane's visible width (AV1 7.16).
+  // Keep the normative formula, including unconstrained level-31 dimensions.
+  if superres_denom != 8 &&
+    (
+      frame_width >= upscaled_width ||
+      (
+        !sequence.monochrome &&
+        (frame_width + 1) / 2 >= (upscaled_width + 1) / 2
+      )
+    ) {
+    return None
   }
   let render_different = match r.take(1) {
     Some(v) => v == 1
@@ -253,7 +285,7 @@ pub fn av1_parse_stage1_frame(
     }
     return None
   }
-  if allow_tools {
+  if allow_tools && frame_width == upscaled_width {
     let allow_intrabc = match r.take(1) {
       Some(v) => v == 1
       None => return None
@@ -263,7 +295,7 @@ pub fn av1_parse_stage1_frame(
     }
   }
 
-  let mi_cols = 2 * ((sequence.width + 7) / 8)
+  let mi_cols = 2 * ((frame_width + 7) / 8)
   let mi_rows = 2 * ((sequence.height + 7) / 8)
   let sb_shift = if sequence.use_128x128_superblock { 5 } else { 4 }
   let sb_cols = (mi_cols + (1 << sb_shift) - 1) >> sb_shift
@@ -513,105 +545,79 @@ pub fn av1_parse_stage1_frame(
   }
 
   let coded_lossless = base_q_idx == 0
-  if !coded_lossless {
-    let loop_filter = match
-      av1_parse_loop_filter_config(r, sequence.monochrome) {
-      Some(config) => config
+  let loop_filter = if coded_lossless {
+    None
+  } else {
+    match av1_parse_loop_filter_config(r, sequence.monochrome) {
+      Some(config) => Some(config)
       None => return None
     }
-    let cdef = if sequence.enable_cdef {
-      match av1_parse_cdef_config(r, sequence.monochrome) {
-        Some(config) => Some(config)
+  }
+  let cdef = if !coded_lossless && sequence.enable_cdef {
+    match av1_parse_cdef_config(r, sequence.monochrome) {
+      Some(config) => Some(config)
+      None => return None
+    }
+  } else {
+    None
+  }
+  // Superres changes samples even when every transform is lossless. Such a
+  // frame still carries restoration syntax, unlike an all-lossless frame.
+  let all_lossless = coded_lossless && frame_width == upscaled_width
+  if !all_lossless && sequence.enable_restoration {
+    let num_planes = if sequence.monochrome { 1 } else { 3 }
+    for _ in 0..<num_planes {
+      let lr_type = match r.take(2) {
+        Some(value) => value
         None => return None
       }
-    } else {
-      None
-    }
-    if sequence.enable_restoration {
-      let num_planes = if sequence.monochrome { 1 } else { 3 }
-      for _ in 0..<num_planes {
-        let lr_type = match r.take(2) {
-          Some(v) => v
-          None => return None
-        }
-        if lr_type != 0 {
-          return None
-        }
+      if lr_type != 0 {
+        return None
       }
     }
-    let tx_mode_select = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    // reduced_tx_set follows tx_mode for intra still frames (AV1 §5.9.24).
-    let reduced_tx_set = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    let (offset, tile_payload) = match
-      av1_frame_tile_group_payload(
-        frame_payload,
-        r.bit_pos,
-        tile_cols,
-        tile_rows,
-      ) {
-      Some(value) => value
-      None => return None
-    }
-    Some({
-      header_bytes: offset,
-      tile_payload,
-      base_q_idx,
-      tile_cols,
-      tile_rows,
-      tile_cols_log2,
-      tile_rows_log2,
-      tile_col_starts_sb,
-      tile_row_starts_sb,
-      tile_size_bytes,
-      tx_mode_select,
-      reduced_tx_set,
-      coded_lossless,
-      cdef,
-      loop_filter: Some(loop_filter),
-      disable_cdf_update,
-      allow_screen_content_tools: allow_tools,
-    })
-  } else {
-    if r.take(1) is None {
-      return None
-    }
-    let (offset, tile_payload) = match
-      av1_frame_tile_group_payload(
-        frame_payload,
-        r.bit_pos,
-        tile_cols,
-        tile_rows,
-      ) {
-      Some(value) => value
-      None => return None
-    }
-    Some({
-      header_bytes: offset,
-      tile_payload,
-      base_q_idx,
-      tile_cols,
-      tile_rows,
-      tile_cols_log2,
-      tile_rows_log2,
-      tile_col_starts_sb,
-      tile_row_starts_sb,
-      tile_size_bytes,
-      tx_mode_select: false,
-      reduced_tx_set: false,
-      coded_lossless,
-      cdef: None,
-      loop_filter: None,
-      disable_cdf_update,
-      allow_screen_content_tools: allow_tools,
-    })
   }
+  let tx_mode_select = if coded_lossless {
+    false
+  } else {
+    match r.take(1) {
+      Some(value) => value == 1
+      None => return None
+    }
+  }
+  // This flag is present for lossless frames too, after the implicit TX mode.
+  let reduced_tx_set = match r.take(1) {
+    Some(value) => value == 1
+    None => return None
+  }
+  let (offset, tile_payload) = match
+    av1_frame_tile_group_payload(frame_payload, r.bit_pos, tile_cols, tile_rows) {
+    Some(value) => value
+    None => return None
+  }
+  Some({
+    frame_width,
+    upscaled_width,
+    superres_denom,
+    header_bytes: offset,
+    tile_payload,
+    base_q_idx,
+    tile_cols,
+    tile_rows,
+    tile_cols_log2,
+    tile_rows_log2,
+    tile_col_starts_sb,
+    tile_row_starts_sb,
+    tile_size_bytes,
+    tx_mode_select,
+    reduced_tx_set,
+    coded_lossless,
+    cdef,
+    loop_filter,
+    disable_cdf_update,
+    allow_screen_content_tools: allow_tools,
+  })
 }
+
 ///|
 /// Return validated tile payload slices for a parsed frame header. The frame
 /// parser has already consumed the optional tile-group range header; this

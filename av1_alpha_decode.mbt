@@ -12,9 +12,11 @@ fn av1_alpha_samples_to_bytes(
   let maximum = (1 << bit_depth) - 1
   samples.map(fn(value) { ((value * 255 + maximum / 2) / maximum).to_byte() })
 }
+
 ///|
 /// Decode a complete monochrome intra tile, including AC, lossless transforms
 /// and supported intra modes. Frame filters run before quantizing alpha to eight bits.
+/// Width is coded; optional upscaled_width is applied before alpha conversion.
 pub fn av1_decode_alpha_tile(
   width : Int,
   height : Int,
@@ -30,6 +32,7 @@ pub fn av1_decode_alpha_tile(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  upscaled_width? : Int = 0,
 ) -> Array[Byte]? {
   let frame = match
     av1_decode_tile_planes(
@@ -53,12 +56,14 @@ pub fn av1_decode_alpha_tile(
       monochrome=true,
       enable_intra_edge_filter~,
       loop_filter~,
+      upscaled_width~,
     ) {
     Some(value) => value
     None => return None
   }
   Some(av1_alpha_samples_to_bytes(av1_frame_crop(frame, 0), frame.bit_depth))
 }
+
 ///|
 /// Decode a monochrome OBU frame through shared intra traversal and filters.
 /// Alpha represents coverage, so its final conversion always uses full UNORM.
@@ -72,6 +77,7 @@ pub fn av1_decode_alpha(data : Array[Byte]) -> Array[Byte]? {
   }
   Some(av1_alpha_samples_to_bytes(av1_frame_crop(frame, 0), frame.bit_depth))
 }
+
 ///|
 /// Decode the validated auxiliary alpha item from a complete AVIF container.
 /// The result is a row-major 8-bit alpha plane, rounded from its native depth.

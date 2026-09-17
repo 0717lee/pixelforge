@@ -130,7 +130,10 @@ fn av1_txb_skip_ctx_luma(top : Int, left : Int, whole : Bool) -> Int {
 ///|
 /// Chroma all_zero context (AV1 spec §8.3): 7 plus one per non-empty
 /// neighbour side, plus 3 when the residual block exceeds the transform.
-fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bool,
+fn av1_txb_skip_ctx_chroma(
+  above_nonzero : Bool,
+  left_nonzero : Bool,
+  whole : Bool,
 ) -> Int {
   let ctx = 7 +
     (if above_nonzero { 1 } else { 0 }) +
@@ -144,7 +147,13 @@ fn av1_txb_skip_ctx_chroma(above_nonzero : Bool, left_nonzero : Bool, whole : Bo
 
 ///|
 /// dc_sign context from the neighbour dc categories (AV1 spec §8.3).
-fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y4 : Int, width_units : Int, height_units? : Int = 0,
+fn av1_dc_sign_ctx_from(
+  above_dc : Array[Int],
+  left_dc : Array[Int],
+  x4 : Int,
+  y4 : Int,
+  width_units : Int,
+  height_units? : Int = 0,
 ) -> Int {
   let h_units = if height_units > 0 { height_units } else { width_units }
   let mut score = 0
@@ -174,6 +183,8 @@ fn av1_dc_sign_ctx_from(above_dc : Array[Int], left_dc : Array[Int], x4 : Int, y
 }
 
 ///|
+/// Decode one intra tile. Width is the coded width; a nonzero upscaled_width
+/// requests final horizontal superres after native-depth frame filtering.
 pub fn av1_decode_dc_tile(
   width : Int,
   height : Int,
@@ -191,8 +202,9 @@ pub fn av1_decode_dc_tile(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  upscaled_width? : Int = 0,
 ) -> Image? {
-  if loop_filter is Some(_) {
+  if loop_filter is Some(_) || upscaled_width != 0 {
     let frame = match
       av1_decode_tile_planes(
         width,
@@ -214,6 +226,7 @@ pub fn av1_decode_dc_tile(
         cdef,
         enable_intra_edge_filter~,
         loop_filter~,
+        upscaled_width~,
       ) {
       Some(value) => value
       None => return None
@@ -238,11 +251,12 @@ pub fn av1_decode_dc_tile(
     enable_intra_edge_filter~,
   )
 }
+
 ///|
 /// Decode a complete tile group into a raster image when every tile is a
 /// bounded intra tile supported by the current pixel path. Tile-local MSAC
-/// state is reset for each payload. When CDEF is present, complete native-depth
-/// planes are assembled before filtering across tile boundaries.
+/// state is reset for each payload. Frame filtering and nonzero upscaled_width
+/// operate on assembled native planes, preserving samples across tile seams.
 pub fn av1_decode_tile_group(
   width : Int,
   height : Int,
@@ -263,6 +277,7 @@ pub fn av1_decode_tile_group(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  upscaled_width? : Int = 0,
 ) -> Image? {
   if width <= 0 ||
     height <= 0 ||
@@ -280,7 +295,7 @@ pub fn av1_decode_tile_group(
   if tile_width < 16 || tile_width > 64 || tile_height < 16 || tile_height > 64 {
     return None
   }
-  if cdef is Some(_) || loop_filter is Some(_) {
+  if cdef is Some(_) || loop_filter is Some(_) || upscaled_width != 0 {
     let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
     let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
     let frame = match
@@ -304,6 +319,7 @@ pub fn av1_decode_tile_group(
         cdef,
         enable_intra_edge_filter~,
         loop_filter~,
+        upscaled_width~,
       ) {
       Some(value) => value
       None => return None
@@ -356,10 +372,13 @@ pub fn av1_decode_tile_group(
   }
   Some(output)
 }
+
 ///|
 /// Decode tiles whose superblock boundaries are explicitly known, including
 /// non-uniform tile_info() layouts. Each tile keeps one entropy state across
 /// its superblocks; frame filters run on the assembled native-depth planes.
+/// Width and boundaries refer to coded pixels; upscaled_width selects the
+/// final display width after filtering (zero preserves the coded width).
 pub fn av1_decode_tile_group_with_boundaries(
   width : Int,
   height : Int,
@@ -381,6 +400,7 @@ pub fn av1_decode_tile_group_with_boundaries(
   enable_intra_edge_filter? : Bool = false,
   cdef? : Av1CdefConfig? = None,
   loop_filter? : Av1LoopFilterConfig? = None,
+  upscaled_width? : Int = 0,
   monochrome? : Bool = false,
 ) -> Image? {
   if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
@@ -418,12 +438,14 @@ pub fn av1_decode_tile_group_with_boundaries(
       monochrome~,
       enable_intra_edge_filter~,
       loop_filter~,
+      upscaled_width~,
     ) {
     Some(value) => value
     None => return None
   }
   av1_frame_to_rgba(frame)
 }
+
 ///|
 /// Decode a reduced-still AV1 OBU stream through the supported intra syntax,
 /// native-depth frame filters and final color conversion.
@@ -433,6 +455,7 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
     None => None
   }
 }
+
 ///|
 /// Decode an AVIF container through the same pure MoonBit intra frame
 /// path. Unsupported syntax returns None; a validated
@@ -444,7 +467,7 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
     None => avif_decode_grid_auto(data)
     Some(value) =>
       av1_decode_tile_group_with_boundaries(
-        value.width,
+        value.frame_width,
         value.height,
         value.tile_col_starts_sb,
         value.tile_row_starts_sb,
@@ -468,10 +491,12 @@ pub fn avif_decode(data : Array[Byte]) -> Image? {
         enable_intra_edge_filter=value.enable_intra_edge_filter,
         cdef=value.cdef,
         loop_filter=value.loop_filter,
+        upscaled_width=value.width,
         monochrome=value.monochrome,
       )
   }
 }
+
 ///|
 test "single DC helper decodes a chroma coefficient" {
   let decoder = av1_msac_new([b'\x00', b'\x00'], false)

@@ -1,11 +1,8 @@
 /// Bounded, pure MoonBit AV1 bitstream foundation used by the AVIF decoder.
 ///
-/// This module deliberately keeps the first AV1 milestone small and explicit:
-/// it parses low-overhead OBU headers and a reduced-still-picture sequence
-/// header, validates the stage-one profile (8-bit 4:2:0), and exposes the
-/// dimensions and colour configuration to the container layer.  Tile entropy
-/// decoding and inverse transforms are not silently approximated; `av1_decode`
-/// returns `None` until those stages are available.
+/// Parses low-overhead OBU headers and supported reduced-still sequences,
+/// retaining native 8/10/12-bit color configuration and the distinction between
+/// entropy-coded and displayed dimensions for the tile reconstruction stage.
 
 ///|
 /// Parsed AV1 sequence configuration for the stage-one decoder.
@@ -46,7 +43,10 @@ pub(all) struct Av1FrameInfo {
 /// data boundary rather than an image: tile bytes are still entropy-coded and
 /// must be reconstructed before an `Image` exists.
 pub(all) struct Av1Stage1Input {
+  /// Container/display width after superres; tile geometry uses frame_width.
   width : Int
+  frame_width : Int
+  superres_denom : Int
   height : Int
   bit_depth : Int
   monochrome : Bool
@@ -73,6 +73,7 @@ pub(all) struct Av1Stage1Input {
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
 }
+
 ///|
 /// Small AV1 MSAC boolean decoder. It is kept independent from frame syntax so
 /// the tile decoder can adopt it without changing the public image API.
@@ -623,6 +624,8 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         Some(frame) =>
           Some({
             width: c.width,
+            frame_width: frame.frame_width,
+            superres_denom: frame.superres_denom,
             height: c.height,
             bit_depth: c.bit_depth,
             monochrome: seq.monochrome,

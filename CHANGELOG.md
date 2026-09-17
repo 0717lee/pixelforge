@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added normative AV1 horizontal super-resolution decoding at 8/10/12 bits.
+  The header parses use_superres plus the coded denominator (nine through
+  sixteen), derives the entropy-coded frame_width against the display width
+  and keeps both dimensions distinct through tile geometry. The fixed 8-tap
+  phase interpolation upscales complete native-depth planes after deblocking
+  and CDEF, with Q14 stepping, half-error phase correction and outer-edge
+  replication per the pinned libaom scalar path. CodedLossless and AllLossless
+  stay distinct when scaling occurs, active restoration syntax is still
+  consumed, and allow_intrabc only appears without scaling.
+- Verified the kernel against 780 original-C normatives cases covering all
+  bit depths, both plane groups, phases, strides and padding. Eighteen
+  complete dual-dav1d references cover denominators 9–16, color/mono,
+  8/10/12 bits, odd crops and two-tile seams; two constructed q0 headers
+  exercise the screen-content and restoration syntax gates.
+
 - Added native 8/10/12-bit AV1 palette decoding, including all 2–8-color
   probabilities, direct-MI neighbor caches, signed V deltas, diagonal index
   traversal and coded-edge padding. Palette predictions retain ordinary
