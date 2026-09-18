@@ -69,6 +69,17 @@ pub(all) struct Av1MotionField {
   y_modes : Array[Int]
   is_inter : Array[Bool]
   written : Array[Bool]
+  /// Skip and skip-mode flags, which the transform-size contexts read back.
+  skips : Array[Int]
+  skip_modes : Array[Int]
+  /// Luma transform extents and the two subpel filter choices, so a later block
+  /// can measure this one's neighbours.
+  tx_width : Array[Int]
+  tx_height : Array[Int]
+  /// Luma transform types, which a chroma transform of an inter block inherits.
+  tx_types : Array[Int]
+  interp_v : Array[Int]
+  interp_h : Array[Int]
   /// Two reference names and two motion vectors per unit, interleaved by unit.
   refs : Array[Int]
   mv_rows : Array[Int]
@@ -88,6 +99,13 @@ pub fn av1_motion_field(cols : Int, rows : Int) -> Av1MotionField {
     y_modes: Array::make(size, av1_intra_frame),
     is_inter: Array::make(size, false),
     written: Array::make(size, false),
+    skips: Array::make(size, 0),
+    skip_modes: Array::make(size, 0),
+    tx_width: Array::make(size, 4),
+    tx_height: Array::make(size, 4),
+    tx_types: Array::make(size, 0),
+    interp_v: Array::make(size, av1_interp_eighttap),
+    interp_h: Array::make(size, av1_interp_eighttap),
     refs: Array::make(size * 2, av1_intra_frame),
     mv_rows: Array::make(size * 2, 0),
     mv_cols: Array::make(size * 2, 0),
@@ -113,6 +131,9 @@ pub fn av1_motion_field_store(
   refs : Array[Int],
   mv_rows : Array[Int],
   mv_cols : Array[Int],
+  skip? : Int = 0,
+  skip_mode? : Int = 0,
+  interp? : Array[Int] = [],
 ) -> Unit {
   for r = row; r < row + height4 && r < field.rows; r = r + 1 {
     for c = col; c < col + width4 && c < field.cols; c = c + 1 {
@@ -122,6 +143,12 @@ pub fn av1_motion_field_store(
       field.y_modes[unit] = y_mode
       field.is_inter[unit] = refs[0] > av1_intra_frame
       field.written[unit] = true
+      field.skips[unit] = skip
+      field.skip_modes[unit] = skip_mode
+      if interp.length() >= 2 {
+        field.interp_v[unit] = interp[0]
+        field.interp_h[unit] = interp[1]
+      }
       field.refs[unit * 2] = refs[0]
       field.refs[unit * 2 + 1] = refs[1]
       field.mv_rows[unit * 2] = mv_rows[0]
@@ -130,6 +157,80 @@ pub fn av1_motion_field_store(
       field.mv_cols[unit * 2 + 1] = mv_cols[1]
     }
   }
+}
+
+///|
+/// Record the luma transform extents of one block over its 4x4 footprint. The
+/// transform-size contexts of later blocks measure neighbours against these
+/// (AV1 §8.3, get_above_tx_width and get_left_tx_height).
+fn av1_motion_field_store_tx(
+  field : Av1MotionField,
+  row : Int,
+  col : Int,
+  width4 : Int,
+  height4 : Int,
+  tx_width : Int,
+  tx_height : Int,
+) -> Unit {
+  for r = row; r < row + height4 && r < field.rows; r = r + 1 {
+    for c = col; c < col + width4 && c < field.cols; c = c + 1 {
+      let unit = av1_field_unit(field, r, c)
+      field.tx_width[unit] = tx_width
+      field.tx_height[unit] = tx_height
+    }
+  }
+}
+
+///|
+/// get_above_tx_width( row, col ) (AV1 §9.3.4): the transform width of the unit
+/// above one position. `block_row` is the top MI row of the coding block being
+/// sized, and a skipped inter block sitting on that edge reports its own block
+/// width, because it coded no residual to subdivide. An unavailable edge reports
+/// the largest possible width.
+fn av1_above_tx_width(
+  field : Av1MotionField,
+  block_row : Int,
+  row : Int,
+  col : Int,
+  avail_u : Bool,
+) -> Int {
+  if row <= 0 || col < 0 || col >= field.cols {
+    return 64
+  }
+  let unit = (row - 1) * field.cols + col
+  if row == block_row {
+    if !avail_u {
+      return 64
+    }
+    if field.skips[unit] != 0 && field.is_inter[unit] {
+      return field.width4[unit] * 4
+    }
+  }
+  field.tx_width[unit]
+}
+
+///|
+/// get_left_tx_height( row, col ), the vertical twin of the above (AV1 §9.3.4).
+fn av1_left_tx_height(
+  field : Av1MotionField,
+  block_col : Int,
+  row : Int,
+  col : Int,
+  avail_l : Bool,
+) -> Int {
+  if row < 0 || row >= field.rows || col <= 0 {
+    return 64
+  }
+  let unit = row * field.cols + (col - 1)
+  if col == block_col {
+    if !avail_l {
+      return 64
+    }
+    if field.skips[unit] != 0 && field.is_inter[unit] {
+      return field.height4[unit] * 4
+    }
+  }
+  field.tx_height[unit]
 }
 
 ///|

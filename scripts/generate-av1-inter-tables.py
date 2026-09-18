@@ -4,7 +4,7 @@
     python scripts/generate-av1-inter-tables.py
     python scripts/generate-av1-inter-tables.py --check
 
-Every `var Default… = [][]uint16{…}` declaration in the eight cached source
+Every `var Default… = [][]uint16{…}` declaration in the nine cached source
 files listed in SOURCES below is transcribed; none is hand-copied. The nesting
 depth is taken from the Go type (`[]uint16` through `[][][][]uint16`) and the
 literals are parsed structurally, so a reshaped upstream table changes the
@@ -47,6 +47,9 @@ SOURCES = (
     ("tables_interintra_gen.go", "ac9a20591303c2e6237a279b65cb042b9070e44526dfea34e5c3cd17c05c7208"),
     ("tables_intertx_gen.go", "cd91a79c2bc041846c69cae13b6b45454ec5c7302c6a8d775b5715bc040ab3ac"),
     ("tables_wedge_gen.go", "a4af33027848e4cf41207184d580bd89e2bd5ce8ef5e800bd48facd4fe81bc1b"),
+    # Intra blocks that live inside an inter frame read their luma mode from a
+    # different table than an intra frame does, so it belongs with the inter set.
+    ("tables_ymode_gen.go", "63844b587ccd9f033c419ca1abe3f5363acdf95891a5aaa5707cfd2774de985d"),
 )
 
 # One doc-comment body per Go table, naming the syntax element and its index
@@ -193,6 +196,11 @@ DOCS: dict[str, tuple[str, ...]] = {
     "DefaultWedgeIndexCdf": (
         "Default_Wedge_Index_Cdf: [block mi_size 0..21][16 symbols]; the high wedge bits",
         "come from this CDF and the tail is read with ns(5).",
+    ),
+    "DefaultYModeCdf": (
+        "Default_Y_Mode_Cdf: [size group 0..3][10 luma prediction modes]. An intra block",
+        "inside an inter frame selects its row by Size_Group[ MiSize ] instead of using",
+        "the above and left modes of an intra frame.",
     ),
 }
 

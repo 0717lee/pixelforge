@@ -495,6 +495,33 @@ fn av1_vartx_contains(state : Av1VarTxNeighbors, node : Av1TxNode) -> Bool {
 }
 
 ///|
+/// The txfm_split CDF index from the two neighbour dimensions (AV1 spec §9.3.4).
+/// `block_width` and `block_height` are the coding block; the size class comes
+/// from its largest axis capped at 64, and a transform whose square-up class
+/// differs from that cap adds three to the context.
+fn av1_txfm_split_ctx(
+  above_width : Int,
+  left_height : Int,
+  block_width : Int,
+  block_height : Int,
+  node_width : Int,
+  node_height : Int,
+) -> Int {
+  let block_size = if block_width > block_height {
+    block_width
+  } else {
+    block_height
+  }
+  let max_size = if block_size > 64 { 64 } else { block_size }
+  let max_tx = av1_msac_floor_log2(max_size) - 2
+  let node_size = if node_width > node_height { node_width } else { node_height }
+  let smaller = if node_size != max_size { 3 } else { 0 }
+  let above = if above_width < node_width { 1 } else { 0 }
+  let left = if left_height < node_height { 1 } else { 0 }
+  6 * (4 - max_tx) + smaller + above + left
+}
+
+///|
 /// AV1 txfm_split CDF selection (spec section 8.3). Unlike tx_depth, each
 /// smaller neighbour contributes one; the size class comes from the coding
 /// block and the square-up size of this transform, not recursion depth.
@@ -517,22 +544,16 @@ fn av1_txfm_split_context(state : Av1VarTxNeighbors, node : Av1TxNode) -> Int? {
   if above_width < 0 || left_height < 0 {
     return None
   }
-  let block_size = if state.block.width > state.block.height {
-    state.block.width
-  } else {
-    state.block.height
-  }
-  let max_size = if block_size > 64 { 64 } else { block_size }
-  let max_tx = av1_msac_floor_log2(max_size) - 2
-  let node_size = if node.width > node.height {
-    node.width
-  } else {
-    node.height
-  }
-  let smaller = if node_size != max_size { 3 } else { 0 }
-  let above = if above_width < node.width { 1 } else { 0 }
-  let left = if left_height < node.height { 1 } else { 0 }
-  Some(6 * (4 - max_tx) + smaller + above + left)
+  Some(
+    av1_txfm_split_ctx(
+      above_width,
+      left_height,
+      state.block.width,
+      state.block.height,
+      node.width,
+      node.height,
+    ),
+  )
 }
 
 ///|

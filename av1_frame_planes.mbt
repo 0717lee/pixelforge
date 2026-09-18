@@ -223,6 +223,7 @@ fn av1_decode_tile_planes(
   },
   subsampling_x? : Bool = true,
   subsampling_y? : Bool = true,
+  inter? : Av1InterFrame? = None,
 ) -> (Av1FramePlanes, Av1RestorationStripeStore?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
   let sub_x = if subsampling_x { 1 } else { 0 }
@@ -343,6 +344,19 @@ fn av1_decode_tile_planes(
     let top = row_starts[tile.row]
     let tile_width = col_starts[tile.col + 1] - left
     let tile_height = row_starts[tile.row + 1] - top
+    let tile_inter = match inter {
+      Some(config) =>
+        Some(
+          av1_inter_info(
+            config,
+            top / 4,
+            left / 4,
+            (top + av1_partition_coded_extent(tile_height)) / 4,
+            (left + av1_partition_coded_extent(tile_width)) / 4,
+          ),
+        )
+      None => None
+    }
     let state = match
       av1_decode_intra_tile_state(
         tile_width,
@@ -366,6 +380,7 @@ fn av1_decode_tile_planes(
         quant_deltas~,
         sub_x~,
         sub_y~,
+        inter=tile_inter,
       ) {
       Some(value) => value
       None => return None
@@ -665,11 +680,18 @@ fn av1_decode_frame_planes(
     Some(value) => value
     None => return None
   }
-  // The reconstruction below is intra-only until the motion-compensation stage
-  // lands, so a frame that predicts from a reference is refused rather than
-  // decoded as if every block were intra.
-  if !header.frame_is_intra {
+  // An inter frame is only decodable once every tool it signals can be acted
+  // on; a frame that uses one the block stage lacks is refused whole rather
+  // than decoded as a prefix of itself.
+  let inter = if header.frame_is_intra {
+    None
+  } else if !av1_inter_frame_supported(header, seq) {
     return None
+  } else {
+    match av1_inter_frame_of(header, seq, state) {
+      Some(value) => Some(value)
+      None => return None
+    }
   }
   let film_grain = header.film_grain
   let frame_height = header.frame_height
@@ -716,6 +738,7 @@ fn av1_decode_frame_planes(
       quant_deltas=header.quant_deltas,
       subsampling_x=seq.subsampling_x,
       subsampling_y=seq.subsampling_y,
+      inter~,
     ) {
     Some(value) => value
     None => return None

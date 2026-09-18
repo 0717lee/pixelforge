@@ -1,0 +1,1063 @@
+///|
+/// Inter-frame block reconstruction: the tile leaf that mounts the inter syntax
+/// of `av1_inter_mode.mbt` onto the existing partition walk, and turns it into
+/// samples (AV1 §5.11.17 through §5.11.37).
+///
+/// The partition tree itself is shared with intra frames, so only the leaf
+/// changes. An inter frame's intra blocks reuse the intra reading with the
+/// inter-frame luma mode table; both share one tile entropy decoder, one set of
+/// adaptive probabilities and one pair of reconstructed planes.
+///
+/// Everything a reference prediction has to do is here: read the motion, store
+/// it into the frame's motion field, size the transforms, interpolate the
+/// reference, then add the residual.
+
+///|
+/// Transform extents a coding block may reach (AV1 §5.11.15, Max_Tx_Size_Rect):
+/// each axis is capped at 64 samples.
+fn av1_max_rect_tx(width : Int, height : Int) -> (Int, Int) {
+  (
+    if width > 64 { 64 } else { width },
+    if height > 64 { 64 } else { height },
+  )
+}
+
+///|
+/// Split_Tx_Size (AV1 §5.11.15): halve the long axis, or both axes when the
+/// transform is square.
+fn av1_tx_split(width : Int, height : Int) -> (Int, Int) {
+  if width > height {
+    (width / 2, height)
+  } else if height > width {
+    (width, height / 2)
+  } else {
+    (width / 2, height / 2)
+  }
+}
+
+///|
+/// get_tx_size( plane, txSz ) for a chroma plane (AV1 §5.11.35): the chroma
+/// residual block's own maximum, with any 64-sample axis folded back to 32.
+fn av1_chroma_tx_size(
+  width : Int,
+  height : Int,
+  lossless : Bool,
+) -> (Int, Int) {
+  if lossless {
+    return (4, 4)
+  }
+  let cap = av1_max_rect_tx(width, height)
+  if cap.0 == 64 || cap.1 == 64 {
+    if cap.0 == 16 {
+      (16, 32)
+    } else if cap.1 == 16 {
+      (32, 16)
+    } else {
+      (32, 32)
+    }
+  } else {
+    cap
+  }
+}
+
+///|
+/// The residual block size of one plane (AV1 §5.11.36, get_plane_residual_size
+/// over the Subsampled_Size table). A residual block is never narrower or
+/// shorter than four samples.
+fn av1_plane_residual_size(
+  width : Int,
+  height : Int,
+  plane : Int,
+  sub_x : Int,
+  sub_y : Int,
+) -> (Int, Int) {
+  if plane == 0 {
+    return (width, height)
+  }
+  let scaled_w = if width >> sub_x < 4 { 4 } else { width >> sub_x }
+  let scaled_h = if height >> sub_y < 4 { 4 } else { height >> sub_y }
+  (scaled_w, scaled_h)
+}
+
+///|
+/// get_tx_set for an inter block (AV1 §5.11.48). Sets 1 to 3 replace the two
+/// intra sets; 0 means the transform type is fixed to DCT_DCT.
+fn av1_inter_tx_set(
+  width : Int,
+  height : Int,
+  reduced : Bool,
+) -> Int {
+  let larger = if width > height { width } else { height }
+  let smaller = if width < height { width } else { height }
+  let up = av1_msac_floor_log2(larger) - 2
+  let sqr = av1_msac_floor_log2(smaller) - 2
+  if up > 3 {
+    0
+  } else if reduced || up == 3 {
+    3
+  } else if sqr == 2 {
+    2
+  } else {
+    1
+  }
+}
+
+///|
+/// Tx_Type_Inter_Inv_Set1..3 (AV1 §5.11.47): the decoded index back to a
+/// transform type.
+fn av1_inter_tx_type_of(set : Int, index : Int) -> Av1TxType {
+  match (set, index) {
+    (1, 0) => Av1TxIdentityIdentity
+    (1, 1) => Av1TxDctDct
+    (1, 2) => Av1TxVerticalDct
+    (1, 3) => Av1TxHorizontalDct
+    (1, 4) => Av1TxVerticalAdst
+    (1, 5) => Av1TxHorizontalAdst
+    (1, 6) => Av1TxVerticalFlipadst
+    (1, 7) => Av1TxHorizontalFlipadst
+    (1, 8) => Av1TxAdstDct
+    (1, 9) => Av1TxDctAdst
+    (1, 10) => Av1TxFlipadstDct
+    (1, 11) => Av1TxDctFlipadst
+    (1, 12) => Av1TxAdstAdst
+    (1, 13) => Av1TxFlipadstFlipadst
+    (1, 14) => Av1TxAdstFlipadst
+    (1, 15) => Av1TxFlipadstAdst
+    (2, 0) => Av1TxIdentityIdentity
+    (2, 1) => Av1TxVerticalDct
+    (2, 2) => Av1TxHorizontalDct
+    (2, 3) => Av1TxDctDct
+    (2, 4) => Av1TxAdstDct
+    (2, 5) => Av1TxDctAdst
+    (2, 6) => Av1TxFlipadstDct
+    (2, 7) => Av1TxDctFlipadst
+    (2, 8) => Av1TxAdstAdst
+    (2, 9) => Av1TxFlipadstFlipadst
+    (2, 10) => Av1TxAdstFlipadst
+    (2, 11) => Av1TxFlipadstAdst
+    (3, 0) => Av1TxIdentityIdentity
+    (3, 1) => Av1TxDctDct
+    _ => Av1TxDctDct
+  }
+}
+
+///|
+/// How many transform types one inter set codes.
+fn av1_inter_tx_set_symbols(set : Int) -> Int {
+  match set {
+    1 => 16
+    2 => 12
+    3 => 2
+    _ => 0
+  }
+}
+
+///|
+/// is_tx_type_in_set for an inter block (AV1 §5.11.47): a chroma transform may
+/// only reuse a luma type its own set contains.
+fn av1_inter_tx_type_in_set(set : Int, tx_type : Av1TxType) -> Bool {
+  match tx_type {
+    Av1TxDctDct => true
+    Av1TxVerticalAdst | Av1TxHorizontalAdst | Av1TxVerticalFlipadst |
+      Av1TxHorizontalFlipadst =>
+      set == 1
+    _ => set == 1 || set == 2 || set == 3
+  }
+}
+
+///|
+/// Spec TX_TYPES index of a transform type (AV1 §6.10.4). The MoonBit enum
+/// carries three extra identity combinations, so the mapping is explicit.
+fn av1_tx_type_code(tx_type : Av1TxType) -> Int {
+  match tx_type {
+    Av1TxDctDct => 0
+    Av1TxAdstDct => 1
+    Av1TxDctAdst => 2
+    Av1TxAdstAdst => 3
+    Av1TxFlipadstDct => 4
+    Av1TxDctFlipadst => 5
+    Av1TxFlipadstFlipadst => 6
+    Av1TxAdstFlipadst => 7
+    Av1TxFlipadstAdst => 8
+    Av1TxIdentityIdentity => 9
+    Av1TxVerticalDct => 10
+    Av1TxHorizontalDct => 11
+    Av1TxVerticalAdst => 12
+    Av1TxHorizontalAdst => 13
+    Av1TxVerticalFlipadst => 14
+    Av1TxHorizontalFlipadst => 15
+    _ => 0
+  }
+}
+
+///|
+fn av1_tx_type_of_code(code : Int) -> Av1TxType {
+  match code {
+    0 => Av1TxDctDct
+    1 => Av1TxAdstDct
+    2 => Av1TxDctAdst
+    3 => Av1TxAdstAdst
+    4 => Av1TxFlipadstDct
+    5 => Av1TxDctFlipadst
+    6 => Av1TxFlipadstFlipadst
+    7 => Av1TxAdstFlipadst
+    8 => Av1TxFlipadstAdst
+    9 => Av1TxIdentityIdentity
+    10 => Av1TxVerticalDct
+    11 => Av1TxHorizontalDct
+    12 => Av1TxVerticalAdst
+    13 => Av1TxHorizontalAdst
+    14 => Av1TxVerticalFlipadst
+    15 => Av1TxHorizontalFlipadst
+    _ => Av1TxDctDct
+  }
+}
+
+///|
+/// TxTypes[ y4 ][ x4 ] over one transform's luma footprint (AV1 §5.11.47), which
+/// is what a chroma transform of the same block reads back.
+fn av1_inter_record_tx_types(
+  field : Av1MotionField,
+  x4 : Int,
+  y4 : Int,
+  width : Int,
+  height : Int,
+  tx_type : Av1TxType,
+) -> Unit {
+  let code = av1_tx_type_code(tx_type)
+  for row in y4..<(y4 + height / 4) {
+    for col in x4..<(x4 + width / 4) {
+      if row >= 0 && row < field.rows && col >= 0 && col < field.cols {
+        field.tx_types[row * field.cols + col] = code
+      }
+    }
+  }
+}
+
+///|
+/// transform_type( x4, y4, txSz ) for an inter block (AV1 §5.11.47). The type is
+/// only coded when the transform set offers a choice and the quantizer is not
+/// zero; otherwise it is DCT_DCT, but it is still recorded for chroma.
+fn av1_inter_luma_tx_type(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  width : Int,
+  height : Int,
+  x4 : Int,
+  y4 : Int,
+) -> Av1TxType {
+  let set = av1_inter_tx_set(width, height, state.reduced_tx_set)
+  let sqr = av1_msac_floor_log2(if width < height { width } else { height }) - 2
+  if set == 0 || state.base_q_idx == 0 {
+    av1_inter_record_tx_types(info.field, x4, y4, width, height, Av1TxDctDct)
+    return Av1TxDctDct
+  }
+  let cdfs = info.cdfs
+  let index =
+    if set == 1 {
+      if sqr < 0 || sqr >= cdfs.inter_tx_type_set1.length() {
+        return Av1TxDctDct
+      }
+      decoder.symbol(cdfs.inter_tx_type_set1[sqr])
+    } else if set == 2 {
+      decoder.symbol(cdfs.inter_tx_type_set2)
+    } else {
+      if sqr < 0 || sqr >= cdfs.inter_tx_type_set3.length() {
+        return Av1TxDctDct
+      }
+      decoder.symbol(cdfs.inter_tx_type_set3[sqr])
+    }
+  if index < 0 || index >= av1_inter_tx_set_symbols(set) {
+    return Av1TxDctDct
+  }
+  let tx_type = av1_inter_tx_type_of(set, index)
+  av1_inter_record_tx_types(info.field, x4, y4, width, height, tx_type)
+  tx_type
+}
+
+///|
+/// compute_tx_type( plane, txSz, blockX, blockY ) for the chroma planes of an
+/// inter block (AV1 §5.11.47): inherit the luma type at the transform's own
+/// origin, falling back to DCT_DCT when it is outside the chroma set.
+fn av1_inter_chroma_tx_type(
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  current : Av1InterBlock,
+  width : Int,
+  height : Int,
+  x : Int,
+  y : Int,
+) -> Av1TxType {
+  let set = av1_inter_tx_set(width, height, state.reduced_tx_set)
+  if set == 0 {
+    return Av1TxDctDct
+  }
+  let field = info.field
+  let x4 = x / 4
+  let y4 = y / 4
+  let luma_col = if x4 << state.sub_x < current.mi_col {
+    current.mi_col
+  } else {
+    x4 << state.sub_x
+  }
+  let luma_row = if y4 << state.sub_y < current.mi_row {
+    current.mi_row
+  } else {
+    y4 << state.sub_y
+  }
+  if luma_row >= field.rows || luma_col >= field.cols {
+    return Av1TxDctDct
+  }
+  let code = field.tx_types[luma_row * field.cols + luma_col]
+  let tx_type = av1_tx_type_of_code(code)
+  if av1_inter_tx_type_in_set(set, tx_type) { tx_type } else { Av1TxDctDct }
+}
+
+///|
+/// read_var_tx_size( row, col, txSz, depth ) (AV1 §5.11.16). Positions are frame
+/// MI units; leaves are collected in the order the tree is read, which is the
+/// order their coefficients appear in the bitstream.
+fn av1_read_var_tx_size(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+  row : Int,
+  col : Int,
+  tx_width : Int,
+  tx_height : Int,
+  depth : Int,
+  leaves : Array[Av1TxNode],
+) -> Bool {
+  if row >= info.mi_rows || col >= info.mi_cols {
+    return true
+  }
+  let field = info.field
+  let split =
+    if tx_width == 4 && tx_height == 4 {
+      0
+    } else if depth >= 2 {
+      0
+    } else {
+      let above = av1_above_tx_width(
+        field,
+        block.mi_row,
+        row,
+        col,
+        row == block.mi_row && block.avail_u,
+      )
+      let left = av1_left_tx_height(
+        field,
+        block.mi_col,
+        row,
+        col,
+        col == block.mi_col && block.avail_l,
+      )
+      let ctx = av1_txfm_split_ctx(
+        above,
+        left,
+        block.block_width,
+        block.block_height,
+        tx_width,
+        tx_height,
+      )
+      if ctx < 0 || ctx >= state.vartx.rows.length() {
+        return false
+      }
+      decoder.symbol(state.vartx.rows[ctx])
+    }
+  let width4 = tx_width / 4
+  let height4 = tx_height / 4
+  if split == 1 {
+    let (sub_width, sub_height) = av1_tx_split(tx_width, tx_height)
+    for i = 0; i < height4; i = i + sub_height / 4 {
+      for j = 0; j < width4; j = j + sub_width / 4 {
+        if !av1_read_var_tx_size(
+            decoder,
+            state,
+            info,
+            block,
+            row + i,
+            col + j,
+            sub_width,
+            sub_height,
+            depth + 1,
+            leaves,
+          ) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+  av1_motion_field_store_tx(field, row, col, width4, height4, tx_width, tx_height)
+  leaves.push({
+    row: (row - info.tile_row_start) * 4,
+    col: (col - info.tile_col_start) * 4,
+    width: tx_width,
+    height: tx_height,
+  })
+  true
+}
+
+///|
+/// read_block_tx_size( ) (AV1 §5.11.15). A non-skipped inter block under
+/// TX_MODE_SELECT reads the variable transform tree; everything else reads at
+/// most one tx_depth symbol. The luma result is also recorded into the frame's
+/// motion field, because later blocks measure their neighbours against it.
+fn av1_read_block_tx_size(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+) -> (Int, Int, Array[Array[Av1TxNode]])? {
+  let roots : Array[Array[Av1TxNode]] = []
+  let (max_width, max_height) = av1_max_rect_tx(
+    block.block_width,
+    block.block_height,
+  )
+  if state.tx_mode_select &&
+    block.size_index > 0 &&
+    block.is_inter &&
+    block.skip == 0 &&
+    state.base_q_idx != 0 {
+    let (tx_w4, tx_h4) = (max_width / 4, max_height / 4)
+    let mut row = block.mi_row
+    while row < block.mi_row + block.height4 {
+      let mut col = block.mi_col
+      while col < block.mi_col + block.width4 {
+        // One root per 64-pixel residual chunk, in the order residual() walks
+        // them, so the leaf lists can be consumed chunk by chunk.
+        let leaves : Array[Av1TxNode] = []
+        roots.push(leaves)
+        if !av1_read_var_tx_size(
+            decoder,
+            state,
+            info,
+            block,
+            row,
+            col,
+            max_width,
+            max_height,
+            0,
+            leaves,
+          ) {
+          return None
+        }
+        col = col + tx_w4
+      }
+      row = row + tx_h4
+    }
+    return Some((max_width, max_height, roots))
+  }
+  let allow_select = !block.is_inter || block.skip == 0
+  if state.base_q_idx == 0 {
+    av1_motion_field_store_tx(
+      info.field,
+      block.mi_row,
+      block.mi_col,
+      block.width4,
+      block.height4,
+      4,
+      4,
+    )
+    return Some((4, 4, []))
+  }
+  let mut tx_width = max_width
+  let mut tx_height = max_height
+  if allow_select &&
+    block.size_index > 0 &&
+    state.tx_mode_select {
+    let context = av1_tx_depth_ctx(info, block, max_width, max_height)
+    let depth = match
+      av1_decode_tx_depth_for_block(
+        decoder,
+        state.tx_depth,
+        block.block_width,
+        block.block_height,
+        context,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    for _ in 0..<depth {
+      let (next_width, next_height) = av1_tx_split(tx_width, tx_height)
+      tx_width = next_width
+      tx_height = next_height
+    }
+  }
+  av1_motion_field_store_tx(
+    info.field,
+    block.mi_row,
+    block.mi_col,
+    block.width4,
+    block.height4,
+    tx_width,
+    tx_height,
+  )
+  Some((tx_width, tx_height, []))
+}
+
+///|
+/// tx_depth context (AV1 §9.3.4). An inter neighbour reports its own block size
+/// whether or not it was skipped, and an unavailable edge reports zero rather
+/// than the 64 the transform-tree contexts use.
+fn av1_tx_depth_ctx(
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+  max_width : Int,
+  max_height : Int,
+) -> Int {
+  let field = info.field
+  let above = if !block.avail_u {
+    0
+  } else {
+    let unit = (block.mi_row - 1) * field.cols + block.mi_col
+    if field.is_inter[unit] {
+      field.width4[unit] * 4
+    } else {
+      field.tx_width[unit]
+    }
+  }
+  let left = if !block.avail_l {
+    0
+  } else {
+    let unit = block.mi_row * field.cols + block.mi_col - 1
+    if field.is_inter[unit] {
+      field.height4[unit] * 4
+    } else {
+      field.tx_height[unit]
+    }
+  }
+  (if above >= max_width { 1 } else { 0 }) +
+    (if left >= max_height { 1 } else { 0 })
+}
+
+///|
+/// compute_prediction( ) for a single-reference block (AV1 §7.11.3.1). Each plane
+/// is interpolated from the reference named by the motion field at the plane's
+/// own sample grid, so a chroma block that is merged with its neighbour reads the
+/// neighbour's vector rather than its own.
+fn av1_inter_predict(
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+  tile_block : Av1SbBlock,
+) -> Bool {
+  let field = info.field
+  // Only the block that owns the chroma samples of a merged group predicts
+  // them; the other one has no chroma syntax at all (AV1 §5.11.17).
+  let plane_count = if av1_intra_has_chroma(state, tile_block) { 3 } else { 1 }
+  for plane in 0..<plane_count {
+    let sub_x = if plane == 0 { 0 } else { state.sub_x }
+    let sub_y = if plane == 0 { 0 } else { state.sub_y }
+    let (residual_w, residual_h) = av1_plane_residual_size(
+      block.block_width,
+      block.block_height,
+      plane,
+      sub_x,
+      sub_y,
+    )
+    let pred_w = block.block_width >> sub_x
+    let pred_h = block.block_height >> sub_y
+    let base_x = (block.mi_col >> sub_x) * 4
+    let base_y = (block.mi_row >> sub_y) * 4
+    let cand_row = (block.mi_row >> sub_y) << sub_y
+    let cand_col = (block.mi_col >> sub_x) << sub_x
+    let target = state.planes[plane]
+    let mut r = 0
+    let mut y = 0
+    while y < ((residual_h / 4) * 4) {
+      let mut c = 0
+      let mut x = 0
+      while x < ((residual_w / 4) * 4) {
+        let unit = ((cand_row + r) * field.cols + cand_col + c) * 2
+        if unit + 1 >= field.refs.length() {
+          return false
+        }
+        let name = field.refs[unit]
+        if name <= av1_intra_frame {
+          // An intra neighbour cannot be interpolated from; only the inter-intra
+          // blend reaches here, and the frame gate refuses that tool.
+          return false
+        }
+        let reference = match av1_inter_reference(info, name) {
+          Some(value) => value
+          None => return false
+        }
+        let request : Av1MotionRequest = {
+          reference,
+          frame_width: info.mi_cols * 4,
+          frame_height: info.mi_rows * 4,
+          plane,
+          x: base_x + x,
+          y: base_y + y,
+          width: pred_w,
+          height: pred_h,
+          mv_row: field.mv_rows[unit],
+          mv_col: field.mv_cols[unit],
+          filter_vertical: field.interp_v[(cand_row + r) * field.cols + cand_col + c],
+          filter_horizontal: field.interp_h[(cand_row + r) * field.cols + cand_col + c],
+          compound: false,
+        }
+        let prediction = av1_motion_compensate(request)
+        av1_motion_store(
+          target.pixels,
+          target.width,
+          prediction,
+          pred_w,
+          pred_h,
+          (base_x + x) - (info.tile_col_start >> sub_x) * 4,
+          (base_y + y) - (info.tile_row_start >> sub_y) * 4,
+          (1 << state.bit_depth) - 1,
+        )
+        c = c + 1
+        x = x + pred_w
+      }
+      r = r + 1
+      y = y + pred_h
+    }
+  }
+  true
+}
+
+///|
+/// The stored reference frame behind one reference name.
+fn av1_inter_reference(info : Av1InterInfo, name : Int) -> Av1RefFrame? {
+  if name < av1_last_frame || name >= info.refs.length() {
+    None
+  } else {
+    info.refs[name]
+  }
+}
+
+///|
+/// residual( ) for an inter block (AV1 §5.11.34). Prediction already filled the
+/// block, so every transform only adds its residual. Luma follows the transform
+/// tree the block recorded; chroma keeps a uniform raster inside each 64-pixel
+/// chunk, and both share the intra path's transform decoding.
+fn av1_inter_residual(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+  tile_block : Av1SbBlock,
+  luma_width : Int,
+  luma_height : Int,
+  roots : Array[Array[Av1TxNode]],
+) -> Bool {
+  let has_chroma = av1_intra_has_chroma(state, tile_block)
+  let plane_count = if has_chroma { 3 } else { 1 }
+  // Motion compensation, not intra prediction, fills an inter block, so the
+  // colour-from-luma state is explicitly off for the whole block.
+  av1_cfl_begin_block(state.cfl, tile_block, false)
+  let chunks_x = if block.block_width > 64 {
+    block.block_width / 64
+  } else {
+    1
+  }
+  let chunks_y = if block.block_height > 64 {
+    block.block_height / 64
+  } else {
+    1
+  }
+  let chunk_width = block.block_width / chunks_x
+  let chunk_height = block.block_height / chunks_y
+  for chunk_y in 0..<chunks_y {
+    for chunk_x in 0..<chunks_x {
+      let origin_x = tile_block.col + chunk_x * chunk_width
+      let origin_y = tile_block.row + chunk_y * chunk_height
+      let chunk = chunk_y * chunks_x + chunk_x
+      if roots.is_empty() {
+        if !av1_inter_residual_raster(
+            decoder,
+            state,
+            block,
+            0,
+            origin_x,
+            origin_y,
+            chunk_width,
+            chunk_height,
+            luma_width,
+            luma_height,
+          ) {
+          return false
+        }
+      } else {
+        if chunk >= roots.length() {
+          return false
+        }
+        for leaf in roots[chunk] {
+          if !av1_intra_transform(
+              decoder,
+              state,
+              0,
+              0,
+              leaf.col,
+              leaf.row,
+              leaf.width,
+              leaf.height,
+              chunk_width,
+              chunk_height,
+              block.skip,
+              inter=true,
+            ) {
+            return false
+          }
+        }
+      }
+      for plane in 1..<plane_count {
+        let sub_x = state.sub_x
+        let sub_y = state.sub_y
+        let (residual_w, residual_h) = av1_plane_residual_size(
+          chunk_width,
+          chunk_height,
+          plane,
+          sub_x,
+          sub_y,
+        )
+        let (tx_width, tx_height) = av1_chroma_tx_size(
+          residual_w,
+          residual_h,
+          state.base_q_idx == 0,
+        )
+        if !av1_inter_residual_raster(
+            decoder,
+            state,
+            block,
+            plane,
+            origin_x >> sub_x,
+            origin_y >> sub_y,
+            residual_w,
+            residual_h,
+            tx_width,
+            tx_height,
+          ) {
+          return false
+        }
+      }
+    }
+  }
+  true
+}
+
+///|
+/// Walk one plane's transform raster inside a residual chunk.
+fn av1_inter_residual_raster(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  block : Av1InterBlock,
+  plane : Int,
+  origin_x : Int,
+  origin_y : Int,
+  width : Int,
+  height : Int,
+  tx_width : Int,
+  tx_height : Int,
+) -> Bool {
+  let mut y = 0
+  while y < height {
+    let mut x = 0
+    while x < width {
+      if !av1_intra_transform(
+          decoder,
+          state,
+          plane,
+          0,
+          origin_x + x,
+          origin_y + y,
+          tx_width,
+          tx_height,
+          width,
+          height,
+          block.skip,
+          inter=true,
+        ) {
+        return false
+      }
+      x = x + tx_width
+    }
+    y = y + tx_height
+  }
+  true
+}
+
+///|
+/// intra_block_mode_info( ) for an intra block coded inside an inter frame
+/// (AV1 §5.11.27). The luma mode reads the size-group table rather than the
+/// neighbour modes an intra frame would use, and the transform size comes from
+/// the same read_block_tx_size the inter branch uses.
+fn av1_intra_in_inter_block(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  inter : Av1InterBlock,
+  block : Av1SbBlock,
+  block_index : Int,
+  has_chroma : Bool,
+) -> Bool {
+  let group = if block_index < av1_size_group.length() {
+    av1_size_group[block_index]
+  } else {
+    return false
+  }
+  if group >= info.cdfs.y_mode.length() {
+    return false
+  }
+  let y_mode = decoder.symbol(info.cdfs.y_mode[group])
+  if y_mode < 0 || y_mode > 12 {
+    return false
+  }
+  if !av1_intra_read_mode_angle(decoder, state, y_mode, block_index) {
+    return false
+  }
+  let mut uv_mode = AV1_INTRA_DC
+  if has_chroma {
+    let cfl_allowed = if state.base_q_idx == 0 {
+      block.width <= 8 && block.height <= 8
+    } else {
+      block.width <= 32 && block.height <= 32
+    }
+    let mode = decoder.symbol(
+      if cfl_allowed { state.uv_cfl[y_mode] } else { state.uv_no_cfl[y_mode] },
+    )
+    if mode == AV1_INTRA_CFL {
+      if !cfl_allowed || !av1_cfl_read_alphas(decoder, state.cfl) {
+        return false
+      }
+    } else if !av1_intra_read_mode_angle(
+        decoder,
+        state,
+        mode,
+        block_index,
+        plane=1,
+      ) {
+      return false
+    }
+    uv_mode = mode
+  }
+  if state.enable_filter_intra &&
+    y_mode == AV1_INTRA_DC &&
+    block.width <= 32 &&
+    block.height <= 32 {
+    match decoder.symbol(state.filter_intra[block_index]) {
+      0 => ()
+      1 => {
+        let mode = decoder.symbol(state.filter_intra_mode_cdf)
+        if mode < 0 || mode >= 5 {
+          return false
+        }
+        state.filter_intra_mode = mode
+      }
+      _ => return false
+    }
+  }
+  inter.y_mode = y_mode
+  let size = match av1_read_block_tx_size(decoder, state, info, inter) {
+    Some(value) => value
+    None => return false
+  }
+  let (tx_width, tx_height, _) = size
+  av1_intra_record_modes(state, block, y_mode, uv_mode, has_chroma, inter.skip)
+  if !av1_intra_residuals(
+      decoder,
+      state,
+      block,
+      y_mode,
+      uv_mode,
+      tx_width,
+      tx_height,
+      inter.skip,
+    ) {
+    return false
+  }
+  av1_tx_traversal_record_size(
+    state.tx_neighbors,
+    { row: block.row, col: block.col, width: block.width, height: block.height, },
+    tx_width,
+    tx_height,
+  )
+  true
+}
+
+///|
+/// Record the tile-local mode and skip grids a later block's contexts read.
+fn av1_intra_record_modes(
+  state : Av1IntraState,
+  block : Av1SbBlock,
+  y_mode : Int,
+  uv_mode : Int,
+  has_chroma : Bool,
+  skip : Int,
+) -> Unit {
+  let x4 = block.col / 4
+  let y4 = block.row / 4
+  for row in y4..<(y4 + block.height / 4) {
+    if row >= state.rows {
+      break
+    }
+    for col in x4..<(x4 + block.width / 4) {
+      if col >= state.cols {
+        break
+      }
+      state.skips[row * state.cols + col] = skip
+      state.y_modes[row * state.cols + col] = y_mode
+      if has_chroma {
+        state.uv_modes[row * state.cols + col] = uv_mode
+      }
+    }
+  }
+}
+
+///|
+/// decode_block( ) for an inter frame (AV1 §5.11.17). The leaf replaces the
+/// intra one entirely: skip may be implied by skip_mode, the block may be intra,
+/// and an inter block's samples come from motion compensation rather than from
+/// its own neighbourhood.
+fn av1_inter_tile_block(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1SbBlock,
+  partition : Av1SbPartition,
+) -> Bool {
+  state.prediction_partition = partition
+  state.y_angle_delta = 0
+  state.uv_angle_delta = 0
+  state.filter_intra_mode = -1
+  let block_index = match av1_intra_block_index(block.width, block.height) {
+    Some(value) => value
+    None => return false
+  }
+  let x4 = block.col / 4
+  let y4 = block.row / 4
+  let mi_row = info.tile_row_start + y4
+  let mi_col = info.tile_col_start + x4
+  let has_chroma = av1_intra_has_chroma(state, block)
+  let current = av1_inter_block(
+    mi_row,
+    mi_col,
+    block.width / 4,
+    block.height / 4,
+    block_index,
+    mi_row > info.tile_row_start,
+    mi_col > info.tile_col_start,
+  )
+  if !av1_read_skip_mode(decoder, info, current) {
+    return false
+  }
+  if !current.skip_mode {
+    let mut skip_context = 0
+    if y4 > 0 {
+      skip_context = skip_context + state.skips[(y4 - 1) * state.cols + x4]
+    }
+    if x4 > 0 {
+      skip_context = skip_context + state.skips[y4 * state.cols + x4 - 1]
+    }
+    let skip = decoder.symbol(state.skip_cdfs[skip_context])
+    if skip != 0 && skip != 1 {
+      return false
+    }
+    current.skip = skip
+  }
+  if !av1_intra_cdef_index(decoder, state, block, current.skip) {
+    return false
+  }
+  if !av1_read_is_inter(decoder, info, current) {
+    return false
+  }
+  if !current.is_inter {
+    return av1_intra_in_inter_block(
+      decoder,
+      state,
+      info,
+      current,
+      block,
+      block_index,
+      has_chroma,
+    )
+  }
+  if !av1_inter_block_motion(decoder, info, current) {
+    return false
+  }
+  // The specification writes the motion field before transform sizing and
+  // before prediction, so a block's own entries are already visible to both.
+  av1_motion_field_store(
+    info.field,
+    mi_row,
+    mi_col,
+    current.width4,
+    current.height4,
+    current.y_mode,
+    [ current.ref_frame, av1_none_frame ],
+    [ current.mv_row, 0 ],
+    [ current.mv_col, 0 ],
+    skip=current.skip,
+    skip_mode=(if current.skip_mode { 1 } else { 0 }),
+    interp=[ current.interp_vertical, current.interp_horizontal ],
+  )
+  av1_intra_record_modes(
+    state,
+    block,
+    current.y_mode,
+    AV1_INTRA_DC,
+    has_chroma,
+    current.skip,
+  )
+  let sized = match av1_read_block_tx_size(decoder, state, info, current) {
+    Some(value) => value
+    None => return false
+  }
+  let (tx_width, tx_height, roots) = sized
+  state.current = Some(current)
+  if !av1_inter_predict(state, info, current, block) {
+    return false
+  }
+  if !av1_inter_residual(
+      decoder,
+      state,
+      info,
+      current,
+      block,
+      tx_width,
+      tx_height,
+      roots,
+    ) {
+    return false
+  }
+  decoder.symbol_max_bits >= -14
+}
+
+///|
+/// Which inter frames this decoder can reconstruct. Every tool left out here is
+/// a second motion vector, a blend or a per-block parameter that the block stage
+/// cannot yet act on; refusing the frame keeps the bitstream honest instead of
+/// decoding a prefix of it.
+pub fn av1_inter_frame_supported(
+  header : Av1FrameHeaderInfo,
+  sequence : Av1SequenceInfo,
+) -> Bool {
+  if header.reference_select ||
+    header.is_motion_mode_switchable ||
+    header.allow_warped_motion ||
+    header.use_ref_frame_mvs ||
+    header.skip_mode_present ||
+    header.allow_intrabc ||
+    header.allow_screen_content_tools ||
+    header.coded_lossless {
+    return false
+  }
+  if sequence.enable_interintra_compound || sequence.enable_masked_compound {
+    return false
+  }
+  if !header.frame_is_intra && header.tile_payload.is_empty() {
+    return false
+  }
+  for index in 0..<header.gm_type.length() {
+    if header.gm_type[index] != av1_gm_identity {
+      return false
+    }
+  }
+  true
+}

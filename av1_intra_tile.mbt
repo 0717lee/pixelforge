@@ -84,6 +84,15 @@ priv struct Av1IntraState {
   tx_mode_select : Bool
   tx_depth : Av1TxDepthState
   tx_neighbors : Av1TxTraversalState
+  /// Variable-transform split rows, used only when an inter block codes a
+  /// rectangular transform tree.
+  vartx : Av1VarTxCdfState
+  /// Inter-frame block state, or None for an intra frame whose leaf reads the
+  /// intra syntax directly.
+  inter : Av1InterInfo?
+  /// The inter block whose transforms are being reconstructed; a chroma
+  /// transform reads its origin to find the luma type it inherits.
+  mut current : Av1InterBlock?
   restoration_units : Array[Av1RestorationUnitRecord]
 }
 
@@ -111,6 +120,7 @@ fn av1_intra_state(
   },
   sub_x? : Int = 1,
   sub_y? : Int = 1,
+  inter? : Av1InterInfo? = None,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -175,6 +185,9 @@ fn av1_intra_state(
     tx_mode_select,
     tx_depth: av1_tx_depth_state(),
     tx_neighbors: av1_tx_traversal_state(width, height),
+    vartx: av1_vartx_cdf_state(),
+    inter,
+    current: None,
     restoration_units: [],
   }
 }
@@ -308,6 +321,7 @@ fn av1_intra_transform(
   block_width : Int,
   block_height : Int,
   skip : Int,
+  inter? : Bool = false,
 ) -> Bool {
   let plane = state.planes[plane_index]
   if x >= plane.width || y >= plane.height {
@@ -375,8 +389,42 @@ fn av1_intra_transform(
   let mut residual : Array[Int] = []
   if all_zero == 0 {
     let tx_type = if plane_index == 0 {
-      match av1_intra_tx_type(decoder, state, tx_width, tx_height, mode) {
-        Some(value) => value
+      if inter {
+        match state.inter {
+          Some(info) => av1_inter_luma_tx_type(
+            decoder,
+            state,
+            info,
+            tx_width,
+            tx_height,
+            x4,
+            y4,
+          )
+          None => return false
+        }
+      } else {
+        match av1_intra_tx_type(decoder, state, tx_width, tx_height, mode) {
+          Some(value) => value
+          None => return false
+        }
+      }
+    } else if inter {
+      match state.current {
+        Some(current) => {
+          let info = match state.inter {
+            Some(value) => value
+            None => return false
+          }
+          av1_inter_chroma_tx_type(
+            state,
+            info,
+            current,
+            tx_width,
+            tx_height,
+            x,
+            y,
+          )
+        }
         None => return false
       }
     } else if state.base_q_idx == 0 || tx_width >= 32 || tx_height >= 32 {
@@ -453,6 +501,20 @@ fn av1_intra_transform(
     }
   } else if all_zero != 1 {
     return false
+  } else if inter && plane_index == 0 {
+    // An all-zero luma transform still records DCT_DCT, because the block's
+    // chroma transforms inherit it (AV1 §5.11.39).
+    match state.inter {
+      Some(info) => av1_inter_record_tx_types(
+        info.field,
+        x4,
+        y4,
+        tx_width,
+        tx_height,
+        Av1TxDctDct,
+      )
+      None => ()
+    }
   }
   if decoder.symbol_max_bits < -14 {
     return false
@@ -464,7 +526,17 @@ fn av1_intra_transform(
   } else {
     state.palette.v_colors
   }
-  let prediction = if !colors.is_empty() {
+  let prediction = if inter {
+    // An inter block's prediction is already in the plane: motion compensation
+    // wrote it before the residual, and reconstruct only adds and clips.
+    Array::makei(tx_width * tx_height, i => {
+      let row = y + i / tx_width
+      let col = x + i % tx_width
+      plane.pixels[(if row < plane.height { row } else { plane.height - 1 }) *
+        plane.width +
+        (if col < plane.width { col } else { plane.width - 1 })]
+    })
+  } else if !colors.is_empty() {
     let block = match state.prediction_block {
       Some(value) => value
       None => return false
@@ -836,6 +908,7 @@ fn av1_intra_residuals(
   luma_tx_width : Int,
   luma_tx_height : Int,
   skip : Int,
+  inter? : Bool = false,
 ) -> Bool {
   state.prediction_block = Some(block)
   let has_chroma = av1_intra_has_chroma(state, block)
@@ -930,6 +1003,7 @@ fn av1_intra_residuals(
                 width,
                 height,
                 skip,
+                inter=inter,
               ) {
               return false
             }
@@ -1011,6 +1085,19 @@ fn av1_intra_palette_maps(
 
 ///|
 fn av1_intra_block(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  block : Av1SbBlock,
+  partition? : Av1SbPartition = Av1SbPartitionNone,
+) -> Bool {
+  match state.inter {
+    Some(info) => av1_inter_tile_block(decoder, state, info, block, partition)
+    None => av1_intra_only_block(decoder, state, block, partition~)
+  }
+}
+
+///|
+fn av1_intra_only_block(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
   block : Av1SbBlock,
@@ -1156,21 +1243,7 @@ fn av1_intra_block(
     }
   }
   let (luma_tx_width, luma_tx_height) = selected
-  for row in y4..<(y4 + block.height / 4) {
-    if row >= state.rows {
-      break
-    }
-    for col in x4..<(x4 + block.width / 4) {
-      if col >= state.cols {
-        break
-      }
-      state.skips[row * state.cols + col] = skip
-      state.y_modes[row * state.cols + col] = y_mode
-      if has_chroma {
-        state.uv_modes[row * state.cols + col] = uv_mode
-      }
-    }
-  }
+  av1_intra_record_modes(state, block, y_mode, uv_mode, has_chroma, skip)
   if !av1_intra_residuals(
       decoder, state, block, y_mode, uv_mode, luma_tx_width, luma_tx_height, skip,
     ) {
@@ -1228,6 +1301,7 @@ fn av1_decode_intra_tile_state(
   restoration_layout? : Av1RestorationLayout? = None,
   tile_origin_row_mi? : Int = 0,
   tile_origin_col_mi? : Int = 0,
+  inter? : Av1InterInfo? = None,
   quant_deltas? : Av1QuantDeltas = {
     y_dc: 0,
     u_dc: 0,
@@ -1275,6 +1349,7 @@ fn av1_decode_intra_tile_state(
     quant_deltas~,
     sub_x~,
     sub_y~,
+    inter~,
   )
   let neighbors = match
     av1_partition_neighbor_state(

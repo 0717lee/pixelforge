@@ -9,6 +9,7 @@
 // _refs/go-av1/cdf/tables_interintra_gen.go SHA-256: ac9a20591303c2e6237a279b65cb042b9070e44526dfea34e5c3cd17c05c7208
 // _refs/go-av1/cdf/tables_intertx_gen.go SHA-256: cd91a79c2bc041846c69cae13b6b45454ec5c7302c6a8d775b5715bc040ab3ac
 // _refs/go-av1/cdf/tables_wedge_gen.go SHA-256: a4af33027848e4cf41207184d580bd89e2bd5ce8ef5e800bd48facd4fe81bc1b
+// _refs/go-av1/cdf/tables_ymode_gen.go SHA-256: 63844b587ccd9f033c419ca1abe3f5363acdf95891a5aaa5707cfd2774de985d
 //
 // BSD 2-Clause License
 //
@@ -1158,6 +1159,54 @@ fn av1_wedge_index_cdfs() -> Array[Array[Int]] {
     [
       2048, 4096, 6144, 8192, 10240, 12288, 14336, 16384, 18432, 20480, 22528, 24576,
       26624, 28672, 30720, 32768, 0,
+    ],
+  ]
+}
+
+///|
+/// Default_Y_Mode_Cdf: [size group 0..3][10 luma prediction modes]. An intra block
+/// inside an inter frame selects its row by Size_Group[ MiSize ] instead of using
+/// the above and left modes of an intra frame.
+/// Go source: DefaultYModeCdf in tables_ymode_gen.go, shape 4x14.
+let av1_y_mode : Array[Array[Int]] = [
+  [
+    22801, 23489, 24293, 24756, 25601, 26123, 26606, 27418, 27945, 29228, 29685,
+    30349, 32768, 0,
+  ],
+  [
+    18673, 19845, 22631, 23318, 23950, 24649, 25527, 27364, 28152, 29701, 29984,
+    30852, 32768, 0,
+  ],
+  [
+    19770, 20979, 23396, 23939, 24241, 24654, 25136, 27073, 27830, 29360, 29730,
+    30659, 32768, 0,
+  ],
+  [
+    20155, 21301, 22838, 23178, 23261, 23533, 23703, 24804, 25352, 26575, 27016,
+    28049, 32768, 0,
+  ],
+]
+
+///|
+/// Fresh DefaultYModeCdf rows for one tile, so that probability adaptation cannot
+/// corrupt these defaults. Retain the result for the tile's lifetime.
+fn av1_y_mode_cdfs() -> Array[Array[Int]] {
+  [
+    [
+      22801, 23489, 24293, 24756, 25601, 26123, 26606, 27418, 27945, 29228, 29685,
+      30349, 32768, 0,
+    ],
+    [
+      18673, 19845, 22631, 23318, 23950, 24649, 25527, 27364, 28152, 29701, 29984,
+      30852, 32768, 0,
+    ],
+    [
+      19770, 20979, 23396, 23939, 24241, 24654, 25136, 27073, 27830, 29360, 29730,
+      30659, 32768, 0,
+    ],
+    [
+      20155, 21301, 22838, 23178, 23261, 23533, 23703, 24804, 25352, 26575, 27016,
+      28049, 32768, 0,
     ],
   ]
 }
