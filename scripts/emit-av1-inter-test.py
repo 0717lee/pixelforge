@@ -9,6 +9,9 @@ the MoonBit assertions contain their own %@ / %d format specifiers.
 """
 
 import os
+import subprocess
+
+MOONFMT = os.path.join(os.path.expanduser("~"), ".moon", "bin", "moonfmt")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fixtures", "av1-inter")
@@ -199,6 +202,32 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
 """
 
 
+def obu_chain(data):
+    """Return (type, header_start, payload_end) for each OBU in a temporal unit."""
+    out = []
+    i = 0
+    while i < len(data):
+        header = data[i]
+        kind = (header >> 3) & 0x0F
+        has_size = (header >> 1) & 1
+        j = i + 1
+        if (header >> 2) & 1:
+            j += 1
+        size = 0
+        if has_size:
+            shift = 0
+            while True:
+                byte = data[j]
+                size |= (byte & 0x7F) << shift
+                j += 1
+                if not byte & 0x80:
+                    break
+                shift += 7
+        out.append((kind, i, j + size))
+        i = j + size
+    return out
+
+
 def byte_literal(data):
     rows = []
     for start in range(0, len(data), 12):
@@ -223,6 +252,77 @@ def rle(samples):
         out.append("%d, %d," % (value, run))
         i += run
     return "\n  ".join(out)
+
+
+def sequence_tokens(data):
+    """Byte offsets that split the first fixture into per-temporal-unit chunks."""
+    chain = obu_chain(data)
+    types = [entry[0] for entry in chain]
+    frames = [i for i, kind in enumerate(chain) if kind[0] == 6]
+    seqs = [i for i, kind in enumerate(chain) if kind[0] == 1]
+    assert types[0] == 2 and len(frames) == 2 and len(seqs) == 1, chain
+    first = chain[frames[0]]
+    return {
+        "@UNIT1_END@": str(chain[frames[0] + 1][2] if len(chain) > frames[0] + 1 else len(data)),
+        "@SEQ_START@": str(chain[seqs[0]][1]),
+        "@FRAME_START@": str(first[1]),
+        "@FRAME_END@": str(first[2]),
+        "@TD_START@": str(chain[1][1]) if types[1] == 2 else "0",
+        "@TD_END@": str(chain[1][2]) if types[1] == 2 else "0",
+        "@LEN@": str(len(data)),
+    }
+
+
+SEQUENCE_TEST = r"""
+///|
+/// AVIF image sequences only have to carry the sequence header in the first
+/// item, so a later temporal unit that omits it must still decode. These two
+/// units are the same key frame, once with the header and once without.
+test "video decoder latches the sequence header across temporal units" {
+  let whole = general_inter_64x64_obu
+  let with_header = av1_inter_slice_bytes(whole, 0, @UNIT1_END@)
+  let bare = av1_inter_concat(
+    av1_inter_slice_bytes(whole, @TD_START@, @TD_END@),
+    av1_inter_concat(
+      av1_inter_slice_bytes(whole, @FRAME_START@, @FRAME_END@),
+      [],
+    ),
+  )
+  let decoder = av1_video_decoder()
+  let first = match av1_video_decode_frame(decoder, with_header) {
+    Some(value) => value
+    None => fail("first temporal unit did not decode")
+  }
+  assert_eq(decoder.sequence is Some(_), true)
+  // Cold decoder, header-less unit: nothing can be decoded without a sequence.
+  assert_eq(av1_video_decode_frame(av1_video_decoder(), bare) is None, true)
+  let second = match av1_video_decode_frame(decoder, bare) {
+    Some(value) => value
+    None => fail("header-less temporal unit did not reuse the cached sequence")
+  }
+  assert_eq(second.get_pixel(0, 0), first.get_pixel(0, 0))
+  assert_eq(second.get_pixel(31, 17), first.get_pixel(31, 17))
+  assert_eq(second.width, first.width)
+}
+
+///|
+fn av1_inter_slice_bytes(
+  source : Array[Byte],
+  start : Int,
+  end : Int,
+) -> Array[Byte] {
+  Array::makei(end - start, i => source[start + i])
+}
+
+///|
+fn av1_inter_concat(left : Array[Byte], right : Array[Byte]) -> Array[Byte] {
+  let out = Array::copy(left)
+  for byte in right {
+    out.push(byte)
+  }
+  out
+}
+"""
 
 
 def main():
@@ -267,6 +367,13 @@ def main():
         ]
         assert not leftover, leftover
         parts.append(body)
+    body = SEQUENCE_TEST
+    for token, value in sequence_tokens(
+        open(os.path.join(FIX, NAMES[0] + ".obu"), "rb").read()
+    ).items():
+        body = body.replace(token, value)
+    assert "@" not in body, body
+    parts.append(body)
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("".join(parts))
     print("wrote", OUT, os.path.getsize(OUT), "bytes")

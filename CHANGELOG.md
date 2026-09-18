@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- AVIF image sequences no longer require every item to carry its own sequence
+  header. `av1_video_decode.mbt` adds a stateful decoder that latches the parsed
+  sequence and owns one `Av1FrameMap` across items, which is also where an inter
+  frame will find the references it predicts from; `avif_decode_animation_frames`
+  now drives that object instead of decoding each sample independently. AVIF
+  allows the header in the first item only, so a conforming sequence whose later
+  items omitted it previously decoded to nothing. A new test re-wraps the key
+  frame of the general fixture as a header-less temporal unit and asserts it
+  decodes to the same picture only because the sequence was latched.
+  1123/1123.
+
 - Started Phase D (general frame syntax) with the inter-frame foundation. The
   sequence parser now reads the whole general `sequence_header_obu` instead of
   rejecting anything that is not a reduced still picture: operating points with

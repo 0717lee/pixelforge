@@ -12048,3 +12048,52 @@ test "inter_minimal_64x64: general frame headers parse and the key frame matches
     assert_eq(av1_frame_map_show(map, slot) is None, false)
   }
 }
+
+///|
+/// AVIF image sequences only have to carry the sequence header in the first
+/// item, so a later temporal unit that omits it must still decode. These two
+/// units are the same key frame, once with the header and once without.
+test "video decoder latches the sequence header across temporal units" {
+  let whole = general_inter_64x64_obu
+  let with_header = av1_inter_slice_bytes(whole, 0, 72)
+  let bare = av1_inter_concat(
+    av1_inter_slice_bytes(whole, 0, 0),
+    av1_inter_concat(
+      av1_inter_slice_bytes(whole, 14, 70),
+      [],
+    ),
+  )
+  let decoder = av1_video_decoder()
+  let first = match av1_video_decode_frame(decoder, with_header) {
+    Some(value) => value
+    None => fail("first temporal unit did not decode")
+  }
+  assert_eq(decoder.sequence is Some(_), true)
+  // Cold decoder, header-less unit: nothing can be decoded without a sequence.
+  assert_eq(av1_video_decode_frame(av1_video_decoder(), bare) is None, true)
+  let second = match av1_video_decode_frame(decoder, bare) {
+    Some(value) => value
+    None => fail("header-less temporal unit did not reuse the cached sequence")
+  }
+  assert_eq(second.get_pixel(0, 0), first.get_pixel(0, 0))
+  assert_eq(second.get_pixel(31, 17), first.get_pixel(31, 17))
+  assert_eq(second.width, first.width)
+}
+
+///|
+fn av1_inter_slice_bytes(
+  source : Array[Byte],
+  start : Int,
+  end : Int,
+) -> Array[Byte] {
+  Array::makei(end - start, i => source[start + i])
+}
+
+///|
+fn av1_inter_concat(left : Array[Byte], right : Array[Byte]) -> Array[Byte] {
+  let out = Array::copy(left)
+  for byte in right {
+    out.push(byte)
+  }
+  out
+}

@@ -626,10 +626,16 @@ fn av1_decode_frame_planes(
   data : Array[Byte],
   allow_monochrome? : Bool = false,
   map? : Av1FrameMap,
+  sequence? : Av1SequenceInfo,
 ) -> Av1FramePlanes? {
-  let seq = match av1_sequence_info(data) {
+  // An AVIF image sequence carries the sequence header in the first item only,
+  // so a later temporal unit may legitimately have none of its own.
+  let seq = match sequence {
     Some(value) => value
-    None => return None
+    None => match av1_sequence_info(data) {
+      Some(value) => value
+      None => return None
+    }
   }
   if !seq.monochrome &&
     seq.matrix_coefficients != 1 &&

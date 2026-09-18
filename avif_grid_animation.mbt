@@ -70,6 +70,9 @@ pub fn avif_decode_animation_frames(
     return None
   }
   let frames : Array[AvifAnimationPixelFrame] = []
+  // One stateful decoder for the whole sequence: later items may omit the
+  // sequence header, and every item may predict from an earlier frame.
+  let video = av1_video_decoder()
   let mut expected_timestamp = 0
   for i in 0..<samples.length() {
     let timing = descriptor.frames[i]
@@ -79,7 +82,11 @@ pub fn avif_decode_animation_frames(
       timing.timestamp != expected_timestamp || timing.duration <= 0 {
       return None
     }
-    let image = match av1_decode(samples[i]) {
+    let image = match av1_video_decode_frame(
+      video,
+      samples[i],
+      allow_monochrome=true,
+    ) {
       Some(value) => value
       None => return None
     }

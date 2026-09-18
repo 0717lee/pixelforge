@@ -140,6 +140,10 @@ pub fn av1_tx_traversal_record(Av1TxTraversalState, Av1TxNode) -> Unit
 
 pub fn av1_tx_traversal_state(Int, Int) -> Av1TxTraversalState
 
+pub fn av1_video_decode_frame(Av1VideoDecoder, Array[Byte], allow_monochrome? : Bool) -> Image?
+
+pub fn av1_video_decoder() -> Av1VideoDecoder
+
 pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
 pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Image?
@@ -701,6 +705,11 @@ pub(all) enum Av1TxType {
   Av1TxHorizontalAdst
   Av1TxVerticalFlipadst
   Av1TxHorizontalFlipadst
+}
+
+pub(all) struct Av1VideoDecoder {
+  mut sequence : Av1SequenceInfo?
+  map : Av1FrameMap
 }
 
 pub struct AvifAlphaExtent {
