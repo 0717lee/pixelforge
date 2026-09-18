@@ -137,6 +137,9 @@ pub fn av1_motion_field_store(
 /// keeps the derivation independent of the rest of the frame frame.
 pub(all) struct Av1MvFrame {
   allow_high_precision_mv : Bool
+  /// Temporal motion-vector projection is a separate stage; a frame that asks
+  /// for it is refused rather than derived from an incomplete candidate list.
+  use_ref_frame_mvs : Bool
   force_integer_mv : Int
   gm_type : Array[Int]
   gm_params : Array[Array[Int]]
@@ -144,10 +147,11 @@ pub(all) struct Av1MvFrame {
 }
 
 ///|
-/// Project a parsed frame frame onto what motion derivation needs.
+/// Project a parsed frame header onto what motion derivation needs.
 pub fn av1_mv_frame_of(hf : Av1FrameHeaderInfo) -> Av1MvFrame {
   {
     allow_high_precision_mv: hf.allow_high_precision_mv,
+    use_ref_frame_mvs: hf.use_ref_frame_mvs,
     force_integer_mv: hf.force_integer_mv,
     gm_type: hf.gm_type,
     gm_params: hf.gm_params,
@@ -588,7 +592,7 @@ fn av1_extra_search(
   block : Av1MvBlock,
   frame : Av1MvFrame,
   is_compound : Bool,
-) -> Unit {
+) -> Bool? {
   let mut w4 = block.width4
   if w4 > 16 {
     w4 = 16
@@ -630,8 +634,12 @@ fn av1_extra_search(
         stack.global_cols[0],
       )
     }
-    return
+    return Some(true)
   }
+  // The compound fallback merges the reference-identical and
+  // reference-different candidate sets (§7.10.2.12). Until that lands, a
+  // compound block that needs it is refused rather than silently under-filled.
+  None
 }
 
 ///|
@@ -783,7 +791,7 @@ pub fn av1_find_mv_stack(
   block : Av1MvBlock,
   frame : Av1MvFrame,
   is_compound : Bool,
-) -> Av1MvStack {
+) -> Av1MvStack? {
   let stack = av1_mv_stack_new()
   let bw4 = block.width4
   let bh4 = block.height4
@@ -849,8 +857,11 @@ pub fn av1_find_mv_stack(
   av1_sort_mv_stack(stack, 0, num_nearest, is_compound)
   av1_sort_mv_stack(stack, num_nearest, stack.count, is_compound)
   if stack.count < 2 {
-    av1_extra_search(field, stack, block, frame, is_compound)
+    match av1_extra_search(field, stack, block, frame, is_compound) {
+      None => return None
+      Some(_) => ()
+    }
   }
   av1_stack_contexts(field, stack, block, is_compound, num_new)
-  stack
+  Some(stack)
 }

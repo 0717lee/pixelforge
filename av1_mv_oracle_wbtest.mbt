@@ -40,6 +40,7 @@ fn av1_mv_test_frame(
 ) -> Av1MvFrame {
   {
     allow_high_precision_mv,
+    use_ref_frame_mvs: false,
     force_integer_mv,
     gm_type: Array::make(av1_total_refs_per_frame, av1_gm_identity),
     gm_params: Array::make(av1_total_refs_per_frame, av1_identity_gm_params()),
@@ -75,7 +76,7 @@ test "mv stack geom2x2_at2_2_n1" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [-16, 0, -17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [36, 0, 37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -123,7 +124,7 @@ test "mv stack geom2x2_at0_0_n2" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -174,7 +175,7 @@ test "mv stack geom2x2_at4_4_n3" {
     tile_col_start: 0,
     tile_col_end: 6,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [36, 0, -32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [31, 0, -17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -223,7 +224,7 @@ test "mv stack geom2x2_at1_3_n4" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 3)
   assert_eq(stack.mv_rows, [-26, 0, -6, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [16, 0, 16, 0, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -275,7 +276,7 @@ test "mv stack geom4x4_at2_2_n5" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [-32, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-6, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -318,7 +319,7 @@ test "mv stack geom4x4_at0_0_n6" {
     tile_col_start: 0,
     tile_col_end: 8,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -373,7 +374,7 @@ test "mv stack geom4x4_at4_4_n7" {
     block,
     av1_mv_test_frame(false, 1),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -428,7 +429,7 @@ test "mv stack geom4x4_at1_4_n8" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [-14, 0, -12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-6, 0, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -470,7 +471,7 @@ test "mv stack geom1x4_at2_2_n9" {
     tile_col_start: 0,
     tile_col_end: 5,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -520,7 +521,7 @@ test "mv stack geom1x4_at0_0_n10" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -567,7 +568,7 @@ test "mv stack geom1x4_at4_4_n11" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -610,7 +611,7 @@ test "mv stack geom1x4_at1_2_n12" {
     tile_col_start: 0,
     tile_col_end: 5,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [3, 0, -31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [12, 0, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -659,7 +660,7 @@ test "mv stack geom4x1_at2_2_n13" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -709,7 +710,7 @@ test "mv stack geom4x1_at0_0_n14" {
     block,
     av1_mv_test_frame(false, 1),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -754,7 +755,7 @@ test "mv stack geom4x1_at4_4_n15" {
     tile_col_start: 0,
     tile_col_end: 8,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [13, 0, -28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [14, 0, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -799,7 +800,7 @@ test "mv stack geom4x1_at1_4_n16" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -850,7 +851,7 @@ test "mv stack geom8x2_at2_2_n17" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -907,7 +908,7 @@ test "mv stack geom8x2_at0_0_n18" {
     tile_col_start: 0,
     tile_col_end: 12,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -959,7 +960,7 @@ test "mv stack geom8x2_at4_4_n19" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 3)
   assert_eq(stack.mv_rows, [6, 0, 34, 0, -28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-36, 0, -18, 0, -4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1019,7 +1020,7 @@ test "mv stack geom8x2_at1_6_n20" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 3)
   assert_eq(stack.mv_rows, [10, 0, -12, 0, -16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [12, 0, 36, 0, -16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1064,7 +1065,7 @@ test "mv stack geom2x8_at2_2_n21" {
     tile_col_start: 0,
     tile_col_end: 6,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 1), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 1), false).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1117,7 +1118,7 @@ test "mv stack geom2x8_at0_0_n22" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1172,7 +1173,7 @@ test "mv stack geom2x8_at4_4_n23" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1220,7 +1221,7 @@ test "mv stack geom2x8_at1_3_n24" {
     tile_col_start: 0,
     tile_col_end: 6,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1273,7 +1274,7 @@ test "mv stack geom16x4_at2_2_n25" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [-1, 0, -38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-11, 0, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1328,7 +1329,7 @@ test "mv stack geom16x4_at0_0_n26" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1381,7 +1382,7 @@ test "mv stack geom16x4_at4_4_n27" {
     tile_col_start: 0,
     tile_col_end: 20,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 3)
   assert_eq(stack.mv_rows, [-4, 0, 20, 0, -15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [11, 0, 17, 0, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1458,7 +1459,7 @@ test "mv stack geom16x4_at1_10_n28" {
     block,
     av1_mv_test_frame(false, 1),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 3)
   assert_eq(stack.mv_rows, [32, 0, 26, 0, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [24, 0, -23, 0, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1520,7 +1521,7 @@ test "mv stack geom4x16_at2_2_n29" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 5)
   assert_eq(stack.mv_rows, [
     -40, 0, 38, 0, 36, 0, -16, 0, 20, 0, 0, 0, 0, 0, 0, 0,
@@ -1581,7 +1582,7 @@ test "mv stack geom4x16_at0_0_n30" {
     tile_col_start: 0,
     tile_col_end: 8,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1651,7 +1652,7 @@ test "mv stack geom4x16_at4_4_n31" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 4)
   assert_eq(stack.mv_rows, [4, 0, 28, 0, 36, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-6, 0, 20, 0, -4, 0, -20, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1706,7 +1707,7 @@ test "mv stack geom4x16_at1_4_n32" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 2)
   assert_eq(stack.mv_rows, [-26, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-35, 0, -39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1746,7 +1747,7 @@ test "mv stack geom1x1_at2_2_n33" {
     tile_col_start: 0,
     tile_col_end: 5,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1790,7 +1791,7 @@ test "mv stack geom1x1_at0_0_n34" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1839,7 +1840,7 @@ test "mv stack geom1x1_at4_4_n35" {
     block,
     av1_mv_test_frame(false, 1),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1882,7 +1883,7 @@ test "mv stack geom1x1_at1_2_n36" {
     tile_col_start: 0,
     tile_col_end: 5,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1936,7 +1937,7 @@ test "mv stack geom2x4_at2_2_n37" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [-4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -1985,7 +1986,7 @@ test "mv stack geom2x4_at0_0_n38" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -2032,7 +2033,7 @@ test "mv stack geom2x4_at4_4_n39" {
     tile_col_start: 0,
     tile_col_end: 6,
   }
-  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false)
+  let stack = av1_find_mv_stack(field, block, av1_mv_test_frame(true, 0), false).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -2084,7 +2085,7 @@ test "mv stack geom2x4_at1_3_n40" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 1)
   assert_eq(stack.mv_rows, [40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [-16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -2156,7 +2157,7 @@ test "mv stack tile_bounded_41" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -2196,7 +2197,7 @@ test "mv stack empty_42" {
     block,
     av1_mv_test_frame(false, 0),
     false,
-  )
+  ).unwrap()
   assert_eq(stack.count, 0)
   assert_eq(stack.mv_rows, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert_eq(stack.mv_cols, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])

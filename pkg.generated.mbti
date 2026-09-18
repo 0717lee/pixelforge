@@ -64,7 +64,7 @@ pub fn av1_decode_tx_partition_tree_payload(Array[Byte], Av1TxNode, Int, disable
 
 pub fn av1_extract_tile_payloads(Array[Byte], Int, Int, Int) -> Array[Av1TilePayload]?
 
-pub fn av1_find_mv_stack(Av1MotionField, Av1MvBlock, Av1MvFrame, Bool) -> Av1MvStack
+pub fn av1_find_mv_stack(Av1MotionField, Av1MvBlock, Av1MvFrame, Bool) -> Av1MvStack?
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
@@ -451,6 +451,7 @@ pub(all) struct Av1MvBlock {
 
 pub(all) struct Av1MvFrame {
   allow_high_precision_mv : Bool
+  use_ref_frame_mvs : Bool
   force_integer_mv : Int
   gm_type : Array[Int]
   gm_params : Array[Array[Int]]
