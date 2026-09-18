@@ -26,10 +26,15 @@ priv struct Av1CflState {
   mut ac_width : Int
   mut ac_height : Int
   mut ac_ready : Bool
+  /// Chroma subsampling shifts and the resulting chroma buffer stride.
+  sub_x : Int
+  sub_y : Int
+  stride : Int
 }
 
 ///|
-fn av1_cfl_state() -> Av1CflState {
+fn av1_cfl_state(sub_x? : Int = 1, sub_y? : Int = 1) -> Av1CflState {
+  let stride = 64 >> sub_x
   {
     sign: [1418, 2123, 13340, 18405, 26972, 28343, 32294, 32768, 0],
     alpha: [
@@ -63,13 +68,16 @@ fn av1_cfl_state() -> Av1CflState {
     store_y: false,
     base_x: 0,
     base_y: 0,
-    recon_q3: Array::make(32 * 32, 0),
-    ac_q3: Array::make(32 * 32, 0),
+    recon_q3: Array::make(stride * (64 >> sub_y), 0),
+    ac_q3: Array::make(stride * (64 >> sub_y), 0),
     buf_width: 0,
     buf_height: 0,
     ac_width: 0,
     ac_height: 0,
     ac_ready: false,
+    sub_x,
+    sub_y,
+    stride,
   }
 }
 
@@ -106,15 +114,26 @@ fn av1_cfl_begin_block(
   store_y : Bool,
 ) -> Unit {
   cfl.store_y = store_y
-  let sub8 = block.width == 4 || block.height == 4
-  cfl.base_x = if sub8 { block.col / 8 * 8 } else { block.col }
-  cfl.base_y = if sub8 { block.row / 8 * 8 } else { block.row }
+  // A subsampled axis merges sub-eight-pixel luma blocks into their eight-pixel
+  // group, so the shared buffer is rooted there; an unsampled axis is 1:1.
+  cfl.base_x = if cfl.sub_x == 1 && block.width < 8 {
+    block.col / 8 * 8
+  } else {
+    block.col
+  }
+  cfl.base_y = if cfl.sub_y == 1 && block.height < 8 {
+    block.row / 8 * 8
+  } else {
+    block.row
+  }
 }
 
 ///|
 /// Store the complete clipped reconstruction of one luma TX, including its
-/// samples beyond the frame MI rectangle. 4:2:0 retains fractional precision
-/// as Q3 = 2 * (Y00 + Y01 + Y10 + Y11), without an intermediate average.
+/// samples beyond the frame MI rectangle. The downsampled luma keeps three
+/// fractional bits (Q3): the subsampling window sum is scaled by 8 / n, so
+/// 4:2:0 stores 2 * (Y00 + Y01 + Y10 + Y11), 4:2:2 and 4:4:0 store four
+/// times the pair sum, and 4:4:4 stores eight times the single sample.
 fn av1_cfl_store_tx(
   cfl : Av1CflState,
   x : Int,
@@ -123,10 +142,10 @@ fn av1_cfl_store_tx(
   height : Int,
   reconstruction : Array[Int],
 ) -> Bool {
-  let col = (x - cfl.base_x) / 2
-  let row = (y - cfl.base_y) / 2
-  let store_width = width / 2
-  let store_height = height / 2
+  let col = (x - cfl.base_x) >> cfl.sub_x
+  let row = (y - cfl.base_y) >> cfl.sub_y
+  let store_width = width >> cfl.sub_x
+  let store_height = height >> cfl.sub_y
   if x < cfl.base_x ||
     y < cfl.base_y ||
     width < 4 ||
@@ -136,8 +155,8 @@ fn av1_cfl_store_tx(
     width % 2 != 0 ||
     height % 2 != 0 ||
     reconstruction.length() != width * height ||
-    col + store_width > 32 ||
-    row + store_height > 32 {
+    col + store_width > cfl.stride ||
+    row + store_height > 64 >> cfl.sub_y {
     return false
   }
   if col == 0 && row == 0 {
@@ -152,16 +171,19 @@ fn av1_cfl_store_tx(
     }
   }
   cfl.ac_ready = false
+  // 8 / (2^sub_x * 2^sub_y) keeps the mean in Q3 for every subsampling.
+  let precision = 8 >> (cfl.sub_x + cfl.sub_y)
   for j in 0..<store_height {
     for i in 0..<store_width {
-      let offset = 2 * j * width + 2 * i
-      cfl.recon_q3[(row + j) * 32 + col + i] = (
-          reconstruction[offset] +
-          reconstruction[offset + 1] +
-          reconstruction[offset + width] +
-          reconstruction[offset + width + 1]
-        ) <<
-        1
+      let luma_x = i << cfl.sub_x
+      let luma_y = j << cfl.sub_y
+      let mut sum = 0
+      for dy in 0..<(1 << cfl.sub_y) {
+        for dx in 0..<(1 << cfl.sub_x) {
+          sum = sum + reconstruction[(luma_y + dy) * width + luma_x + dx]
+        }
+      }
+      cfl.recon_q3[(row + j) * cfl.stride + col + i] = sum * precision
     }
   }
   true
@@ -173,8 +195,8 @@ fn av1_cfl_store_tx(
 fn av1_cfl_prepare(cfl : Av1CflState, width : Int, height : Int) -> Bool {
   if width < 4 ||
     height < 4 ||
-    width > 32 ||
-    height > 32 ||
+    width > 64 >> cfl.sub_x ||
+    height > 64 >> cfl.sub_y ||
     (width & (width - 1)) != 0 ||
     (height & (height - 1)) != 0 ||
     cfl.buf_width <= 0 ||
@@ -186,9 +208,9 @@ fn av1_cfl_prepare(cfl : Av1CflState, width : Int, height : Int) -> Bool {
   }
   if cfl.buf_width < width {
     for row in 0..<cfl.buf_height {
-      let last = cfl.recon_q3[row * 32 + cfl.buf_width - 1]
+      let last = cfl.recon_q3[row * cfl.stride + cfl.buf_width - 1]
       for col in cfl.buf_width..<width {
-        cfl.recon_q3[row * 32 + col] = last
+        cfl.recon_q3[row * cfl.stride + col] = last
       }
     }
     cfl.buf_width = width
@@ -196,7 +218,9 @@ fn av1_cfl_prepare(cfl : Av1CflState, width : Int, height : Int) -> Bool {
   if cfl.buf_height < height {
     for row in cfl.buf_height..<height {
       for col in 0..<width {
-        cfl.recon_q3[row * 32 + col] = cfl.recon_q3[(row - 1) * 32 + col]
+        cfl.recon_q3[row * cfl.stride + col] = cfl.recon_q3[(row - 1) *
+          cfl.stride +
+          col]
       }
     }
     cfl.buf_height = height
@@ -205,13 +229,14 @@ fn av1_cfl_prepare(cfl : Av1CflState, width : Int, height : Int) -> Bool {
   let mut sum = count / 2
   for row in 0..<height {
     for col in 0..<width {
-      sum = sum + cfl.recon_q3[row * 32 + col]
+      sum = sum + cfl.recon_q3[row * cfl.stride + col]
     }
   }
   let mean = sum / count
   for row in 0..<height {
     for col in 0..<width {
-      cfl.ac_q3[row * 32 + col] = cfl.recon_q3[row * 32 + col] - mean
+      cfl.ac_q3[row * cfl.stride + col] = cfl.recon_q3[row * cfl.stride + col] -
+        mean
     }
   }
   cfl.ac_width = width
@@ -253,7 +278,8 @@ fn av1_cfl_predict(
     for col in 0..<width {
       let i = row * width + col
       prediction[i] = av1_intra_clip(
-        prediction[i] + av1_cfl_scaled_luma(alpha_q3, cfl.ac_q3[row * 32 + col]),
+        prediction[i] +
+        av1_cfl_scaled_luma(alpha_q3, cfl.ac_q3[row * cfl.stride + col]),
         bit_depth,
       )
     }

@@ -34,7 +34,11 @@ fn av1_restoration_stripe_bounds(
     let start = if k * s > o { k * s - o } else { 0 }
     let end = {
       let raw = (k + 1) * s - o
-      if raw < plane_height { raw } else { plane_height }
+      if raw < plane_height {
+        raw
+      } else {
+        plane_height
+      }
     }
     bounds.push((start, end))
   }
@@ -81,7 +85,11 @@ fn av1_restoration_stripe_pair(
   if stripe < 0 || stripe >= info.count {
     return []
   }
-  if above { info.top[stripe] } else { info.bottom[stripe] }
+  if above {
+    info.top[stripe]
+  } else {
+    info.bottom[stripe]
+  }
 }
 
 ///|
@@ -101,6 +109,8 @@ fn av1_restoration_save_stripes(
   height : Int,
   bit_depth : Int,
   monochrome : Bool,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Av1RestorationStripeStore? {
   let num_planes = if monochrome { 1 } else { 3 }
   if planes.length() != num_planes ||
@@ -117,17 +127,19 @@ fn av1_restoration_save_stripes(
   let superres = output_width != width
   let result : Array[Av1RestorationPlaneStripes] = []
   for plane in 0..<num_planes {
-    let divisor = if plane == 0 { 1 } else { 2 }
-    let stride = coded_width / divisor
-    let plane_height = (height + divisor - 1) / divisor
-    let plane_width_coded = (width + divisor - 1) / divisor
-    let plane_width_up = (output_width + divisor - 1) / divisor
+    let divisor_x = if plane == 0 { 1 } else { 1 << sub_x }
+    let divisor_y = if plane == 0 { 1 } else { 1 << sub_y }
+    let stride = coded_width / divisor_x
+    let plane_height = (height + divisor_y - 1) / divisor_y
+    let plane_width_coded = (width + divisor_x - 1) / divisor_x
+    let plane_width_up = (output_width + divisor_x - 1) / divisor_x
     if stride < plane_width_coded ||
       plane_height <= 0 ||
       planes[plane].length() < plane_height * stride {
       return None
     }
-    let bounds = match av1_restoration_stripe_bounds(plane_height, plane != 0) {
+    let bounds = match
+      av1_restoration_stripe_bounds(plane_height, plane != 0 && sub_y == 1) {
       Some(value) => value
       None => return None
     }
@@ -160,7 +172,11 @@ fn av1_restoration_save_stripes(
             pair[i * plane_width_coded + col] = planes[plane][row * stride + col]
           }
         }
-        if above { top[k] = pair } else { bottom[k] = pair }
+        if above {
+          top[k] = pair
+        } else {
+          bottom[k] = pair
+        }
       }
     } else if entries.length() > 0 {
       // Pack the coded rows and upscale them in one normative pass so
@@ -180,13 +196,7 @@ fn av1_restoration_save_stripes(
       }
       let upscaled = match
         av1_superres_upscale_plane(
-          temp,
-          stride,
-          stride,
-          plane_width_coded,
-          plane_width_up,
-          row_count,
-          bit_depth,
+          temp, stride, stride, plane_width_coded, plane_width_up, row_count, bit_depth,
         ) {
         Some(value) => value
         None => return None
@@ -197,10 +207,16 @@ fn av1_restoration_save_stripes(
         let pair : Array[Int] = Array::make(2 * plane_width_up, 0)
         for i in 0..<2 {
           for col in 0..<plane_width_up {
-            pair[i * plane_width_up + col] = upscaled[(index + i) * plane_width_up + col]
+            pair[i * plane_width_up + col] = upscaled[(index + i) *
+              plane_width_up +
+              col]
           }
         }
-        if above { top[k] = pair } else { bottom[k] = pair }
+        if above {
+          top[k] = pair
+        } else {
+          bottom[k] = pair
+        }
         index = index + 2
       }
     }
@@ -214,7 +230,7 @@ fn av1_restoration_save_stripes(
       bottom,
     })
   }
-  Some({ planes: result })
+  Some({ planes: result, })
 }
 
 ///|
@@ -222,7 +238,9 @@ fn av1_restoration_save_stripes(
 /// normative bounds, every stored pair holds exactly two rows at the
 /// plane's upscaled width, internal boundaries are populated and
 /// outer boundaries are empty.
-fn av1_restoration_stripe_store_valid(store : Av1RestorationStripeStore) -> Bool {
+fn av1_restoration_stripe_store_valid(
+  store : Av1RestorationStripeStore,
+) -> Bool {
   if store.planes.length() == 0 {
     return false
   }
@@ -248,8 +266,7 @@ fn av1_restoration_stripe_store_valid(store : Av1RestorationStripeStore) -> Bool
         }
       }
     }
-    if info.top[0].length() != 0 ||
-      info.bottom[info.count - 1].length() != 0 {
+    if info.top[0].length() != 0 || info.bottom[info.count - 1].length() != 0 {
       return false
     }
     for k in 1..<info.count {

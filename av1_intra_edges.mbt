@@ -159,6 +159,8 @@ fn av1_intra_edge_counts(
   tx : Av1TxNode,
   plane : Int,
   sb_size : Int,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Av1IntraEdgeCounts? {
   if coded_width <= 0 ||
     coded_height <= 0 ||
@@ -196,26 +198,39 @@ fn av1_intra_edge_counts(
   }
   let mi_row = block.row / 4
   let mi_col = block.col / 4
-  let subsample = if plane == 0 { 0 } else { 1 }
-  let divisor = 1 << subsample
+  // Each axis carries its own subsampling shift; a luma block narrower than
+  // eight pixels merges into its eight-pixel chroma group only on a subsampled
+  // axis (AV1 section 6.4.3 is_chroma_reference).
+  let plane_sub_x = if plane == 0 { 0 } else { sub_x }
+  let plane_sub_y = if plane == 0 { 0 } else { sub_y }
   if plane != 0 &&
     (
-      (block.width < 8 && (mi_col & 1) == 0) ||
-      (block.height < 8 && (mi_row & 1) == 0)
+      (plane_sub_x == 1 && block.width < 8 && (mi_col & 1) == 0) ||
+      (plane_sub_y == 1 && block.height < 8 && (mi_row & 1) == 0)
     ) {
     return None
   }
-  let origin_x = if plane == 0 { block.col } else { block.col / 8 * 4 }
-  let origin_y = if plane == 0 { block.row } else { block.row / 8 * 4 }
-  let plane_width = if plane != 0 && block.width < 8 {
-    4
+  let origin_x = if plane_sub_x == 1 { block.col / 8 * 4 } else { block.col }
+  let origin_y = if plane_sub_y == 1 { block.row / 8 * 4 } else { block.row }
+  let plane_width = if plane != 0 {
+    let scaled = block.width >> plane_sub_x
+    if scaled < 4 {
+      4
+    } else {
+      scaled
+    }
   } else {
-    block.width / divisor
+    block.width
   }
-  let plane_height = if plane != 0 && block.height < 8 {
-    4
+  let plane_height = if plane != 0 {
+    let scaled = block.height >> plane_sub_y
+    if scaled < 4 {
+      4
+    } else {
+      scaled
+    }
   } else {
-    block.height / divisor
+    block.height
   }
   if tx.col < origin_x ||
     tx.row < origin_y ||
@@ -225,33 +240,33 @@ fn av1_intra_edge_counts(
     tx.height > plane_height ||
     tx.col - origin_x > plane_width - tx.width ||
     tx.row - origin_y > plane_height - tx.height ||
-    tx.col >= (tile.col + tile.width) / divisor ||
-    tx.row >= (tile.row + tile.height) / divisor {
+    tx.col >= (tile.col + tile.width) >> plane_sub_x ||
+    tx.row >= (tile.row + tile.height) >> plane_sub_y {
     return None
   }
   let col_offset = (tx.col - origin_x) / 4
   let row_offset = (tx.row - origin_y) / 4
   let top_available = row_offset != 0 ||
-    (if plane != 0 && block.height == 4 {
+    (if plane_sub_y == 1 && block.height == 4 {
       mi_row - 1 > tile.row / 4
     } else {
       mi_row > tile.row / 4
     })
   let left_available = col_offset != 0 ||
-    (if plane != 0 && block.width == 4 {
+    (if plane_sub_x == 1 && block.width == 4 {
       mi_col - 1 > tile.col / 4
     } else {
       mi_col > tile.col / 4
     })
-  let xr = coded_width / divisor - tx.col - tx.width
-  let yd = coded_height / divisor - tx.row - tx.height
-  let right_available = mi_col + ((col_offset + tx.width / 4) << subsample) <
+  let xr = (coded_width >> plane_sub_x) - tx.col - tx.width
+  let yd = (coded_height >> plane_sub_y) - tx.row - tx.height
+  let right_available = mi_col + ((col_offset + tx.width / 4) << plane_sub_x) <
     (tile.col + tile.width) / 4
   let bottom_available = yd > 0 &&
-    mi_row + ((row_offset + tx.height / 4) << subsample) <
+    mi_row + ((row_offset + tx.height / 4) << plane_sub_y) <
     (tile.row + tile.height) / 4
-  let scaled_width = plane_width * divisor
-  let scaled_height = plane_height * divisor
+  let scaled_width = plane_width << plane_sub_x
+  let scaled_height = plane_height << plane_sub_y
   let index = av1_intra_block_index(scaled_width, scaled_height).unwrap()
   let tr_table = match av1_intra_edge_table(true, index, partition) {
     Some(value) => value
@@ -269,7 +284,7 @@ fn av1_intra_edge_counts(
     row_offset,
     col_offset,
     tx.width,
-    subsample,
+    plane_sub_x,
     sb_size,
     top_available,
     right_available,
@@ -283,7 +298,7 @@ fn av1_intra_edge_counts(
     row_offset,
     col_offset,
     tx.height,
-    subsample,
+    plane_sub_y,
     sb_size,
     bottom_available,
     left_available,

@@ -23,6 +23,8 @@ test "monochrome limited range matches actual libavif scalar gray vectors" {
       bit_depth: [8, 10, 12][d],
       full_range: false,
       matrix_coefficients: 2,
+      sub_x: 1,
+      sub_y: 1,
       planes: [plane],
     }
     let image = av1_frame_to_rgba(frame).unwrap()

@@ -142,6 +142,8 @@ pub fn av1_yuv420_to_rgba_color(Int, Int, Array[Byte], Array[Byte], Array[Byte],
 
 pub fn av1_yuv420_to_rgba_range(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool) -> Image?
 
+pub fn av1_yuv_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, subsampling_x? : Bool, subsampling_y? : Bool, full_range? : Bool, matrix_coefficients? : Int) -> Image?
+
 pub fn avif_alpha_item_descriptor(Array[Byte]) -> AvifAlphaItemDescriptor?
 
 pub fn avif_alpha_item_payload(Array[Byte]) -> Array[Byte]?
@@ -630,6 +632,8 @@ pub struct AvifContainer {
   height : Int
   bit_depth : Int
   monochrome : Bool
+  subsampling_x : Bool
+  subsampling_y : Bool
   yuv420 : Bool
   has_alpha : Bool
   av1c : Array[Byte]

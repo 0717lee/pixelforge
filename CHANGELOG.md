@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- Added 4:4:4 and 4:2:2 chroma support. The container now exposes both `av1C`
+  subsampling flags instead of collapsing them into a 4:2:0 test, and the
+  frame parser accepts profiles 1 and 2 (validating the profile/bit-depth
+  pairing) rather than rejecting any non-4:2:0 stream. Every plane geometry is
+  parameterised by the two subsampling shifts: plane allocation and assembly,
+  cropping, the superres driver, grid-cell copies, the film-grain scatter and
+  the loop-restoration stripe store. Inside the intra decoder the chroma
+  reference rule (`is_chroma_reference`) now applies per axis, chroma blocks
+  and palette maps take `max(4, luma >> sub)` sizes, the directional edge
+  counts derive above/left/top-right/bottom-left availability per axis, CfL
+  downsamples and stores its luma buffer with axis-specific windows (the Q3
+  precision factor becomes `8 / 2^(sub_x+sub_y)`), and the coefficient leaf
+  receives the plane's own transform size. CDEF selects chroma blocks that are
+  eight luma pixels wide and tall, the loop-filter driver scales each axis
+  independently, and the restoration layout, per-superblock unit reads and
+  source-view strides all follow the real subsampling. Colour conversion grew
+  a general planar YUV path (`av1_yuv_highbd_to_rgba`) with the 4:2:0 entry
+  kept as a wrapper.
+- Verified against dav1d pixel ground truth with three reduced-still fixtures:
+  a 64x64 4:4:4 encode (profile 1), the same frame at 4:2:2 (profile 2, chroma
+  32x64), and a 4:4:4 encode whose `cdef_uv_pri_strength` is 10 so the chroma
+  CDEF path runs for real. The first two also carry active loop restoration on
+  a single chroma plane (SGRPROJ on V for 4:4:4, Wiener on U for 4:2:2), which
+  is what exposed the per-axis stripe and stride requirements. All three match
+  dav1d for every sample of every plane. Four new tests cover the colour
+  config, the two chroma formats and the active-CDEF case; full suite:
+  1063/1063.
+
 - Added per-plane quantizer deltas, so `separate_uv_delta_q` streams decode
   instead of being rejected. `quantization_params` now keeps the decoded
   deltas rather than refusing non-zero ones, reads the `diff_uv_delta` flag

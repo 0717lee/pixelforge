@@ -1,25 +1,32 @@
 ///|
-/// High-bit-depth planar YUV420 conversion for the staged AV1 path.
+/// High-bit-depth planar YUV conversion for the staged AV1 path.
 ///
 /// The public Image type stores 8-bit channels; coded 8..12-bit samples are
 /// converted with the high-bit-depth matrix and narrowed only for final RGBA
 /// storage. Codec reconstruction remains integer-only; this adapter performs
 /// no browser or FFI fallback.
-pub fn av1_yuv420_highbd_to_rgba(
+///
+/// `subsampling_x`/`subsampling_y` select 4:4:4, 4:2:2 or 4:2:0; the defaults
+/// keep the historical 4:2:0 behaviour of `av1_yuv420_highbd_to_rgba`.
+pub fn av1_yuv_highbd_to_rgba(
   width : Int,
   height : Int,
   y : Array[Int],
   u : Array[Int],
   v : Array[Int],
   bit_depth : Int,
+  subsampling_x? : Bool = true,
+  subsampling_y? : Bool = true,
   full_range? : Bool = false,
   matrix_coefficients? : Int = 6,
 ) -> Image? {
   if bit_depth < 8 || bit_depth > 12 || width <= 0 || height <= 0 {
     return None
   }
-  let cw = (width + 1) / 2
-  let ch = (height + 1) / 2
+  let sub_x = if subsampling_x { 1 } else { 0 }
+  let sub_y = if subsampling_y { 1 } else { 0 }
+  let cw = (width + (1 << sub_x) - 1) >> sub_x
+  let ch = (height + (1 << sub_y) - 1) >> sub_y
   if y.length() != width * height ||
     u.length() != cw * ch ||
     v.length() != cw * ch {
@@ -30,7 +37,13 @@ pub fn av1_yuv420_highbd_to_rgba(
   let scale = 1 << (bit_depth - 8)
   let max_value = (1 << bit_depth) - 1
   let clamp_sample = fn(sample : Int) -> Int {
-    if sample < 0 { 0 } else if sample > max_value { max_value } else { sample }
+    if sample < 0 {
+      0
+    } else if sample > max_value {
+      max_value
+    } else {
+      sample
+    }
   }
   let out = Image::new(width, height)
   let round = 128 * scale
@@ -41,7 +54,7 @@ pub fn av1_yuv420_highbd_to_rgba(
   for yy in 0..<height {
     for xx in 0..<width {
       let yi = yy * width + xx
-      let ci = (yy / 2) * cw + xx / 2
+      let ci = (yy >> sub_y) * cw + (xx >> sub_x)
       let y0 = clamp_sample(y[yi])
       let u0 = clamp_sample(u[ci]) - 128 * scale
       let v0 = clamp_sample(v[ci]) - 128 * scale
@@ -77,4 +90,28 @@ pub fn av1_yuv420_highbd_to_rgba(
     }
   }
   Some(out)
+}
+
+///|
+/// 4:2:0 convenience wrapper over `av1_yuv_highbd_to_rgba`.
+pub fn av1_yuv420_highbd_to_rgba(
+  width : Int,
+  height : Int,
+  y : Array[Int],
+  u : Array[Int],
+  v : Array[Int],
+  bit_depth : Int,
+  full_range? : Bool = false,
+  matrix_coefficients? : Int = 6,
+) -> Image? {
+  av1_yuv_highbd_to_rgba(
+    width,
+    height,
+    y,
+    u,
+    v,
+    bit_depth,
+    full_range~,
+    matrix_coefficients~,
+  )
 }

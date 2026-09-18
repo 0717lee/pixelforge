@@ -97,15 +97,16 @@ fn avif_decode_grid_frame(
       first.height
     }
     for plane in 0..<plane_count {
-      let divisor = if plane == 0 { 1 } else { 2 }
-      let stride = width / divisor
-      let source_stride = frame.coded_width / divisor
+      let divisor_x = if plane == 0 { 1 } else { 1 << frame.sub_x }
+      let divisor_y = if plane == 0 { 1 } else { 1 << frame.sub_y }
+      let stride = width / divisor_x
+      let source_stride = frame.coded_width / divisor_x
       let source = frame.planes[plane]
       let target = planes[plane]
-      for y in 0..<(copy_height / divisor) {
-        let destination = (oy / divisor + y) * stride + ox / divisor
+      for y in 0..<(copy_height / divisor_y) {
+        let destination = (oy / divisor_y + y) * stride + ox / divisor_x
         let start = y * source_stride
-        for x in 0..<(copy_width / divisor) {
+        for x in 0..<(copy_width / divisor_x) {
           target[destination + x] = source[start + x]
         }
       }
@@ -118,6 +119,8 @@ fn avif_decode_grid_frame(
     bit_depth: first.bit_depth,
     full_range: first.full_range,
     matrix_coefficients: first.matrix_coefficients,
+    sub_x: first.sub_x,
+    sub_y: first.sub_y,
     planes,
   })
 }

@@ -63,6 +63,8 @@ fn av1_loop_filter_frame(
   bit_depth : Int,
   planes : Array[Array[Int]],
   tx_sizes : Array[Array[Int]],
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Bool {
   if !av1_loop_filter_config_valid(config) ||
     width <= 0 ||
@@ -82,9 +84,10 @@ fn av1_loop_filter_frame(
     return false
   }
   for plane in 0..<planes.length() {
-    let scale = if plane == 0 { 1 } else { 2 }
-    let stride = coded_width / scale
-    let rows = coded_height / scale
+    let scale_x = if plane == 0 { 1 } else { 1 << sub_x }
+    let scale_y = if plane == 0 { 1 } else { 1 << sub_y }
+    let stride = coded_width / scale_x
+    let rows = coded_height / scale_y
     if planes[plane].length() != stride * rows ||
       tx_sizes[plane].length() != stride / 4 * (rows / 4) {
       return false
@@ -101,10 +104,11 @@ fn av1_loop_filter_frame(
     }
   }
   for plane in 0..<planes.length() {
-    let scale = if plane == 0 { 1 } else { 2 }
-    let stride = coded_width / scale
-    let visible_width = (width + scale - 1) / scale
-    let visible_height = (height + scale - 1) / scale
+    let scale_x = if plane == 0 { 1 } else { 1 << sub_x }
+    let scale_y = if plane == 0 { 1 } else { 1 << sub_y }
+    let stride = coded_width / scale_x
+    let visible_width = (width + scale_x - 1) / scale_x
+    let visible_height = (height + scale_y - 1) / scale_y
     let cols = stride / 4
     let map = tx_sizes[plane]
     for direction in 0..<2 {

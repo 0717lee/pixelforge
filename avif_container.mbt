@@ -10,6 +10,10 @@ pub struct AvifContainer {
   height : Int
   bit_depth : Int
   monochrome : Bool
+  /// Chroma subsampling from the `av1C` box. `yuv420` is both flags set; a
+  /// 4:2:2 stream sets x only and a 4:4:4 stream sets neither.
+  subsampling_x : Bool
+  subsampling_y : Bool
   yuv420 : Bool
   has_alpha : Bool
   // A grid inherits this configuration from its validated coded cells.
@@ -19,6 +23,7 @@ pub struct AvifContainer {
   nclx_transfer : Int?
   nclx_matrix : Int?
 }
+
 ///|
 priv struct Box {
   typ : Int
@@ -120,7 +125,9 @@ fn u32(d : Array[Byte], p : Int, e : Int) -> Int raise AvifError {
 fn u64(d : Array[Byte], p : Int, e : Int) -> Int raise AvifError {
   // Box sizes and array offsets must fit Int before any arithmetic.
   for i in 0..<4 {
-    if u8(d, p + i, e) != 0 { raise AvifError::Unsupported }
+    if u8(d, p + i, e) != 0 {
+      raise AvifError::Unsupported
+    }
   }
   if u8(d, p + 4, e) > 127 {
     raise AvifError::Unsupported
@@ -220,7 +227,13 @@ fn walk(
 }
 
 ///|
-fn parse_av1c(_d : Array[Byte], p : Prop) -> (Int, Bool, Bool) raise AvifError {
+/// `av1C` configuration. Returns (bit depth, monochrome, subsampling_x,
+/// subsampling_y); byte 2 stores monochrome at bit 4 and the two subsampling
+/// flags at bits 3 and 2 (AV1 ISOBMFF binding §2.3.3).
+fn parse_av1c(
+  _d : Array[Byte],
+  p : Prop,
+) -> (Int, Bool, Bool, Bool) raise AvifError {
   if p.data.length() < 3 {
     raise AvifError::Invalid
   }
@@ -236,9 +249,7 @@ fn parse_av1c(_d : Array[Byte], p : Prop) -> (Int, Bool, Bool) raise AvifError {
   } else {
     10
   }
-  // AV1C byte 2 stores monochrome at bit 4 and the two 4:2:0
-  // subsampling flags at bits 3 and 2 (AV1 ISOBMFF binding §2.3.3).
-  (depth, (f & 0x10) != 0, ((f >> 3) & 1) != 0 && ((f >> 2) & 1) != 0)
+  (depth, (f & 0x10) != 0, ((f >> 3) & 1) != 0, ((f >> 2) & 1) != 0)
 }
 
 ///|
@@ -306,7 +317,8 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     let mut h = 0
     let mut depth = 8
     let mut mono = false
-    let mut yuv = false
+    let mut sub_x = false
+    let mut sub_y = false
     let mut av1 : Array[Byte]? = None
     let mut np : Int? = None
     let mut nt : Int? = None
@@ -325,7 +337,8 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
         let parsed = parse_av1c(data, q)
         depth = parsed.0
         mono = parsed.1
-        yuv = parsed.2
+        sub_x = parsed.2
+        sub_y = parsed.3
       }
       if q.kind == t_colr {
         np = Some(q.p)
@@ -358,7 +371,8 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
           let parsed = parse_av1c(data, property)
           depth = parsed.0
           mono = parsed.1
-          yuv = parsed.2
+          sub_x = parsed.2
+          sub_y = parsed.3
         }
       }
     }
@@ -395,7 +409,9 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       height: h,
       bit_depth: depth,
       monochrome: mono,
-      yuv420: yuv,
+      subsampling_x: sub_x,
+      subsampling_y: sub_y,
+      yuv420: sub_x && sub_y,
       has_alpha: avif_alpha_descriptor_checked(data) is Some(_),
       av1c: av1.unwrap(),
       payload,
@@ -407,6 +423,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     _ => None
   }
 }
+
 ///|
 fn parse_iloc(
   d : Array[Byte],
@@ -415,7 +432,9 @@ fn parse_iloc(
 ) -> Unit raise AvifError {
   let p = b.payload
   let v = u8(d, p, b.end)
-  if v > 2 { raise AvifError::Unsupported }
+  if v > 2 {
+    raise AvifError::Unsupported
+  }
   let a = u8(d, p + 4, b.end)
   let os = a >> 4
   let ls = a & 15
@@ -504,7 +523,9 @@ fn parse_ipma(
   }
   let p = b.payload
   let version = u8(d, p, b.end)
-  if version > 1 { raise AvifError::Unsupported }
+  if version > 1 {
+    raise AvifError::Unsupported
+  }
   let flags = u32(d, p, b.end) & 0xFFFFFF
   let mut q = p + 4
   let n = u32(d, q, b.end)
@@ -520,7 +541,9 @@ fn parse_ipma(
       q = q + (if (flags & 1) != 0 { 2 } else { 1 })
       if xi >= 0 {
         let property = if (flags & 1) != 0 { a & 0x7FFF } else { a & 0x7F }
-        if property != 0 { xs[xi].props.push(property) }
+        if property != 0 {
+          xs[xi].props.push(property)
+        }
       }
     }
   }

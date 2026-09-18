@@ -8,15 +8,29 @@ priv struct Av1FramePlanes {
   bit_depth : Int
   full_range : Bool
   matrix_coefficients : Int
+  /// Chroma subsampling shifts (0 or 1) for planes 1 and 2.
+  sub_x : Int
+  sub_y : Int
   planes : Array[Array[Int]]
 }
 
 ///|
+/// Per-axis chroma divisors for a plane: (1, 1) for luma, 2^sub otherwise.
+/// The coded luma extent is always a multiple of eight, so a shift is exact.
+fn av1_frame_plane_divisor(frame : Av1FramePlanes, plane : Int) -> (Int, Int) {
+  if plane == 0 {
+    (1, 1)
+  } else {
+    (1 << frame.sub_x, 1 << frame.sub_y)
+  }
+}
+
+///|
 fn av1_frame_crop(frame : Av1FramePlanes, plane : Int) -> Array[Int] {
-  let divisor = if plane == 0 { 1 } else { 2 }
-  let width = (frame.width + divisor - 1) / divisor
-  let height = (frame.height + divisor - 1) / divisor
-  let stride = frame.coded_width / divisor
+  let (divisor_x, divisor_y) = av1_frame_plane_divisor(frame, plane)
+  let width = (frame.width + divisor_x - 1) / divisor_x
+  let height = (frame.height + divisor_y - 1) / divisor_y
+  let stride = frame.coded_width / divisor_x
   Array::makei(width * height, fn(i) {
     frame.planes[plane][i / width * stride + i % width]
   })
@@ -47,13 +61,15 @@ fn av1_frame_to_rgba(frame : Av1FramePlanes) -> Image? {
     }
     return Some(image)
   }
-  av1_yuv420_highbd_to_rgba(
+  av1_yuv_highbd_to_rgba(
     frame.width,
     frame.height,
     av1_frame_crop(frame, 0),
     av1_frame_crop(frame, 1),
     av1_frame_crop(frame, 2),
     frame.bit_depth,
+    subsampling_x=frame.sub_x == 1,
+    subsampling_y=frame.sub_y == 1,
     full_range=frame.full_range,
     matrix_coefficients=frame.matrix_coefficients,
   )
@@ -155,10 +171,10 @@ fn av1_frame_apply_grain(
     None => None
     Some(_) => {
       for p in 0..<frame.planes.length() {
-        let divisor = if p == 0 { 1 } else { 2 }
-        let w = (frame.width + divisor - 1) / divisor
-        let h = (frame.height + divisor - 1) / divisor
-        let stride = frame.coded_width / divisor
+        let (divisor_x, divisor_y) = av1_frame_plane_divisor(frame, p)
+        let w = (frame.width + divisor_x - 1) / divisor_x
+        let h = (frame.height + divisor_y - 1) / divisor_y
+        let stride = frame.coded_width / divisor_x
         for y in 0..<h {
           for x in 0..<w {
             frame.planes[p][y * stride + x] = cropped[p][y * w + x]
@@ -205,8 +221,12 @@ fn av1_decode_tile_planes(
     v_dc: 0,
     v_ac: 0,
   },
+  subsampling_x? : Bool = true,
+  subsampling_y? : Bool = true,
 ) -> (Av1FramePlanes, Av1RestorationStripeStore?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
+  let sub_x = if subsampling_x { 1 } else { 0 }
+  let sub_y = if subsampling_y { 1 } else { 0 }
   if width <= 0 ||
     height <= 0 ||
     width > MAX_IMAGE_PIXELS / height ||
@@ -265,17 +285,23 @@ fn av1_decode_tile_planes(
     Some(value) => value
     None => return None
   }
+  let chroma_coded_w = (coded_width + (1 << sub_x) - 1) >> sub_x
+  let chroma_coded_h = (coded_height + (1 << sub_y) - 1) >> sub_y
   let planes : Array[Array[Int]] = [Array::make(coded_width * coded_height, 0)]
   if !monochrome {
-    planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
-    planes.push(Array::make(coded_width / 2 * (coded_height / 2), 0))
+    planes.push(Array::make(chroma_coded_w * chroma_coded_h, 0))
+    planes.push(Array::make(chroma_coded_w * chroma_coded_h, 0))
   }
   let tx_sizes : Array[Array[Int]] = []
   if filter_active {
     for plane in 0..<planes.length() {
-      let divisor = if plane == 0 { 1 } else { 2 }
+      let divisor_x = if plane == 0 { 1 } else { 1 << sub_x }
+      let divisor_y = if plane == 0 { 1 } else { 1 << sub_y }
       tx_sizes.push(
-        Array::make(coded_width / divisor / 4 * (coded_height / divisor / 4), 0),
+        Array::make(
+          coded_width / divisor_x / 4 * (coded_height / divisor_y / 4),
+          0,
+        ),
       )
     }
   }
@@ -294,8 +320,8 @@ fn av1_decode_tile_planes(
         output_width,
         height,
         monochrome,
-        !monochrome,
-        !monochrome,
+        !monochrome && sub_x == 1,
+        !monochrome && sub_y == 1,
         superres_denom,
       )
     None => None
@@ -338,28 +364,31 @@ fn av1_decode_tile_planes(
         tile_origin_row_mi=top / 4,
         tile_origin_col_mi=left / 4,
         quant_deltas~,
+        sub_x~,
+        sub_y~,
       ) {
       Some(value) => value
       None => return None
     }
     for p in 0..<planes.length() {
-      let divisor = if p == 0 { 1 } else { 2 }
+      let divisor_x = if p == 0 { 1 } else { 1 << sub_x }
+      let divisor_y = if p == 0 { 1 } else { 1 << sub_y }
       let source = state.planes[p]
-      let stride = coded_width / divisor
+      let stride = coded_width / divisor_x
       if filter_active {
         let source_cols = source.width / 4
-        let target_cols = coded_width / divisor / 4
+        let target_cols = coded_width / divisor_x / 4
         for row in 0..<(source.height / 4) {
           for col in 0..<source_cols {
-            tx_sizes[p][(top / divisor / 4 + row) * target_cols +
-            left / divisor / 4 +
+            tx_sizes[p][(top / divisor_y / 4 + row) * target_cols +
+            left / divisor_x / 4 +
             col] = source.tx_sizes[row * source_cols + col]
           }
         }
       }
       for row in 0..<source.height {
         for col in 0..<source.width {
-          planes[p][(top / divisor + row) * stride + left / divisor + col] = source.pixels[row *
+          planes[p][(top / divisor_y + row) * stride + left / divisor_x + col] = source.pixels[row *
             source.width +
             col]
         }
@@ -415,6 +444,8 @@ fn av1_decode_tile_planes(
       bit_depth,
       planes,
       tx_sizes,
+      sub_x~,
+      sub_y~,
     ) {
     return None
   }
@@ -428,7 +459,15 @@ fn av1_decode_tile_planes(
       if av1_restoration_active(config) {
         match
           av1_restoration_save_stripes(
-            planes, coded_width, width, output_width, height, bit_depth, monochrome,
+            planes,
+            coded_width,
+            width,
+            output_width,
+            height,
+            bit_depth,
+            monochrome,
+            sub_x~,
+            sub_y~,
           ) {
           Some(value) => Some(value)
           None => return None
@@ -443,7 +482,15 @@ fn av1_decode_tile_planes(
     Some(config) =>
       match
         av1_cdef_filter_frame(
-          coded_width, coded_height, planes, skips, indices, config, bit_depth,
+          coded_width,
+          coded_height,
+          planes,
+          skips,
+          indices,
+          config,
+          bit_depth,
+          sub_x~,
+          sub_y~,
         ) {
         Some(value) => value
         None => return None
@@ -456,6 +503,8 @@ fn av1_decode_tile_planes(
     bit_depth,
     full_range,
     matrix_coefficients,
+    sub_x,
+    sub_y,
     planes: filtered,
   }
   let frame = if output_width == width {
@@ -473,7 +522,11 @@ fn av1_decode_tile_planes(
   let frame = match (stripe_store, lr_layout) {
     (Some(store), Some(layout)) => {
       let strides : Array[Int] = Array::makei(frame.planes.length(), fn(i) {
-        frame.coded_width / (if i == 0 { 1 } else { 2 })
+        if i == 0 {
+          frame.coded_width
+        } else {
+          frame.coded_width >> frame.sub_x
+        }
       })
       let view : Av1RestorationSourceView = {
         store,
@@ -487,8 +540,8 @@ fn av1_decode_tile_planes(
           layout,
           bit_depth,
           monochrome,
-          subsampling_x=!monochrome,
-          subsampling_y=!monochrome,
+          subsampling_x=!monochrome && frame.sub_x == 1,
+          subsampling_y=!monochrome && frame.sub_y == 1,
         ) {
         Some(value) => {
           let planes = frame.planes
@@ -502,6 +555,8 @@ fn av1_decode_tile_planes(
             bit_depth: frame.bit_depth,
             full_range: frame.full_range,
             matrix_coefficients: frame.matrix_coefficients,
+            sub_x: frame.sub_x,
+            sub_y: frame.sub_y,
             planes,
           }
         }
@@ -561,6 +616,8 @@ fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
     bit_depth: frame.bit_depth,
     full_range: frame.full_range,
     matrix_coefficients: frame.matrix_coefficients,
+    sub_x: frame.sub_x,
+    sub_y: frame.sub_y,
   })
 }
 
@@ -627,6 +684,8 @@ fn av1_decode_frame_planes(
       upscaled_width=frame.upscaled_width,
       superres_denom=frame.superres_denom,
       quant_deltas=frame.quant_deltas,
+      subsampling_x=seq.subsampling_x,
+      subsampling_y=seq.subsampling_y,
     ) {
     Some(value) => value
     None => return None

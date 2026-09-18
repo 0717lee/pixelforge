@@ -129,7 +129,7 @@ fn av1_cdef_filter_blocks(
   }
   Some(
     av1_cdef_filter_native_blocks(
-      width, height, plane, native, bit_depth, block_size,
+      width, height, plane, native, bit_depth, block_size, block_size,
     ),
   )
 }
@@ -137,20 +137,24 @@ fn av1_cdef_filter_blocks(
 ///|
 /// Internal kernel; callers validate geometry, samples and parameter counts.
 /// All taps read the immutable source plane, including across 64x64 regions.
+/// A CDEF block is 8x8 luma pixels, so a subsampled chroma block is
+/// (8 >> sub_x) by (8 >> sub_y) chroma pixels and still maps one-to-one onto
+/// the luma 8x8 parameter grid.
 fn av1_cdef_filter_native_blocks(
   width : Int,
   height : Int,
   plane : Array[Int],
   params : Array[Av1CdefNativeParams],
   bit_depth : Int,
-  block_size : Int,
+  block_w : Int,
+  block_h : Int,
 ) -> Array[Int] {
-  let blocks_x = (width + block_size - 1) / block_size
+  let blocks_x = (width + block_w - 1) / block_w
   let out = plane.copy()
   let shift = bit_depth - 8
   for y in 0..<height {
     for x in 0..<width {
-      let p = params[y / block_size * blocks_x + x / block_size]
+      let p = params[y / block_h * blocks_x + x / block_w]
       let pri = p.primary_strength
       let sec = p.secondary_strength
       if pri == 0 && sec == 0 {

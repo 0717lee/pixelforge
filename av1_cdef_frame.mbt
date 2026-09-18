@@ -100,6 +100,8 @@ fn av1_cdef_filter_frame(
   indices : Array[Int],
   config : Av1CdefConfig,
   bit_depth : Int,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Array[Array[Int]]? {
   let monochrome = planes.length() == 1
   if width <= 0 ||
@@ -132,8 +134,12 @@ fn av1_cdef_filter_frame(
   }
   let maximum = (1 << bit_depth) - 1
   for plane_index in 0..<planes.length() {
-    let divisor = if plane_index == 0 { 1 } else { 2 }
-    if planes[plane_index].length() != width / divisor * (height / divisor) {
+    let divisor_x = if plane_index == 0 { 1 } else { 1 << sub_x }
+    let divisor_y = if plane_index == 0 { 1 } else { 1 << sub_y }
+    if planes[plane_index].length() !=
+      (width + divisor_x - 1) /
+      divisor_x *
+      ((height + divisor_y - 1) / divisor_y) {
       return None
     }
     for value in planes[plane_index] {
@@ -208,27 +214,34 @@ fn av1_cdef_filter_frame(
     y_params,
     bit_depth,
     8,
+    8,
   )
   if monochrome {
     return Some([filtered_y])
   }
+  let chroma_w = (width + (1 << sub_x) - 1) >> sub_x
+  let chroma_h = (height + (1 << sub_y) - 1) >> sub_y
+  let block_w = 8 >> sub_x
+  let block_h = 8 >> sub_y
   Some([
     filtered_y,
     av1_cdef_filter_native_blocks(
-      width / 2,
-      height / 2,
+      chroma_w,
+      chroma_h,
       planes[1],
       uv_params,
       bit_depth,
-      4,
+      block_w,
+      block_h,
     ),
     av1_cdef_filter_native_blocks(
-      width / 2,
-      height / 2,
+      chroma_w,
+      chroma_h,
       planes[2],
       uv_params,
       bit_depth,
-      4,
+      block_w,
+      block_h,
     ),
   ])
 }

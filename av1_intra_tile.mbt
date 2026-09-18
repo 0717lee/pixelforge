@@ -66,6 +66,10 @@ priv struct Av1IntraState {
   base_q_idx : Int
   /// Per-plane quantizer deltas; the dequant reads the plane's own index.
   quant_deltas : Av1QuantDeltas
+  /// Chroma subsampling shifts (0 or 1). Plane geometry, chroma block
+  /// positions and the coefficient contexts all derive from them.
+  sub_x : Int
+  sub_y : Int
   bit_depth : Int
   monochrome : Bool
   reduced_tx_set : Bool
@@ -105,6 +109,8 @@ fn av1_intra_state(
     v_dc: 0,
     v_ac: 0,
   },
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -116,11 +122,15 @@ fn av1_intra_state(
   }
   let planes = [av1_intra_plane(width, height, bit_depth, track_loop_filter~)]
   if !monochrome {
+    // Coded chroma extents follow ceil(width / 2^sub): the coded luma size is
+    // always a multiple of 8 here, so this only matters for odd visible sizes.
+    let chroma_w = (width + (1 << sub_x) - 1) >> sub_x
+    let chroma_h = (height + (1 << sub_y) - 1) >> sub_y
     planes.push(
-      av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~),
+      av1_intra_plane(chroma_w, chroma_h, bit_depth, track_loop_filter~),
     )
     planes.push(
-      av1_intra_plane(width / 2, height / 2, bit_depth, track_loop_filter~),
+      av1_intra_plane(chroma_w, chroma_h, bit_depth, track_loop_filter~),
     )
   }
   {
@@ -135,7 +145,7 @@ fn av1_intra_state(
     y_mode: av1_intra_y_mode_cdfs(),
     uv_cfl: av1_intra_uv_mode_cdfs(true),
     uv_no_cfl: av1_intra_uv_mode_cdfs(false),
-    cfl: av1_cfl_state(),
+    cfl: av1_cfl_state(sub_x~, sub_y~),
     angle_delta: av1_intra_angle_cdfs(),
     palette: av1_palette_state(width / 4, height / 4),
     palette_y_map: [],
@@ -149,6 +159,8 @@ fn av1_intra_state(
     planes,
     base_q_idx,
     quant_deltas,
+    sub_x,
+    sub_y,
     bit_depth,
     monochrome,
     reduced_tx_set,
@@ -223,10 +235,25 @@ fn av1_intra_block_index(width : Int, height : Int) -> Int? {
 /// With 4:2:0 subsampling, blocks narrower than eight luma pixels share UV
 /// samples with the preceding block. Only the odd MI coordinate on each
 /// sub-eight-pixel axis reads and reconstructs the shared chroma block.
+/// The chroma reference rule (AV1 section 6.4.3 is_chroma_reference): on a
+/// subsampled axis a luma block narrower than eight pixels only carries chroma
+/// when it is the second four-pixel half of its eight-pixel group. An axis
+/// without subsampling never merges.
 fn av1_intra_has_chroma(state : Av1IntraState, block : Av1SbBlock) -> Bool {
-  !state.monochrome &&
-  (block.width >= 8 || ((block.col / 4) & 1) != 0) &&
-  (block.height >= 8 || ((block.row / 4) & 1) != 0)
+  if state.monochrome {
+    return false
+  }
+  let x_owns = if state.sub_x == 1 {
+    block.width >= 8 || ((block.col / 4) & 1) != 0
+  } else {
+    true
+  }
+  let y_owns = if state.sub_y == 1 {
+    block.height >= 8 || ((block.row / 4) & 1) != 0
+  } else {
+    true
+  }
+  x_owns && y_owns
 }
 
 ///|
@@ -442,8 +469,16 @@ fn av1_intra_transform(
       Some(value) => value
       None => return false
     }
-    let origin_x = if plane_index == 0 { block.col } else { block.col / 8 * 4 }
-    let origin_y = if plane_index == 0 { block.row } else { block.row / 8 * 4 }
+    let origin_x = if plane_index == 0 || state.sub_x == 0 {
+      block.col
+    } else {
+      block.col / 8 * 4
+    }
+    let origin_y = if plane_index == 0 || state.sub_y == 0 {
+      block.row
+    } else {
+      block.row / 8 * 4
+    }
     let indices = if plane_index == 0 {
       state.palette_y_map
     } else {
@@ -524,6 +559,8 @@ fn av1_intra_transform(
         { row: y, col: x, width: tx_width, height: tx_height, },
         plane_index,
         state.superblock_size,
+        sub_x=state.sub_x,
+        sub_y=state.sub_y,
       ) {
       Some(value) => value
       None => return false
@@ -811,21 +848,50 @@ fn av1_intra_residuals(
   for chunk_y in 0..<((block.height + 63) / 64) {
     for chunk_x in 0..<((block.width + 63) / 64) {
       for plane in 0..<plane_count {
-        let divisor = if plane == 0 { 1 } else { 2 }
-        let width = if plane != 0 && block.width < 8 {
-          4
+        // Plane geometry follows AV1 section 5.11.5: the chroma block size is
+        // max(4, luma >> sub) per axis, and its origin rounds the luma
+        // position down to the chroma reference (even MI unit) on each
+        // subsampled axis (is_chroma_reference).
+        let plane_sub_x = if plane == 0 { 0 } else { state.sub_x }
+        let plane_sub_y = if plane == 0 { 0 } else { state.sub_y }
+        let divisor_x = 1 << plane_sub_x
+        let divisor_y = 1 << plane_sub_y
+        let width = if plane != 0 {
+          let scaled = block.width >> plane_sub_x
+          if scaled < 4 {
+            4
+          } else {
+            scaled
+          }
         } else {
-          block.width / divisor
+          block.width
         }
-        let height = if plane != 0 && block.height < 8 {
-          4
+        let height = if plane != 0 {
+          let scaled = block.height >> plane_sub_y
+          if scaled < 4 {
+            4
+          } else {
+            scaled
+          }
         } else {
-          block.height / divisor
+          block.height
         }
-        let origin_x = if plane == 0 { block.col } else { block.col / 8 * 4 }
-        let origin_y = if plane == 0 { block.row } else { block.row / 8 * 4 }
-        let unit_width = if block.width < 64 { width } else { 64 / divisor }
-        let unit_height = if block.height < 64 { height } else { 64 / divisor }
+        let origin_x = if plane_sub_x == 1 {
+          block.col / 8 * 4
+        } else {
+          block.col
+        }
+        let origin_y = if plane_sub_y == 1 {
+          block.row / 8 * 4
+        } else {
+          block.row
+        }
+        let unit_width = if block.width < 64 { width } else { 64 / divisor_x }
+        let unit_height = if block.height < 64 {
+          height
+        } else {
+          64 / divisor_y
+        }
         let tx_width = if plane == 0 {
           luma_tx_width
         } else if state.base_q_idx == 0 {
@@ -857,8 +923,8 @@ fn av1_intra_residuals(
                 } else {
                   uv_mode
                 },
-                origin_x + chunk_x * (64 / divisor) + col,
-                origin_y + chunk_y * (64 / divisor) + row,
+                origin_x + chunk_x * (64 / divisor_x) + col,
+                origin_y + chunk_y * (64 / divisor_y) + row,
                 tx_width,
                 tx_height,
                 width,
@@ -907,18 +973,24 @@ fn av1_intra_palette_maps(
     if colors.is_empty() {
       continue
     }
-    let divisor = if plane == 0 { 1 } else { 2 }
-    // A chroma-owning four-pixel axis includes the paired luma block.
-    let extra_cols = if plane != 0 && block.width < 8 { 2 } else { 0 }
-    let extra_rows = if plane != 0 && block.height < 8 { 2 } else { 0 }
+    // Palette index maps are per plane pixel. On a subsampled axis a luma
+    // block narrower than eight pixels shares the chroma block of its paired
+    // neighbour, so the map grows to the full four-chroma-pixel unit
+    // (`extra`), matching the residual block above.
+    let plane_sub_x = if plane == 0 { 0 } else { state.sub_x }
+    let plane_sub_y = if plane == 0 { 0 } else { state.sub_y }
+    let extra_cols = if plane_sub_x == 1 && block.width < 8 { 2 } else { 0 }
+    let extra_rows = if plane_sub_y == 1 && block.height < 8 { 2 } else { 0 }
+    let map_width = (block.width >> plane_sub_x) + extra_cols
+    let map_height = (block.height >> plane_sub_y) + extra_rows
     let indices = match
       av1_palette_decode_index_map(
         decoder,
         colors.length(),
-        block.width / divisor + extra_cols,
-        block.height / divisor + extra_rows,
-        luma_rows / divisor + extra_rows,
-        luma_cols / divisor + extra_cols,
+        map_width,
+        map_height,
+        (luma_rows >> plane_sub_y) + extra_rows,
+        (luma_cols >> plane_sub_x) + extra_cols,
         if plane == 0 {
           state.palette.y_index[colors.length() - 2]
         } else {
@@ -1151,6 +1223,8 @@ fn av1_decode_intra_tile_state(
   monochrome? : Bool = false,
   enable_intra_edge_filter? : Bool = false,
   track_loop_filter? : Bool = false,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
   restoration_layout? : Av1RestorationLayout? = None,
   tile_origin_row_mi? : Int = 0,
   tile_origin_col_mi? : Int = 0,
@@ -1199,6 +1273,8 @@ fn av1_decode_intra_tile_state(
     superblock_size=if use_128x128_superblock { 128 } else { 64 },
     track_loop_filter~,
     quant_deltas~,
+    sub_x~,
+    sub_y~,
   )
   let neighbors = match
     av1_partition_neighbor_state(
@@ -1240,8 +1316,8 @@ fn av1_decode_intra_tile_state(
                   tile_origin_col_mi + col / 4,
                   tile_origin_row_mi + row / 4,
                   sb_size,
-                  subsampling_x=!monochrome,
-                  subsampling_y=!monochrome,
+                  subsampling_x=!monochrome && sub_x == 1,
+                  subsampling_y=!monochrome && sub_y == 1,
                 ) {
                 return None
               }
@@ -1292,6 +1368,8 @@ fn av1_decode_intra_tile(
   tx_mode_select : Bool,
   cdef? : Av1CdefConfig? = None,
   enable_intra_edge_filter? : Bool = false,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Image? {
   let state = match
     av1_decode_intra_tile_state(
@@ -1308,6 +1386,8 @@ fn av1_decode_intra_tile(
       tx_mode_select,
       cdef~,
       enable_intra_edge_filter~,
+      sub_x~,
+      sub_y~,
     ) {
     Some(value) => value
     None => return None
@@ -1327,6 +1407,8 @@ fn av1_decode_intra_tile(
           state.cdef_indices,
           config,
           bit_depth,
+          sub_x~,
+          sub_y~,
         ) {
         Some(value) => value
         None => return None
@@ -1339,13 +1421,17 @@ fn av1_decode_intra_tile(
     }
     None => ()
   }
-  av1_yuv420_highbd_to_rgba(
+  let chroma_w = (width + (1 << sub_x) - 1) >> sub_x
+  let chroma_h = (height + (1 << sub_y) - 1) >> sub_y
+  av1_yuv_highbd_to_rgba(
     width,
     height,
     av1_intra_crop(state.planes[0], width, height),
-    av1_intra_crop(state.planes[1], (width + 1) / 2, (height + 1) / 2),
-    av1_intra_crop(state.planes[2], (width + 1) / 2, (height + 1) / 2),
+    av1_intra_crop(state.planes[1], chroma_w, chroma_h),
+    av1_intra_crop(state.planes[2], chroma_w, chroma_h),
     bit_depth,
+    subsampling_x=sub_x == 1,
+    subsampling_y=sub_y == 1,
     full_range~,
     matrix_coefficients~,
   )

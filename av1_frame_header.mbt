@@ -553,23 +553,23 @@ pub fn av1_parse_stage1_frame(
   allow_monochrome? : Bool = false,
   allow_highbd? : Bool = false,
 ) -> Av1FrameHeaderInfo? {
+  // Profile and bit-depth pairing from AV1 section 6.4.1: profiles 0 and 1
+  // are 8/10-bit, profile 2 also allows 12-bit. Chroma subsampling is not a
+  // gate: the color config already fixed it from the profile, and every
+  // plane geometry below is parameterised by it.
+  let profile_ok = if sequence.profile == 0 || sequence.profile == 1 {
+    sequence.bit_depth == 8 || sequence.bit_depth == 10
+  } else {
+    sequence.profile == 2
+  }
   if sequence.width <= 0 ||
     sequence.width > 65536 ||
     sequence.height <= 0 ||
     sequence.height > 65536 ||
     sequence.width > MAX_IMAGE_PIXELS / sequence.height ||
-    (
-      sequence.profile != 0 &&
-      !(allow_highbd &&
-      sequence.profile == 2 &&
-      (sequence.bit_depth == 10 || sequence.bit_depth == 12))
-    ) ||
+    !profile_ok ||
     (sequence.bit_depth != 8 && !allow_highbd) ||
     (sequence.monochrome && !allow_monochrome) ||
-    (
-      (!sequence.subsampling_x || !sequence.subsampling_y) &&
-      !sequence.monochrome
-    ) ||
     !sequence.reduced_still_picture_header {
     return None
   }
