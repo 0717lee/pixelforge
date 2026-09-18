@@ -8,8 +8,9 @@
 /// the go-av1 test streams are inter sequences that cannot exercise it.
 
 ///|
-/// Position-sensitive 24-bit digest. A single differing sample changes it.
-fn av1_fg_digest(samples : Array[Int]) -> Int {
+/// Position-sensitive 24-bit digest shared with the other AV1 plane tests.
+/// A single differing sample changes it.
+fn av1_plane_digest(samples : Array[Int]) -> Int {
   let mut h = 0
   for i in 0..<samples.length() {
     let v = samples[i] & 0xFF
@@ -547,9 +548,9 @@ test "film grain synthesis matches dav1d pixel truth" {
   assert_eq(u.length(), 1024)
   assert_eq(v.length(), 1024)
   // dav1d with grain synthesis enabled.
-  assert_eq(av1_fg_digest(y), 9177809)
-  assert_eq(av1_fg_digest(u), 6447404)
-  assert_eq(av1_fg_digest(v), 3641591)
+  assert_eq(av1_plane_digest(y), 9177809)
+  assert_eq(av1_plane_digest(u), 6447404)
+  assert_eq(av1_plane_digest(v), 3641591)
   assert_eq(y[0], 19)
   assert_eq(y[1], 87)
   assert_eq(y[2], 168)

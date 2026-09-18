@@ -37,6 +37,8 @@ pub(all) struct Av1FrameHeaderInfo {
   allow_screen_content_tools : Bool
   /// Film-grain parameters, or None when the sequence omitted the tool.
   film_grain : Av1FilmGrainParams?
+  /// Per-plane quantizer deltas from quantization_params.
+  quant_deltas : Av1QuantDeltas
 }
 
 ///|
@@ -568,8 +570,7 @@ pub fn av1_parse_stage1_frame(
       (!sequence.subsampling_x || !sequence.subsampling_y) &&
       !sequence.monochrome
     ) ||
-    !sequence.reduced_still_picture_header ||
-    sequence.separate_uv_delta_q {
+    !sequence.reduced_still_picture_header {
     return None
   }
   let r : Av1FrameBits = { data: frame_payload, bit_pos: 0, }
@@ -808,9 +809,14 @@ pub fn av1_parse_stage1_frame(
     Some(v) => v
     None => return None
   }
+  // quantization_params(): the deltas feed the per-plane quantizer index, so
+  // they are kept instead of rejected. `separate_uv_delta_q` codes one
+  // additional flag and, when set, an independent V delta pair (AV1 5.9.14).
   let mut delta_y = 0
   let mut delta_u = 0
   let mut delta_ua = 0
+  let mut delta_vd = 0
+  let mut delta_va = 0
   if (match r.take(1) {
       Some(v) => v == 1
       None => return None
@@ -821,6 +827,13 @@ pub fn av1_parse_stage1_frame(
     }
   }
   if !sequence.monochrome {
+    let mut diff_uv_delta = false
+    if sequence.separate_uv_delta_q {
+      diff_uv_delta = match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
     if (match r.take(1) {
         Some(v) => v == 1
         None => return None
@@ -839,9 +852,37 @@ pub fn av1_parse_stage1_frame(
         None => return None
       }
     }
+    // Without separate deltas V simply reuses the U pair.
+    if diff_uv_delta {
+      if (match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }) {
+        delta_vd = match r.signed(7) {
+          Some(v) => v
+          None => return None
+        }
+      }
+      if (match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }) {
+        delta_va = match r.signed(7) {
+          Some(v) => v
+          None => return None
+        }
+      }
+    } else {
+      delta_vd = delta_u
+      delta_va = delta_ua
+    }
   }
-  if delta_y != 0 || delta_u != 0 || delta_ua != 0 {
-    return None
+  let quant_deltas : Av1QuantDeltas = {
+    y_dc: delta_y,
+    u_dc: delta_u,
+    u_ac: delta_ua,
+    v_dc: delta_vd,
+    v_ac: delta_va,
   }
   let using_qmatrix = match r.take(1) {
     Some(v) => v == 1
@@ -885,7 +926,10 @@ pub fn av1_parse_stage1_frame(
     }
   }
 
-  let coded_lossless = base_q_idx == 0
+  // CodedLossless also requires every quantizer delta to be zero (AV1 5.9.14),
+  // which gates the loop-filter, CDEF, restoration and tx-mode syntax below.
+  let coded_lossless = base_q_idx == 0 &&
+    av1_quant_deltas_lossless(quant_deltas)
   let loop_filter = if coded_lossless {
     None
   } else {
@@ -978,6 +1022,7 @@ pub fn av1_parse_stage1_frame(
     disable_cdf_update,
     allow_screen_content_tools: allow_tools,
     film_grain,
+    quant_deltas,
   })
 }
 

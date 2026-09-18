@@ -46,7 +46,7 @@ pub fn av1_decode(Array[Byte]) -> Image?
 
 pub fn av1_decode_alpha(Array[Byte]) -> Array[Byte]?
 
-pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Array[Byte]?
+pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, quant_deltas? : Av1QuantDeltas) -> Array[Byte]?
 
 pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, superres_denom? : Int) -> Image?
 
@@ -319,6 +319,7 @@ pub(all) struct Av1FrameHeaderInfo {
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
   film_grain : Av1FilmGrainParams?
+  quant_deltas : Av1QuantDeltas
 }
 
 pub(all) struct Av1FrameInfo {
@@ -333,6 +334,14 @@ pub(all) struct Av1LoopFilterConfig {
   delta_enabled : Bool
   ref_deltas : Array[Int]
   mode_deltas : Array[Int]
+}
+
+pub(all) struct Av1QuantDeltas {
+  y_dc : Int
+  u_dc : Int
+  u_ac : Int
+  v_dc : Int
+  v_ac : Int
 }
 
 pub(all) struct Av1ReferenceState {
@@ -508,6 +517,7 @@ pub(all) struct Av1Stage1Input {
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
   film_grain : Av1FilmGrainParams?
+  quant_deltas : Av1QuantDeltas
 }
 
 pub(all) struct Av1TilePayload {

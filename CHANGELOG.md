@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Added per-plane quantizer deltas, so `separate_uv_delta_q` streams decode
+  instead of being rejected. `quantization_params` now keeps the decoded
+  deltas rather than refusing non-zero ones, reads the `diff_uv_delta` flag
+  and the independent V pair when the sequence enables the tool, and V
+  mirrors U when it does not. `CodedLossless` also requires every delta to
+  be zero, as the spec states, which decides whether the loop-filter, CDEF,
+  restoration and tx-mode syntax follows. The dequantiser reads the plane's
+  own index (`base_q_idx` plus the plane's DC and AC deltas, clamped to
+  [0, 255]); luma AC keeps the base index. Tile decoding threads the deltas
+  from the frame header through the intra state to each coefficient leaf, and
+  the alpha and stage-one inputs expose the same parameter.
+- Verified against dav1d pixel ground truth with two 64x64 8-bit 4:2:0
+  reduced-still streams that share their tile data and differ only in
+  `quantization_params`: an aomenc encode with
+  `--deltaq-mode=3 --enable-chroma-deltaq=1` (non-zero U deltas, which the
+  decoder previously rejected) and the same stream rewritten to signal
+  `separate_uv_delta_q` with an independent V pair, where Y and U stay
+  identical to the dav1d decode while V follows the new index (928 of 1024
+  samples differ). Both match dav1d for all 6,144 samples. Five new tests
+  cover the two parses, the index arithmetic and both pixel-truth decodes;
+  full suite: 1059/1059.
+
 - Added AV1 film-grain synthesis, the last missing still-picture tool. The
   uncompressed header parses `film_grain_params` (AV1 5.9.30) after
   `reduced_tx_set` and no longer rejects reduced-still streams that enable

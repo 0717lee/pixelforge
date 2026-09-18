@@ -76,6 +76,9 @@ pub(all) struct Av1Stage1Input {
   /// Film-grain parameters parsed from the frame header, or None when the
   /// sequence disabled the tool. Applied after reconstruction.
   film_grain : Av1FilmGrainParams?
+  /// Per-plane quantizer deltas; V differs from U only when the sequence
+  /// enables `separate_uv_delta_q`.
+  quant_deltas : Av1QuantDeltas
 }
 
 ///|
@@ -656,6 +659,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             use_128x128_superblock: seq.use_128x128_superblock,
             tile_payload: frame.tile_payload,
             film_grain: frame.film_grain,
+            quant_deltas: frame.quant_deltas,
           })
       }
     }

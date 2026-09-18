@@ -34,6 +34,13 @@ pub fn av1_decode_alpha_tile(
   loop_filter? : Av1LoopFilterConfig? = None,
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
+  quant_deltas? : Av1QuantDeltas = {
+    y_dc: 0,
+    u_dc: 0,
+    u_ac: 0,
+    v_dc: 0,
+    v_ac: 0,
+  },
 ) -> Array[Byte]? {
   let (frame, _stripe_store) = match
     av1_decode_tile_planes(
@@ -59,6 +66,7 @@ pub fn av1_decode_alpha_tile(
       loop_filter~,
       restoration~,
       upscaled_width~,
+      quant_deltas~,
     ) {
     Some(value) => value
     None => return None

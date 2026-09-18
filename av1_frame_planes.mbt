@@ -198,6 +198,13 @@ fn av1_decode_tile_planes(
   restoration? : Av1RestorationConfig? = None,
   upscaled_width? : Int = 0,
   superres_denom? : Int = 8,
+  quant_deltas? : Av1QuantDeltas = {
+    y_dc: 0,
+    u_dc: 0,
+    u_ac: 0,
+    v_dc: 0,
+    v_ac: 0,
+  },
 ) -> (Av1FramePlanes, Av1RestorationStripeStore?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
   if width <= 0 ||
@@ -330,6 +337,7 @@ fn av1_decode_tile_planes(
         restoration_layout=lr_layout,
         tile_origin_row_mi=top / 4,
         tile_origin_col_mi=left / 4,
+        quant_deltas~,
       ) {
       Some(value) => value
       None => return None
@@ -618,6 +626,7 @@ fn av1_decode_frame_planes(
       restoration=frame.restoration,
       upscaled_width=frame.upscaled_width,
       superres_denom=frame.superres_denom,
+      quant_deltas=frame.quant_deltas,
     ) {
     Some(value) => value
     None => return None

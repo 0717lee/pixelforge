@@ -64,6 +64,8 @@ priv struct Av1IntraState {
   uv_coeff : Av1CoeffContext
   planes : Array[Av1IntraPlane]
   base_q_idx : Int
+  /// Per-plane quantizer deltas; the dequant reads the plane's own index.
+  quant_deltas : Av1QuantDeltas
   bit_depth : Int
   monochrome : Bool
   reduced_tx_set : Bool
@@ -96,6 +98,13 @@ fn av1_intra_state(
   enable_intra_edge_filter? : Bool = false,
   superblock_size? : Int = 64,
   track_loop_filter? : Bool = false,
+  quant_deltas? : Av1QuantDeltas = {
+    y_dc: 0,
+    u_dc: 0,
+    u_ac: 0,
+    v_dc: 0,
+    v_ac: 0,
+  },
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -139,6 +148,7 @@ fn av1_intra_state(
     uv_coeff: av1_coeff_context(base_q_idx, 0, 1),
     planes,
     base_q_idx,
+    quant_deltas,
     bit_depth,
     monochrome,
     reduced_tx_set,
@@ -381,6 +391,18 @@ fn av1_intra_transform(
         height=tx_height,
         scan_class=av1_tx_scan_class(tx_type),
         dc_sign_ctx=if dc_sign < 0 { 1 } else if dc_sign > 0 { 2 } else { 0 },
+        dc_q_idx=av1_plane_qindex(
+          state.base_q_idx,
+          state.quant_deltas,
+          plane_index,
+          true,
+        ),
+        ac_q_idx=av1_plane_qindex(
+          state.base_q_idx,
+          state.quant_deltas,
+          plane_index,
+          false,
+        ),
       ) {
       Some(value) => value
       None => return false
@@ -1132,6 +1154,13 @@ fn av1_decode_intra_tile_state(
   restoration_layout? : Av1RestorationLayout? = None,
   tile_origin_row_mi? : Int = 0,
   tile_origin_col_mi? : Int = 0,
+  quant_deltas? : Av1QuantDeltas = {
+    y_dc: 0,
+    u_dc: 0,
+    u_ac: 0,
+    v_dc: 0,
+    v_ac: 0,
+  },
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -1169,6 +1198,7 @@ fn av1_decode_intra_tile_state(
     enable_intra_edge_filter~,
     superblock_size=if use_128x128_superblock { 128 } else { 64 },
     track_loop_filter~,
+    quant_deltas~,
   )
   let neighbors = match
     av1_partition_neighbor_state(
@@ -1202,7 +1232,7 @@ fn av1_decode_intra_tile_state(
       match lr_tile_state {
         Some(lr_state) =>
           match restoration_layout {
-            Some(layout) => {
+            Some(layout) =>
               if !av1_restoration_read_sb(
                   decoder,
                   lr_state,
@@ -1215,7 +1245,6 @@ fn av1_decode_intra_tile_state(
                 ) {
                 return None
               }
-            }
             None => ()
           }
         None => ()
@@ -1236,11 +1265,10 @@ fn av1_decode_intra_tile_state(
     row = row + sb_size
   }
   match lr_tile_state {
-    Some(lr_state) => {
+    Some(lr_state) =>
       for record in lr_state.units {
         state.restoration_units.push(record)
       }
-    }
     None => ()
   }
   Some(state)
