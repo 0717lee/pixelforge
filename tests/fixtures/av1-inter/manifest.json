@@ -1,0 +1,25 @@
+{
+  "encoder": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE",
+  "fixtures": [
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=64 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt -o C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\general_inter_64x64.check.obu C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\general_inter_64x64.input.y4m",
+      "name": "general_inter_64x64",
+      "obu_sha256": "7b108a3e0bb2074e45202247f76b06c5da4f9e2abaec5e892f8e57261f49c18f",
+      "reference_sha256": "2bedab6e2fa08ae92e3c32ea597a5b1f70fa86eebd6cf5eb44f082399b1f4b00"
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=64 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_minimal_64x64.check.obu C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_minimal_64x64.input.y4m",
+      "name": "inter_minimal_64x64",
+      "obu_sha256": "67084bffd8868f432032e4b4e72fca7ad2d363af73284b01eb4310572f3d6f10",
+      "reference_sha256": "2bedab6e2fa08ae92e3c32ea597a5b1f70fa86eebd6cf5eb44f082399b1f4b00"
+    }
+  ],
+  "frames_per_fixture": 2,
+  "notes": "libaom in this build crashes past two frames, so each fixture is one key frame plus one inter frame.",
+  "oracle_trace": "C:\\Users\\\u8c26\u53cbLee\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build-shared\\bin\\ffmpeg.exe",
+  "reference_decoder": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE",
+  "source_dimensions": [
+    64,
+    64
+  ]
+}

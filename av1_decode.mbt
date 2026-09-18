@@ -27,7 +27,43 @@ pub(all) struct Av1SequenceInfo {
   color_primaries : Int
   transfer_characteristics : Int
   matrix_coefficients : Int
+  /// Inter-frame tool flags (AV1 §5.9.1). A reduced still-picture sequence
+  /// signals none of them, so every default below is the reduced-still
+  /// derivation rather than an unparse.
+  still_picture : Bool
+  enable_order_hint : Bool
+  order_hint_bits : Int
+  enable_ref_frame_mvs : Bool
+  enable_warped_motion : Bool
+  enable_dual_filter : Bool
+  enable_jnt_comp : Bool
+  enable_masked_compound : Bool
+  enable_interintra_compound : Bool
+  /// A `seq_force_*` value of 2 (SELECT) means the frame header picks the tool.
+  seq_force_screen_content_tools : Int
+  seq_force_integer_mv : Int
+  frame_id_numbers_present : Bool
+  delta_frame_id_length_minus_2 : Int
+  additional_frame_id_length_minus_1 : Int
+  decoder_model_info_present : Bool
+  equal_picture_interval : Bool
+  buffer_delay_length_minus_1 : Int
+  buffer_removal_time_length_minus_1 : Int
+  frame_presentation_time_length_minus_1 : Int
+  operating_points_cnt_minus_1 : Int
+  operating_point_idc : Array[Int]
+  /// `frame_width_bits_minus_1` / `frame_height_bits_minus_1`: the field widths
+  /// a `frame_size_override` re-reads the coded dimensions with.
+  frame_width_bits_minus_1 : Int
+  frame_height_bits_minus_1 : Int
 }
+
+///|
+/// AV1 §3: a `seq_force_*` field of 2 defers the choice to the frame header.
+let av1_select_screen_content_tools : Int = 2
+
+///|
+let av1_select_integer_mv : Int = 2
 
 ///|
 /// Header facts available before tile entropy decoding. Reduced still-picture
@@ -392,6 +428,31 @@ fn av1_parse_color_config(
 }
 
 ///|
+/// Skips a 32-bit syntax element. `Av1BitReader::read` caps single reads at 31
+/// bits, so wide fields are consumed as two halves.
+fn av1_skip32(reader : Av1BitReader) -> Bool {
+  av1_skip(reader, 16) && av1_skip(reader, 16)
+}
+
+///|
+/// Skips `num_ticks_per_picture_minus_1`, coded as uvlc (AV1 §4.11): a run of
+/// one bits counted as `i`, terminated by a zero bit, then `i` value bits.
+fn av1_skip_uvlc(reader : Av1BitReader) -> Bool {
+  let mut i = 0
+  while i < 32 {
+    match reader.read(1) {
+      Some(0) => return av1_skip(reader, i)
+      Some(_) => i = i + 1
+      None => return false
+    }
+  }
+  false
+}
+
+///|
+/// Parses `sequence_header_obu` (AV1 §5.5.1). Both the reduced still-picture
+/// and the general grammar are supported; the timing and operating-point fields
+/// the frame header needs to skip its own optional sections are retained.
 fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   let reader = Av1BitReader::new(payload)
   let profile = match av1_u(reader, 3) {
@@ -401,22 +462,119 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   if profile > 2 {
     return None
   }
-  let _still_picture = match av1_u(reader, 1) {
-    Some(v) => v
-    None => return None
-  }
-  let reduced = match av1_u(reader, 1) {
+  let still_picture = match reader.read(1) {
     Some(v) => v == 1
     None => return None
   }
-  // Stage one intentionally accepts only the reduced still-picture header.
-  if !reduced {
-    return None
+  let reduced = match reader.read(1) {
+    Some(v) => v == 1
+    None => return None
   }
-  // reduced_still_picture_header carries operating_point_idc=0 and a
-  // five-bit seq_level_idx before the frame dimension fields.
-  if !av1_skip(reader, 5) {
-    return None
+  // Operating points (AV1 §5.5.1). A reduced still-picture header fixes the
+  // single operating point at idc 0 and reads no presence flags at all.
+  let mut decoder_model_info_present = false
+  let mut equal_picture_interval = false
+  let mut buffer_delay_length_minus_1 = 0
+  let mut buffer_removal_time_length_minus_1 = 0
+  let mut frame_presentation_time_length_minus_1 = 0
+  let mut operating_points_cnt_minus_1 = 0
+  let mut operating_point_idc : Array[Int] = [0]
+  if reduced {
+    if !av1_skip(reader, 5) {
+      return None
+    } // seq_level_idx[0]
+  } else {
+    let timing_info_present = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if timing_info_present {
+      if !av1_skip32(reader) {
+        return None
+      } // num_units_in_display_tick
+      if !av1_skip32(reader) {
+        return None
+      } // time_scale
+      equal_picture_interval = match reader.read(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+      if equal_picture_interval && !av1_skip_uvlc(reader) {
+        return None
+      }
+      decoder_model_info_present = match reader.read(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+      if decoder_model_info_present {
+        buffer_delay_length_minus_1 = match av1_u(reader, 5) {
+          Some(v) => v
+          None => return None
+        }
+        if !av1_skip32(reader) {
+          return None
+        } // num_units_in_decoding_tick
+        buffer_removal_time_length_minus_1 = match av1_u(reader, 5) {
+          Some(v) => v
+          None => return None
+        }
+        frame_presentation_time_length_minus_1 = match av1_u(reader, 5) {
+          Some(v) => v
+          None => return None
+        }
+      }
+    }
+    let initial_display_delay_present = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    operating_points_cnt_minus_1 = match av1_u(reader, 5) {
+      Some(v) => v
+      None => return None
+    }
+    if operating_points_cnt_minus_1 >= 32 {
+      return None
+    }
+    let idcs : Array[Int] = []
+    for _ in 0..<=operating_points_cnt_minus_1 {
+      let idc = match av1_u(reader, 12) {
+        Some(v) => v
+        None => return None
+      }
+      let level = match av1_u(reader, 5) {
+        Some(v) => v
+        None => return None
+      }
+      if level > 7 && !av1_skip(reader, 1) {
+        return None
+      } // seq_tier
+      if decoder_model_info_present {
+        let present = match reader.read(1) {
+          Some(v) => v == 1
+          None => return None
+        }
+        if present {
+          let width = buffer_delay_length_minus_1 + 1
+          if width > 31 ||
+            !av1_skip(reader, width) ||
+            !av1_skip(reader, width) ||
+            !av1_skip(reader, 1) {
+            return None
+          }
+        }
+      }
+      if initial_display_delay_present {
+        let present = match reader.read(1) {
+          Some(v) => v == 1
+          None => return None
+        }
+        if present && !av1_skip(reader, 4) {
+          return None
+        } // initial_display_delay_minus_1
+      }
+      idcs.push(idc)
+    }
+    operating_point_idc = idcs
   }
   let width_bits = match av1_u(reader, 4) {
     Some(v) => v + 1
@@ -426,6 +584,8 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     Some(v) => v + 1
     None => return None
   }
+  let frame_width_bits_minus_1 = width_bits - 1
+  let frame_height_bits_minus_1 = height_bits - 1
   let width_minus_one = match av1_u(reader, width_bits) {
     Some(v) => v
     None => return None
@@ -438,6 +598,26 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   let height = height_minus_one + 1
   if width <= 0 || height <= 0 || width > 65536 || height > 65536 {
     return None
+  }
+  // Frame identification (AV1 §5.5.1). Absent from a reduced still header.
+  let mut frame_id_numbers_present = false
+  let mut delta_frame_id_length_minus_2 = 0
+  let mut additional_frame_id_length_minus_1 = 0
+  if !reduced {
+    frame_id_numbers_present = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if frame_id_numbers_present {
+      delta_frame_id_length_minus_2 = match av1_u(reader, 4) {
+        Some(v) => v
+        None => return None
+      }
+      additional_frame_id_length_minus_1 = match av1_u(reader, 3) {
+        Some(v) => v
+        None => return None
+      }
+    }
   }
   // Sequence tools preceding color_config(). Keep each flag explicit so the
   // frame stage can make a capability decision without guessing bit offsets.
@@ -452,6 +632,75 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   let edge_filter = match av1_u(reader, 1) {
     Some(v) => v == 1
     None => return None
+  }
+  let mut interintra_compound = false
+  let mut masked_compound = false
+  let mut warped_motion = false
+  let mut dual_filter = false
+  let mut order_hint = false
+  let mut jnt_comp = false
+  let mut ref_frame_mvs = false
+  let mut force_screen_content = av1_select_screen_content_tools
+  let mut force_integer_mv = av1_select_integer_mv
+  let mut order_hint_bits = 0
+  if !reduced {
+    interintra_compound = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    masked_compound = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    warped_motion = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    dual_filter = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    order_hint = match reader.read(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if order_hint {
+      jnt_comp = match reader.read(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+      ref_frame_mvs = match reader.read(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+    // seq_choose_screen_content_tools: 1 defers the choice to every frame.
+    force_screen_content = if reader.read(1) == Some(1) {
+      av1_select_screen_content_tools
+    } else {
+      match av1_u(reader, 1) {
+        Some(v) => v
+        None => return None
+      }
+    }
+    force_integer_mv = if force_screen_content > 0 {
+      if reader.read(1) == Some(1) {
+        av1_select_integer_mv
+      } else {
+        match av1_u(reader, 1) {
+          Some(v) => v
+          None => return None
+        }
+      }
+    } else {
+      av1_select_integer_mv
+    }
+    if order_hint {
+      order_hint_bits = match av1_u(reader, 3) {
+        Some(v) => v + 1
+        None => return None
+      }
+    }
   }
   let superres = match av1_u(reader, 1) {
     Some(v) => v == 1
@@ -490,7 +739,7 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     monochrome: color.monochrome,
     subsampling_x: color.subsampling_x,
     subsampling_y: color.subsampling_y,
-    reduced_still_picture_header: true,
+    reduced_still_picture_header: reduced,
     use_128x128_superblock: use128,
     enable_filter_intra: filter_intra,
     enable_intra_edge_filter: edge_filter,
@@ -503,6 +752,29 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     color_primaries: color.primaries,
     transfer_characteristics: color.transfer,
     matrix_coefficients: color.matrix,
+    still_picture,
+    enable_order_hint: order_hint,
+    order_hint_bits,
+    enable_ref_frame_mvs: ref_frame_mvs,
+    enable_warped_motion: warped_motion,
+    enable_dual_filter: dual_filter,
+    enable_jnt_comp: jnt_comp,
+    enable_masked_compound: masked_compound,
+    enable_interintra_compound: interintra_compound,
+    seq_force_screen_content_tools: force_screen_content,
+    seq_force_integer_mv: force_integer_mv,
+    frame_id_numbers_present,
+    delta_frame_id_length_minus_2,
+    additional_frame_id_length_minus_1,
+    decoder_model_info_present,
+    equal_picture_interval,
+    buffer_delay_length_minus_1,
+    buffer_removal_time_length_minus_1,
+    frame_presentation_time_length_minus_1,
+    operating_points_cnt_minus_1,
+    operating_point_idc,
+    frame_width_bits_minus_1,
+    frame_height_bits_minus_1,
   })
 }
 

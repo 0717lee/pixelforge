@@ -239,6 +239,7 @@ fn av1_cdef_header_test_sequence(
   enable_restoration? : Bool = false,
 ) -> Av1SequenceInfo {
   {
+    ..av1_reduced_still_sequence,
     profile: 0,
     width: 64,
     height: 64,
@@ -246,7 +247,6 @@ fn av1_cdef_header_test_sequence(
     monochrome,
     subsampling_x: true,
     subsampling_y: true,
-    reduced_still_picture_header: true,
     use_128x128_superblock: false,
     enable_filter_intra: false,
     enable_intra_edge_filter: false,
@@ -254,8 +254,6 @@ fn av1_cdef_header_test_sequence(
     enable_cdef,
     enable_restoration,
     full_range: false,
-    separate_uv_delta_q: false,
-    film_grain_params_present: false,
     color_primaries: 1,
     transfer_characteristics: 1,
     matrix_coefficients: 6,

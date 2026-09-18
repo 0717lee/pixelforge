@@ -45,9 +45,17 @@ POSSIBILITY OF SUCH DAMAGE.
 ## go-av1 reference tables
 
 The AV1 default CDF and quantizer tables in the `av1_*tables.mbt` files,
-including the intra-mode tables, were transcribed from corresponding tables in
-the `github.com/mgvs/go-av1` project. They are distributed under the BSD
-2-Clause License:
+including the intra-mode tables and the `Subpel_Filters` interpolation kernels
+in `av1_interp_tables.mbt`, were transcribed from corresponding tables in the
+`github.com/mgvs/go-av1` project. The general sequence and frame-header grammar
+(`av1_parse_sequence_payload`, `av1_parse_frame_prefix`, the reference-list
+derivation and the global-motion sub-exponential coders) and the eight-tap
+subpel motion-compensation kernel in `av1_mc.mbt` follow the same project's
+`header/`, `decode/intermode.go` and `decode/mc.go` algorithms, and its
+`decode/subpel_gen.go` source hash is pinned in the generated table header.
+Correctness is settled against the AV1 specification and dav1d output rather
+than against that implementation, and where the two disagree the specification
+wins. It is distributed under the BSD 2-Clause License:
 
 Copyright (c) 2026, Oleksandr Zhabotynskyi
 

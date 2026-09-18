@@ -66,6 +66,10 @@ pub fn av1_extract_tile_payloads(Array[Byte], Int, Int, Int) -> Array[Av1TilePay
 
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
+pub fn av1_frame_map() -> Av1FrameMap
+
+pub fn av1_frame_map_show(Av1FrameMap, Int) -> Av1RefFrame?
+
 pub fn av1_frame_tile_payloads(Av1FrameHeaderInfo) -> Array[Av1TilePayload]?
 
 pub fn av1_intra_predict(Int, Int, Int, Array[Int], Array[Int], Int, Int, have_above? : Bool, have_left? : Bool) -> Array[Int]?
@@ -86,7 +90,7 @@ pub fn av1_parse_show_existing_frame(Array[Byte], Av1ShowExistingFrameConfig) ->
 
 pub fn av1_parse_show_existing_frame_envelope(Array[Byte], Av1ShowExistingFrameConfig) -> Av1ShowExistingFrameEnvelope?
 
-pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool) -> Av1FrameHeaderInfo?
+pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool, map? : Av1FrameMap) -> Av1FrameHeaderInfo?
 
 pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbBlock]
 
@@ -113,6 +117,8 @@ pub fn av1_reference_show_existing(Av1ReferenceState, Av1ShowExistingFrameEnvelo
 pub fn av1_reference_state() -> Av1ReferenceState
 
 pub fn av1_reference_store(Av1ReferenceState, Int, Image, Int) -> Bool
+
+pub fn av1_relative_dist(Av1SequenceInfo, Int, Int) -> Int
 
 pub fn av1_restoration_active(Av1RestorationConfig) -> Bool
 
@@ -301,6 +307,7 @@ pub(all) struct Av1FilmGrainParams {
 pub(all) struct Av1FrameHeaderInfo {
   frame_width : Int
   upscaled_width : Int
+  frame_height : Int
   superres_denom : Int
   header_bytes : Int
   tile_payload : Array[Byte]
@@ -322,12 +329,61 @@ pub(all) struct Av1FrameHeaderInfo {
   allow_screen_content_tools : Bool
   film_grain : Av1FilmGrainParams?
   quant_deltas : Av1QuantDeltas
+  frame_type : Int
+  frame_is_intra : Bool
+  show_frame : Bool
+  show_existing_frame : Bool
+  frame_to_show_map_idx : Int
+  error_resilient : Bool
+  showable_frame : Bool
+  disable_frame_end_update_cdf : Bool
+  force_integer_mv : Int
+  current_frame_id : Int
+  order_hint : Int
+  primary_ref_frame : Int
+  refresh_frame_flags : Int
+  ref_frame_idx : Array[Int]
+  order_hints : Array[Int]
+  ref_frame_sign_bias : Array[Int]
+  allow_high_precision_mv : Bool
+  interpolation_filter : Int
+  is_motion_mode_switchable : Bool
+  use_ref_frame_mvs : Bool
+  allow_warped_motion : Bool
+  reference_select : Bool
+  skip_mode_present : Bool
+  skip_mode_frame : Array[Int]
+  gm_type : Array[Int]
+  gm_params : Array[Array[Int]]
+  prev_gm_params : Array[Array[Int]]
+  mut loop_filter_ref_deltas : Array[Int]
+  mut loop_filter_mode_deltas : Array[Int]
+  allow_intrabc : Bool
+  render_width : Int
+  render_height : Int
 }
 
 pub(all) struct Av1FrameInfo {
   key_frame : Bool
   show_frame : Bool
   payload_size : Int
+}
+
+pub(all) struct Av1FrameMap {
+  slots : Array[Av1RefFrame?]
+  valid : Array[Bool]
+  order_hints : Array[Int]
+  frame_types : Array[Int]
+  frame_ids : Array[Int]
+  upscaled_widths : Array[Int]
+  frame_widths : Array[Int]
+  frame_heights : Array[Int]
+  render_widths : Array[Int]
+  render_heights : Array[Int]
+  saved_gm_params : Array[Array[Array[Int]]]
+  saved_loop_filter_ref_deltas : Array[Array[Int]]
+  saved_loop_filter_mode_deltas : Array[Array[Int]]
+  current_frame_id : Int
 }
 
 pub(all) struct Av1LoopFilterConfig {
@@ -338,12 +394,51 @@ pub(all) struct Av1LoopFilterConfig {
   mode_deltas : Array[Int]
 }
 
+pub(all) struct Av1MotionRequest {
+  reference : Av1RefFrame
+  frame_width : Int
+  frame_height : Int
+  plane : Int
+  x : Int
+  y : Int
+  width : Int
+  height : Int
+  mv_row : Int
+  mv_col : Int
+  filter_vertical : Int
+  filter_horizontal : Int
+  compound : Bool
+}
+
 pub(all) struct Av1QuantDeltas {
   y_dc : Int
   u_dc : Int
   u_ac : Int
   v_dc : Int
   v_ac : Int
+}
+
+pub(all) struct Av1RefFrame {
+  planes : Array[Array[Int]]
+  coded_width : Int
+  coded_height : Int
+  width : Int
+  height : Int
+  sub_x : Int
+  sub_y : Int
+  bit_depth : Int
+  frame_width : Int
+  upscaled_width : Int
+  frame_height : Int
+  render_width : Int
+  render_height : Int
+  order_hint : Int
+  frame_type : Int
+  frame_id : Int
+  order_hints : Array[Int]
+  gm_params : Array[Array[Int]]
+  loop_filter_ref_deltas : Array[Int]
+  loop_filter_mode_deltas : Array[Int]
 }
 
 pub(all) struct Av1ReferenceState {
@@ -467,6 +562,29 @@ pub(all) struct Av1SequenceInfo {
   color_primaries : Int
   transfer_characteristics : Int
   matrix_coefficients : Int
+  still_picture : Bool
+  enable_order_hint : Bool
+  order_hint_bits : Int
+  enable_ref_frame_mvs : Bool
+  enable_warped_motion : Bool
+  enable_dual_filter : Bool
+  enable_jnt_comp : Bool
+  enable_masked_compound : Bool
+  enable_interintra_compound : Bool
+  seq_force_screen_content_tools : Int
+  seq_force_integer_mv : Int
+  frame_id_numbers_present : Bool
+  delta_frame_id_length_minus_2 : Int
+  additional_frame_id_length_minus_1 : Int
+  decoder_model_info_present : Bool
+  equal_picture_interval : Bool
+  buffer_delay_length_minus_1 : Int
+  buffer_removal_time_length_minus_1 : Int
+  frame_presentation_time_length_minus_1 : Int
+  operating_points_cnt_minus_1 : Int
+  operating_point_idc : Array[Int]
+  frame_width_bits_minus_1 : Int
+  frame_height_bits_minus_1 : Int
 }
 
 pub(all) struct Av1ShowExistingFrameConfig {

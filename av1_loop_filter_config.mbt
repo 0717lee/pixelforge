@@ -42,6 +42,8 @@ fn av1_loop_filter_config_valid(config : Av1LoopFilterConfig) -> Bool {
 fn av1_parse_loop_filter_config(
   reader : Av1FrameBits,
   monochrome : Bool,
+  ref_deltas? : Array[Int] = [],
+  mode_deltas? : Array[Int] = [],
 ) -> Av1LoopFilterConfig? {
   let levels = [0, 0, 0, 0]
   for i in 0..<2 {
@@ -66,8 +68,14 @@ fn av1_parse_loop_filter_config(
     Some(value) => value == 1
     None => return None
   }
-  let ref_deltas = [1, 0, 0, 0, -1, 0, -1, -1]
-  let mode_deltas = [0, 0]
+  // `setup_past_independence` or `load_previous` seeds these; the update bits
+  // below only override the entries the frame re-codes (AV1 7.20, 7.21).
+  let ref_deltas = if ref_deltas.length() == 8 {
+    ref_deltas
+  } else {
+    av1_default_loop_filter_ref_deltas()
+  }
+  let mode_deltas = if mode_deltas.length() == 2 { mode_deltas } else { [0, 0] }
   if delta_enabled {
     let update = match reader.take(1) {
       Some(value) => value == 1

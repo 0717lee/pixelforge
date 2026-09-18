@@ -8,6 +8,9 @@ pub(all) struct Av1FrameHeaderInfo {
   /// Visible entropy-coded width, before superres horizontal upscaling.
   frame_width : Int
   upscaled_width : Int
+  /// Entropy-coded height. A general header can override the sequence maximum
+  /// (AV1 5.9.6), so nothing downstream may assume `sequence.height`.
+  frame_height : Int
   /// Eight disables superres; active denominators are nine through sixteen.
   superres_denom : Int
   header_bytes : Int
@@ -39,6 +42,53 @@ pub(all) struct Av1FrameHeaderInfo {
   film_grain : Av1FilmGrainParams?
   /// Per-plane quantizer deltas from quantization_params.
   quant_deltas : Av1QuantDeltas
+  /// Frame classification (AV1 §6.8.2): 0 key, 1 inter, 2 intra-only, 3 switch.
+  frame_type : Int
+  frame_is_intra : Bool
+  show_frame : Bool
+  show_existing_frame : Bool
+  /// Slot of the buffered frame a show-existing frame displays.
+  frame_to_show_map_idx : Int
+  error_resilient : Bool
+  /// Whether the frame may serve as a reference for display-order decisions
+  /// (AV1 §5.9.2). Only a hidden frame signals it.
+  showable_frame : Bool
+  /// §7.21: when set, the entropy-coded frame contexts are not carried over to
+  /// the next tile group, so every tile starts from the frame-level snapshot.
+  disable_frame_end_update_cdf : Bool
+  /// 0/1 when signalled, 2 (`av1_select_integer_mv`) when the sequence fixes it.
+  force_integer_mv : Int
+  current_frame_id : Int
+  order_hint : Int
+  /// `primary_ref_frame`; `av1_primary_ref_none` selects a fresh frame context.
+  primary_ref_frame : Int
+  /// Eight-bit `refresh_frame_flags` mask over the reference buffer slots.
+  refresh_frame_flags : Int
+  /// Slot index for each of the seven named references, `LAST` first.
+  ref_frame_idx : Array[Int]
+  /// Per-reference-name order hints and forward/backward sign bias (§5.9.3).
+  order_hints : Array[Int]
+  ref_frame_sign_bias : Array[Int]
+  allow_high_precision_mv : Bool
+  /// 0..3 select a fixed filter set, 4 means the block signals its own.
+  interpolation_filter : Int
+  is_motion_mode_switchable : Bool
+  use_ref_frame_mvs : Bool
+  allow_warped_motion : Bool
+  reference_select : Bool
+  skip_mode_present : Bool
+  /// The two ordered references a skip-mode block copies its motion from.
+  skip_mode_frame : Array[Int]
+  /// Global motion type and six-tap warp model per reference name (§5.9.24).
+  gm_type : Array[Int]
+  gm_params : Array[Array[Int]]
+  /// Warp models inherited from the primary reference by `load_previous`.
+  prev_gm_params : Array[Array[Int]]
+  mut loop_filter_ref_deltas : Array[Int]
+  mut loop_filter_mode_deltas : Array[Int]
+  allow_intrabc : Bool
+  render_width : Int
+  render_height : Int
 }
 
 ///|
@@ -320,10 +370,26 @@ fn av1_parse_film_grain_params(
   monochrome : Bool,
   subsampling_x : Bool,
   subsampling_y : Bool,
+  frame_is_intra? : Bool = true,
 ) -> Av1FilmGrainParams? {
   let apply_grain = match reader.take(1) {
     Some(v) => v == 1
     None => return None
+  }
+  // An inter frame says whether it re-codes the parameter set or inherits one
+  // from a reference (AV1 5.9.30). Inheriting is out of scope here, so such a
+  // frame is rejected rather than decoded with the wrong grain.
+  if apply_grain && !frame_is_intra {
+    let update_grain = match reader.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if !update_grain {
+      if reader.take(3) is None {
+        return None
+      } // find_ref_idx
+      return None
+    }
   }
   let mut grain_seed = 0
   let mut num_y_points = 0
@@ -544,14 +610,834 @@ fn av1_parse_film_grain_params(
 }
 
 ///|
-/// Parses a reduced-still frame envelope and returns its entropy-coded tile
-/// group. Unsupported syntax is rejected before any bytes are exposed to the
-/// reconstruction stage.
+/// Everything `frame_header()` establishes before `tile_info()`: the frame
+/// class, the reference list, the motion-tool flags and the frame geometry.
+/// A reduced still-picture header is the degenerate case where most of these
+/// are derived rather than signalled (AV1 §5.9.2).
+priv struct Av1FramePrefix {
+  mut disable_cdf_update : Bool
+  mut allow_screen_content_tools : Int
+  mut force_integer_mv : Int
+  mut frame_type : Int
+  mut frame_is_intra : Bool
+  mut show_frame : Bool
+  mut show_existing_frame : Bool
+  mut frame_to_show_map_idx : Int
+  mut error_resilient : Bool
+  mut current_frame_id : Int
+  mut order_hint : Int
+  mut primary_ref_frame : Int
+  mut refresh_frame_flags : Int
+  ref_frame_idx : Array[Int]
+  order_hints : Array[Int]
+  ref_frame_sign_bias : Array[Int]
+  mut allow_high_precision_mv : Bool
+  mut interpolation_filter : Int
+  mut is_motion_mode_switchable : Bool
+  mut use_ref_frame_mvs : Bool
+  mut allow_intrabc : Bool
+  mut upscaled_width : Int
+  mut frame_width : Int
+  mut frame_height : Int
+  mut superres_denom : Int
+  mut render_width : Int
+  mut render_height : Int
+  /// `frame_size_override_flag`, needed again by `frame_size_with_refs`.
+  mut frame_size_override_flag : Int
+  mut showable_frame : Bool
+  mut disable_frame_end_update_cdf : Bool
+  mut loop_filter_ref_deltas : Array[Int]
+  mut loop_filter_mode_deltas : Array[Int]
+  mut prev_gm_params : Array[Array[Int]]
+}
+
+///|
+/// `frame_size()` plus `superres_params()` (AV1 §5.9.6, §5.9.8). The coded
+/// width shrinks under active superres while `upscaled_width` keeps the
+/// resolution motion vectors address.
+fn av1_frame_prefix_size(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+  sequence : Av1SequenceInfo,
+) -> Bool {
+  let override_size = prefix.frame_size_override_flag == 1
+  let (width, height) = if override_size {
+    let w = match r.take(sequence.frame_width_bits_minus_1 + 1) {
+      Some(v) => v + 1
+      None => return false
+    }
+    let h = match r.take(sequence.frame_height_bits_minus_1 + 1) {
+      Some(v) => v + 1
+      None => return false
+    }
+    (w, h)
+  } else {
+    (sequence.width, sequence.height)
+  }
+  let denom = if sequence.enable_superres {
+    let use_superres = match r.take(1) {
+      Some(v) => v == 1
+      None => return false
+    }
+    if use_superres {
+      match r.take(3) {
+        Some(value) => value + 9
+        None => return false
+      }
+    } else {
+      8
+    }
+  } else {
+    8
+  }
+  // Under a size override the frame's own width becomes the upscaled width the
+  // reference buffer records; otherwise the sequence maximum still applies.
+  let upscaled = if override_size { width } else { sequence.width }
+  let coded = (upscaled * 8 + denom / 2) / denom
+  if coded <= 0 ||
+    upscaled <= 0 ||
+    height <= 0 ||
+    coded > 65536 ||
+    height > 65536 {
+    return false
+  }
+  // Active superres must strictly shrink every plane (AV1 §7.16).
+  if denom != 8 &&
+    (
+      coded >= upscaled ||
+      (!sequence.monochrome && (coded + 1) / 2 >= (upscaled + 1) / 2)
+    ) {
+    return false
+  }
+  prefix.upscaled_width = upscaled
+  prefix.frame_width = coded
+  prefix.frame_height = height
+  prefix.superres_denom = denom
+  true
+}
+
+///|
+/// `render_size()` (AV1 §5.9.9). Render dimensions only affect display, so a
+/// frame may carry them without any downstream stage consuming them.
+fn av1_frame_prefix_render_size(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+) -> Bool {
+  let different = match r.take(1) {
+    Some(v) => v == 1
+    None => return false
+  }
+  if different {
+    let w = match r.take(16) {
+      Some(v) => v
+      None => return false
+    }
+    let h = match r.take(16) {
+      Some(v) => v
+      None => return false
+    }
+    prefix.render_width = w + 1
+    prefix.render_height = h + 1
+  } else {
+    prefix.render_width = prefix.upscaled_width
+    prefix.render_height = prefix.frame_height
+  }
+  true
+}
+
+///|
+/// `inter_refs()` and `frame_size_with_refs()` (AV1 §5.9.2, §5.9.7). Fills the
+/// seven named-reference slot indices and derives the per-reference order
+/// hints and sign biases the block stage compares against.
+fn av1_frame_prefix_inter_refs(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+  sequence : Av1SequenceInfo,
+  map : Av1FrameMap,
+) -> Bool {
+  let mut short_signaling = false
+  if sequence.enable_order_hint {
+    short_signaling = match r.take(1) {
+      Some(v) => v == 1
+      None => return false
+    }
+    if short_signaling {
+      let last = match r.take(3) {
+        Some(v) => v
+        None => return false
+      }
+      let gold = match r.take(3) {
+        Some(v) => v
+        None => return false
+      }
+      av1_set_frame_refs(
+        sequence,
+        map,
+        prefix.order_hint,
+        last,
+        gold,
+        prefix.ref_frame_idx,
+      )
+    }
+  }
+  for i in 0..<av1_refs_per_frame {
+    if !short_signaling {
+      let slot = match r.take(3) {
+        Some(v) => v
+        None => return false
+      }
+      prefix.ref_frame_idx[i] = slot
+    }
+    if sequence.frame_id_numbers_present {
+      // delta_frame_id_minus_1 is only used to validate frame identity.
+      if r.take(sequence.delta_frame_id_length_minus_2 + 2) is None {
+        return false
+      }
+    }
+  }
+  // A reference-sized frame inherits the full geometry of the first slot that
+  // declares itself present.
+  let mut inherited = false
+  if prefix.frame_size_override_flag == 1 && !prefix.error_resilient {
+    for i in 0..<av1_refs_per_frame {
+      let found = match r.take(1) {
+        Some(v) => v == 1
+        None => return false
+      }
+      if found {
+        let slot = prefix.ref_frame_idx[i]
+        prefix.upscaled_width = map.upscaled_widths[slot]
+        prefix.frame_width = map.frame_widths[slot]
+        prefix.frame_height = map.frame_heights[slot]
+        prefix.render_width = map.render_widths[slot]
+        prefix.render_height = map.render_heights[slot]
+        inherited = true
+        // A superres flag is still coded for an inherited-size frame.
+        if sequence.enable_superres && r.take(1) is None {
+          return false
+        }
+        break
+      }
+    }
+    if !inherited {
+      if !av1_frame_prefix_size(r, prefix, sequence) {
+        return false
+      }
+      if !av1_frame_prefix_render_size(r, prefix) {
+        return false
+      }
+    }
+  } else {
+    if !av1_frame_prefix_size(r, prefix, sequence) {
+      return false
+    }
+    if !av1_frame_prefix_render_size(r, prefix) {
+      return false
+    }
+  }
+  prefix.allow_high_precision_mv = if prefix.force_integer_mv != 0 {
+    false
+  } else {
+    match r.take(1) {
+      Some(v) => v == 1
+      None => return false
+    }
+  }
+  // `interpolation_filter`: a switchable frame lets each block pick, otherwise
+  // the three-bit selection is fixed for the whole frame (AV1 §5.9.11).
+  let switchable = match r.take(1) {
+    Some(v) => v == 1
+    None => return false
+  }
+  prefix.interpolation_filter = if switchable {
+    4
+  } else {
+    match r.take(2) {
+      Some(v) => v
+      None => return false
+    }
+  }
+  prefix.is_motion_mode_switchable = match r.take(1) {
+    Some(v) => v == 1
+    None => return false
+  }
+  prefix.use_ref_frame_mvs = if prefix.error_resilient ||
+    !sequence.enable_ref_frame_mvs {
+    false
+  } else {
+    match r.take(1) {
+      Some(v) => v == 1
+      None => return false
+    }
+  }
+  for i in 0..<av1_refs_per_frame {
+    let ref_frame = av1_last_frame + i
+    let hint = map.order_hints[prefix.ref_frame_idx[i]]
+    prefix.order_hints[ref_frame] = hint
+    prefix.ref_frame_sign_bias[ref_frame] = if av1_relative_dist(
+        sequence,
+        hint,
+        prefix.order_hint,
+      ) >
+      0 {
+      1
+    } else {
+      0
+    }
+  }
+  true
+}
+
+///|
+/// Reads `frame_header()` up to (but excluding) `tile_info()`. `map` carries the
+/// reference buffer state the general grammar reads and updates; a reduced
+/// still-picture sequence needs none of it.
+fn av1_parse_frame_prefix(
+  r : Av1FrameBits,
+  sequence : Av1SequenceInfo,
+  map : Av1FrameMap?,
+) -> Av1FramePrefix? {
+  let prefix : Av1FramePrefix = {
+    disable_cdf_update: false,
+    allow_screen_content_tools: 0,
+    // §5.9.2: a frame that does not signal it means "integer MV not forced".
+    // The sequence-level SELECT value (2) never reaches this field.
+    force_integer_mv: 0,
+    frame_type: av1_key_frame,
+    frame_is_intra: true,
+    show_frame: true,
+    show_existing_frame: false,
+    frame_to_show_map_idx: 0,
+    error_resilient: false,
+    current_frame_id: 0,
+    order_hint: 0,
+    primary_ref_frame: av1_primary_ref_none,
+    refresh_frame_flags: av1_all_ref_frames_mask,
+    ref_frame_idx: Array::make(av1_refs_per_frame, 0),
+    order_hints: Array::make(av1_total_refs_per_frame, 0),
+    ref_frame_sign_bias: Array::make(av1_total_refs_per_frame, 0),
+    allow_high_precision_mv: false,
+    interpolation_filter: 4,
+    is_motion_mode_switchable: false,
+    use_ref_frame_mvs: false,
+    allow_intrabc: false,
+    upscaled_width: sequence.width,
+    frame_width: sequence.width,
+    frame_height: sequence.height,
+    superres_denom: 8,
+    render_width: sequence.width,
+    render_height: sequence.height,
+    frame_size_override_flag: 0,
+    showable_frame: true,
+    disable_frame_end_update_cdf: sequence.reduced_still_picture_header,
+    loop_filter_ref_deltas: av1_default_loop_filter_ref_deltas(),
+    loop_filter_mode_deltas: [0, 0],
+    prev_gm_params: Array::make(
+      av1_total_refs_per_frame,
+      av1_identity_gm_params(),
+    ),
+  }
+  let id_len = if sequence.frame_id_numbers_present {
+    sequence.additional_frame_id_length_minus_1 +
+    sequence.delta_frame_id_length_minus_2 +
+    3
+  } else {
+    0
+  }
+  if !sequence.reduced_still_picture_header {
+    let show_existing = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if show_existing {
+      prefix.show_existing_frame = true
+      prefix.frame_to_show_map_idx = match r.take(3) {
+        Some(v) => v
+        None => return None
+      }
+      if sequence.decoder_model_info_present &&
+        !sequence.equal_picture_interval &&
+        r.take(sequence.frame_presentation_time_length_minus_1 + 1) is None {
+        return None
+      }
+      if sequence.frame_id_numbers_present && r.take(id_len) is None {
+        return None
+      }
+      // The remaining fields keep their reduced-still defaults; a
+      // show-existing frame carries no new syntax, so the caller resolves it
+      // against the reference buffer instead of decoding tiles.
+      match map {
+        Some(state) =>
+          prefix.frame_type = state.frame_types[prefix.frame_to_show_map_idx]
+        None => return None
+      }
+      prefix.show_frame = true
+      return Some(prefix)
+    }
+    prefix.frame_type = match r.take(2) {
+      Some(v) => v
+      None => return None
+    }
+    prefix.frame_is_intra = prefix.frame_type == av1_key_frame ||
+      prefix.frame_type == av1_intra_only_frame
+    prefix.show_frame = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if prefix.show_frame &&
+      sequence.decoder_model_info_present &&
+      !sequence.equal_picture_interval &&
+      r.take(sequence.frame_presentation_time_length_minus_1 + 1) is None {
+      return None
+    }
+    prefix.showable_frame = if prefix.show_frame {
+      // A shown frame is showable unless it is a key frame; only a hidden
+      // frame says so explicitly (AV1 §5.9.2).
+      prefix.frame_type != av1_key_frame
+    } else {
+      match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+    prefix.error_resilient = if prefix.frame_type == av1_switch_frame ||
+      (prefix.frame_type == av1_key_frame && prefix.show_frame) {
+      true
+    } else {
+      match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+  }
+  // A showing key frame invalidates every buffered reference (AV1 §7.20).
+  if prefix.frame_type == av1_key_frame && prefix.show_frame {
+    match map {
+      Some(state) => av1_frame_map_invalidate(state)
+      None => ()
+    }
+  }
+  prefix.disable_cdf_update = match r.take(1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  prefix.allow_screen_content_tools = if sequence.seq_force_screen_content_tools ==
+    av1_select_screen_content_tools {
+    match r.take(1) {
+      Some(v) => v
+      None => return None
+    }
+  } else {
+    sequence.seq_force_screen_content_tools
+  }
+  if prefix.allow_screen_content_tools != 0 {
+    prefix.force_integer_mv = if sequence.seq_force_integer_mv ==
+      av1_select_integer_mv {
+      match r.take(1) {
+        Some(v) => v
+        None => return None
+      }
+    } else {
+      sequence.seq_force_integer_mv
+    }
+  }
+  if prefix.frame_is_intra {
+    prefix.force_integer_mv = 1
+  }
+  prefix.current_frame_id = if sequence.frame_id_numbers_present {
+    match r.take(id_len) {
+      Some(v) => v
+      None => return None
+    }
+  } else {
+    0
+  }
+  prefix.frame_size_override_flag = if prefix.frame_type == av1_switch_frame {
+    1
+  } else if sequence.reduced_still_picture_header {
+    0
+  } else {
+    match r.take(1) {
+      Some(v) => v
+      None => return None
+    }
+  }
+  if sequence.order_hint_bits > 0 {
+    prefix.order_hint = match r.take(sequence.order_hint_bits) {
+      Some(v) => v
+      None => return None
+    }
+  }
+  prefix.primary_ref_frame = if prefix.frame_is_intra || prefix.error_resilient {
+    av1_primary_ref_none
+  } else {
+    match r.take(3) {
+      Some(v) => v
+      None => return None
+    }
+  }
+  if sequence.decoder_model_info_present {
+    let present = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if present {
+      // `buffer_removal_time` is coded once per operating point this stream
+      // selects. Temporal and spatial ids are 0 for single-layer decode.
+      for op in 0..<=sequence.operating_points_cnt_minus_1 {
+        let idc = sequence.operating_point_idc[op]
+        let needed = idc == 0 ||
+          (((idc >> 0) & 1) == 1 && ((idc >> 8) & 1) == 1)
+        if needed &&
+          r.take(sequence.buffer_removal_time_length_minus_1 + 1) is None {
+          return None
+        }
+      }
+    }
+  }
+  prefix.refresh_frame_flags = if prefix.frame_type == av1_switch_frame ||
+    (prefix.frame_type == av1_key_frame && prefix.show_frame) {
+    av1_all_ref_frames_mask
+  } else {
+    match r.take(8) {
+      Some(v) => v
+      None => return None
+    }
+  }
+  if !prefix.frame_is_intra ||
+    prefix.refresh_frame_flags != av1_all_ref_frames_mask {
+    if prefix.error_resilient && sequence.enable_order_hint {
+      for _ in 0..<av1_num_ref_frames {
+        if r.take(sequence.order_hint_bits) is None {
+          return None
+        } // ref_order_hint
+      }
+    }
+  }
+  if prefix.frame_is_intra {
+    if !av1_frame_prefix_size(r, prefix, sequence) {
+      return None
+    }
+    if !av1_frame_prefix_render_size(r, prefix) {
+      return None
+    }
+    if prefix.allow_screen_content_tools != 0 &&
+      prefix.frame_width == prefix.upscaled_width {
+      prefix.allow_intrabc = match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+  } else {
+    match map {
+      Some(state) =>
+        if !av1_frame_prefix_inter_refs(r, prefix, sequence, state) {
+          return None
+        }
+      None => return None
+    }
+  }
+  prefix.disable_frame_end_update_cdf = if sequence.reduced_still_picture_header ||
+    prefix.disable_cdf_update {
+    true
+  } else {
+    match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+  }
+  // `setup_past_independence` versus `load_previous` (AV1 §7.20, §7.21). The
+  // frame context a non-erasable frame inherits covers the warp models and the
+  // loop-filter deltas, both of which the block stage reads per reference.
+  if prefix.primary_ref_frame == av1_primary_ref_none {
+    prefix.loop_filter_ref_deltas = av1_default_loop_filter_ref_deltas()
+    prefix.loop_filter_mode_deltas = [0, 0]
+  } else {
+    match map {
+      Some(state) => {
+        let slot = prefix.ref_frame_idx[prefix.primary_ref_frame]
+        prefix.loop_filter_ref_deltas = Array::copy(
+          state.saved_loop_filter_ref_deltas[slot],
+        )
+        prefix.loop_filter_mode_deltas = Array::copy(
+          state.saved_loop_filter_mode_deltas[slot],
+        )
+        prefix.prev_gm_params = Array::makei(av1_total_refs_per_frame, i => {
+          Array::copy(state.saved_gm_params[slot][i])
+        })
+      }
+      None => return None
+    }
+  }
+  Some(prefix)
+}
+
+///|
+/// Raw-bit `decode_subexp_with_ref` (AV1 §5.9.27). The global-motion
+/// parameters use this non-arithmetic coder, distinct from the MSAC variant in
+/// `av1_msac.mbt`.
+fn av1_bits_decode_subexp(r : Av1FrameBits, num_syms : Int) -> Int? {
+  let k = 3
+  let mut i = 0
+  let mut mk = 0
+  let mut done = false
+  let mut out : Int? = None
+  while !done {
+    let b2 = if i == 0 { k } else { k + i - 1 }
+    let a = 1 << b2
+    if num_syms <= mk + 3 * a {
+      out = match r.ns(num_syms - mk) {
+        Some(v) => Some(v + mk)
+        None => None
+      }
+      done = true
+    } else {
+      match r.take(1) {
+        Some(1) => {
+          i = i + 1
+          mk = mk + a
+        }
+        Some(_) => {
+          out = match r.take(b2) {
+            Some(v) => Some(v + mk)
+            None => None
+          }
+          done = true
+        }
+        None => {
+          out = None
+          done = true
+        }
+      }
+    }
+  }
+  out
+}
+
+///|
+fn av1_bits_decode_signed_subexp_with_ref(
+  r : Av1FrameBits,
+  low : Int,
+  high : Int,
+  reference : Int,
+) -> Int? {
+  let mx = high - low
+  let v = match av1_bits_decode_subexp(r, mx) {
+    Some(value) => value
+    None => return None
+  }
+  let shifted = reference - low
+  let x = if shifted << 1 <= mx {
+    av1_msac_inverse_recenter(shifted, v)
+  } else {
+    mx - 1 - av1_msac_inverse_recenter(mx - 1 - shifted, v)
+  }
+  Some(x + low)
+}
+
+///|
+/// One decoded warp coefficient, re-expressed in `WARPEDMODEL_PREC_BITS`
+/// precision. The diagonal entries add the identity bias back.
+fn av1_frame_global_param(
+  r : Av1FrameBits,
+  typ : Int,
+  idx : Int,
+  prev : Array[Int],
+  allow_high_precision_mv : Bool,
+) -> Int? {
+  let mut abs_bits = 12
+  let mut prec_bits = 15
+  if idx < 2 {
+    if typ == av1_gm_translation {
+      // A pure translation codes one bit less range and precision when the
+      // frame does not allow quarter-pel motion vectors.
+      let hp = if allow_high_precision_mv { 0 } else { 1 }
+      abs_bits = 9 - hp
+      prec_bits = 3 - hp
+    } else {
+      abs_bits = 12
+      prec_bits = 6
+    }
+  }
+  let prec_diff = av1_warped_model_prec_bits - prec_bits
+  let bias = if idx % 3 == 2 { 1 << av1_warped_model_prec_bits } else { 0 }
+  let sub_ = if idx % 3 == 2 { 1 << prec_bits } else { 0 }
+  let mx = 1 << abs_bits
+  let base = (prev[idx] >> prec_diff) - sub_
+  let delta = match
+    av1_bits_decode_signed_subexp_with_ref(r, -mx, mx + 1, base) {
+    Some(value) => value
+    None => return None
+  }
+  Some((delta << prec_diff) + bias)
+}
+
+///|
+/// `global_motion_params()` (AV1 §5.9.24). Each reference carries a warp model
+/// coded as deltas against the model `load_previous` inherited.
+fn av1_frame_global_motion(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+) -> (Array[Int], Array[Array[Int]])? {
+  let gm_type = Array::make(av1_total_refs_per_frame, av1_gm_identity)
+  let gm_params = Array::make(
+    av1_total_refs_per_frame,
+    av1_identity_gm_params(),
+  )
+  if prefix.frame_is_intra {
+    return Some((gm_type, gm_params))
+  }
+  let read_param = fn(idx : Int, name : Int) -> Int? {
+    av1_frame_global_param(
+      r,
+      gm_type[name],
+      idx,
+      prefix.prev_gm_params[name],
+      prefix.allow_high_precision_mv,
+    )
+  }
+  for name = av1_last_frame; name <= av1_alt_ref_frame; name = name + 1 {
+    let mut typ = av1_gm_identity
+    if (match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }) {
+      if (match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }) {
+        typ = av1_gm_rot_zoom
+      } else if (match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }) {
+        typ = av1_gm_translation
+      } else {
+        typ = av1_gm_affine
+      }
+    }
+    gm_type[name] = typ
+    let indices = if typ == av1_gm_affine {
+      [2, 3, 4, 5]
+    } else if typ == av1_gm_rot_zoom {
+      [2, 3]
+    } else {
+      []
+    }
+    for idx in indices {
+      match read_param(idx, name) {
+        Some(value) => gm_params[name][idx] = value
+        None => return None
+      }
+    }
+    if typ == av1_gm_rot_zoom {
+      // A rot-zoom model is a scaled rotation, so the second row follows.
+      gm_params[name][4] = -gm_params[name][3]
+      gm_params[name][5] = gm_params[name][2]
+    }
+    if typ >= av1_gm_translation {
+      for idx in [0, 1] {
+        match read_param(idx, name) {
+          Some(value) => gm_params[name][idx] = value
+          None => return None
+        }
+      }
+    }
+  }
+  Some((gm_type, gm_params))
+}
+
+///|
+/// `skip_mode_params()` (AV1 §5.9.22). A frame may declare that every block
+/// copies its motion from a fixed pair of ordered references, which removes
+/// per-block motion syntax entirely.
+fn av1_frame_skip_mode(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+  sequence : Av1SequenceInfo,
+  reference_select : Bool,
+) -> (Bool, Array[Int])? {
+  let frames = [av1_last_frame, av1_last_frame]
+  let mut allowed = false
+  if !prefix.frame_is_intra && reference_select && sequence.enable_order_hint {
+    let dist = fn(hint : Int) -> Int {
+      av1_relative_dist(sequence, hint, prefix.order_hint)
+    }
+    let mut forward_idx = -1
+    let mut forward_hint = 0
+    let mut backward_idx = -1
+    let mut backward_hint = 0
+    for i in 0..<av1_refs_per_frame {
+      let hint = prefix.order_hints[av1_last_frame + i]
+      let d = dist(hint)
+      if d < 0 {
+        if forward_idx < 0 || dist(hint) < dist(forward_hint) {
+          forward_idx = i
+          forward_hint = hint
+        }
+      } else if d > 0 {
+        if backward_idx < 0 || dist(hint) > dist(backward_hint) {
+          backward_idx = i
+          backward_hint = hint
+        }
+      }
+    }
+    // With no backward reference the mode pairs the latest forward reference
+    // with the earliest one ahead of it.
+    let mut second_idx = -1
+    let mut second_hint = 0
+    if forward_idx >= 0 && backward_idx < 0 {
+      for i in 0..<av1_refs_per_frame {
+        let hint = prefix.order_hints[av1_last_frame + i]
+        if dist(hint) < dist(forward_hint) {
+          if second_idx < 0 || dist(hint) > dist(second_hint) {
+            second_idx = i
+            second_hint = hint
+          }
+        }
+      }
+    }
+    let pair = if forward_idx < 0 {
+      None
+    } else if backward_idx >= 0 {
+      Some((forward_idx, backward_idx))
+    } else if second_idx >= 0 {
+      Some((forward_idx, second_idx))
+    } else {
+      None
+    }
+    match pair {
+      Some((a, b)) => {
+        allowed = true
+        let lo = if a < b { a } else { b }
+        let hi = if a < b { b } else { a }
+        frames[0] = av1_last_frame + lo
+        frames[1] = av1_last_frame + hi
+      }
+      None => ()
+    }
+  }
+  if !allowed {
+    Some((false, frames))
+  } else {
+    match r.take(1) {
+      Some(v) => Some((v == 1, frames))
+      None => None
+    }
+  }
+}
+
+///|
+/// Parses a frame header and returns its entropy-coded tile group. Unsupported
+/// syntax is rejected before any bytes are exposed to the reconstruction
+/// stage. A general (non reduced-still) sequence reads and updates the
+/// reference buffer, so `map` is required for one.
 pub fn av1_parse_stage1_frame(
   frame_payload : Array[Byte],
   sequence : Av1SequenceInfo,
   allow_monochrome? : Bool = false,
   allow_highbd? : Bool = false,
+  map? : Av1FrameMap,
 ) -> Av1FrameHeaderInfo? {
   // Profile and bit-depth pairing from AV1 section 6.4.1: profiles 0 and 1
   // are 8/10-bit, profile 2 also allows 12-bit. Chroma subsampling is not a
@@ -569,76 +1455,36 @@ pub fn av1_parse_stage1_frame(
     sequence.width > MAX_IMAGE_PIXELS / sequence.height ||
     !profile_ok ||
     (sequence.bit_depth != 8 && !allow_highbd) ||
-    (sequence.monochrome && !allow_monochrome) ||
-    !sequence.reduced_still_picture_header {
+    (sequence.monochrome && !allow_monochrome) {
+    return None
+  }
+  if !sequence.reduced_still_picture_header && map is None {
     return None
   }
   let r : Av1FrameBits = { data: frame_payload, bit_pos: 0, }
-  let disable_cdf_update = match r.take(1) {
-    Some(v) => v == 1
+  let prefix = match av1_parse_frame_prefix(r, sequence, map) {
+    Some(value) => value
     None => return None
   }
-  let allow_tools = match r.take(1) {
-    Some(v) => v == 1
-    None => return None
-  }
-  // Screen-content tools are accepted when force-integer-MV and intrabc
-  // remain disabled; the tile path still requires intra prediction only.
-  if allow_tools && r.take(1) is None {
-    return None
-  } // force_integer_mv
-  let superres_denom = if sequence.enable_superres {
-    let use_superres = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    if use_superres {
-      match r.take(3) {
-        Some(value) => value + 9
-        None => return None
-      }
-    } else {
-      8
-    }
-  } else {
-    8
-  }
-  let upscaled_width = sequence.width
-  let frame_width = (upscaled_width * 8 + superres_denom / 2) / superres_denom
-  // Active superres must increase every plane's visible width (AV1 7.16).
-  // Keep the normative formula, including unconstrained level-31 dimensions.
-  if superres_denom != 8 &&
-    (
-      frame_width >= upscaled_width ||
-      (
-        !sequence.monochrome &&
-        (frame_width + 1) / 2 >= (upscaled_width + 1) / 2
-      )
-    ) {
+  if prefix.show_existing_frame {
+    // A buffered frame carries no tile data: the caller resolves the envelope
+    // against the reference buffer instead of decoding a second time.
     return None
   }
-  let render_different = match r.take(1) {
-    Some(v) => v == 1
-    None => return None
-  }
-  if render_different {
-    if r.take(16) is None || r.take(16) is None {
-      return None
-    }
+  // Screen-content block copy stays out of scope; it changes both the tile
+  // path and the reference used for motion compensation.
+  if prefix.allow_intrabc {
     return None
   }
-  if allow_tools && frame_width == upscaled_width {
-    let allow_intrabc = match r.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    if allow_intrabc {
-      return None
-    }
-  }
+  let disable_cdf_update = prefix.disable_cdf_update
+  let allow_tools = prefix.allow_screen_content_tools != 0
+  let superres_denom = prefix.superres_denom
+  let upscaled_width = prefix.upscaled_width
+  let frame_width = prefix.frame_width
+  let frame_height = prefix.frame_height
 
   let mi_cols = 2 * ((frame_width + 7) / 8)
-  let mi_rows = 2 * ((sequence.height + 7) / 8)
+  let mi_rows = 2 * ((frame_height + 7) / 8)
   let sb_shift = if sequence.use_128x128_superblock { 5 } else { 4 }
   let sb_cols = (mi_cols + (1 << sb_shift) - 1) >> sb_shift
   let sb_rows = (mi_rows + (1 << sb_shift) - 1) >> sb_shift
@@ -933,7 +1779,13 @@ pub fn av1_parse_stage1_frame(
   let loop_filter = if coded_lossless {
     None
   } else {
-    match av1_parse_loop_filter_config(r, sequence.monochrome) {
+    match
+      av1_parse_loop_filter_config(
+        r,
+        sequence.monochrome,
+        ref_deltas=prefix.loop_filter_ref_deltas,
+        mode_deltas=prefix.loop_filter_mode_deltas,
+      ) {
       Some(config) => Some(config)
       None => return None
     }
@@ -973,9 +1825,39 @@ pub fn av1_parse_stage1_frame(
       None => return None
     }
   }
+  // reference_select (AV1 5.9.21) only exists for a frame with references, and
+  // it gates skip_mode, which is the only way a whole frame can be coded
+  // without per-block motion syntax.
+  let reference_select = if prefix.frame_is_intra {
+    false
+  } else {
+    match r.take(1) {
+      Some(value) => value == 1
+      None => return None
+    }
+  }
+  let (skip_mode_present, skip_mode_frame) = match
+    av1_frame_skip_mode(r, prefix, sequence, reference_select) {
+    Some(value) => value
+    None => return None
+  }
+  let allow_warped_motion = if prefix.frame_is_intra ||
+    prefix.error_resilient ||
+    !sequence.enable_warped_motion {
+    false
+  } else {
+    match r.take(1) {
+      Some(value) => value == 1
+      None => return None
+    }
+  }
   // This flag is present for lossless frames too, after the implicit TX mode.
   let reduced_tx_set = match r.take(1) {
     Some(value) => value == 1
+    None => return None
+  }
+  let (gm_type, gm_params) = match av1_frame_global_motion(r, prefix) {
+    Some(value) => value
     None => return None
   }
   // Reduced-still frames are always shown, so the grain syntax is present
@@ -987,6 +1869,7 @@ pub fn av1_parse_stage1_frame(
         sequence.monochrome,
         sequence.subsampling_x,
         sequence.subsampling_y,
+        frame_is_intra=prefix.frame_is_intra,
       ) {
       Some(params) => Some(params)
       None => return None
@@ -1002,6 +1885,7 @@ pub fn av1_parse_stage1_frame(
   Some({
     frame_width,
     upscaled_width,
+    frame_height,
     superres_denom,
     header_bytes: offset,
     tile_payload,
@@ -1023,6 +1907,38 @@ pub fn av1_parse_stage1_frame(
     allow_screen_content_tools: allow_tools,
     film_grain,
     quant_deltas,
+    frame_type: prefix.frame_type,
+    frame_is_intra: prefix.frame_is_intra,
+    show_frame: prefix.show_frame,
+    show_existing_frame: prefix.show_existing_frame,
+    frame_to_show_map_idx: prefix.frame_to_show_map_idx,
+    error_resilient: prefix.error_resilient,
+    showable_frame: prefix.showable_frame,
+    disable_frame_end_update_cdf: prefix.disable_frame_end_update_cdf,
+    force_integer_mv: prefix.force_integer_mv,
+    current_frame_id: prefix.current_frame_id,
+    order_hint: prefix.order_hint,
+    primary_ref_frame: prefix.primary_ref_frame,
+    refresh_frame_flags: prefix.refresh_frame_flags,
+    ref_frame_idx: prefix.ref_frame_idx,
+    order_hints: prefix.order_hints,
+    ref_frame_sign_bias: prefix.ref_frame_sign_bias,
+    allow_high_precision_mv: prefix.allow_high_precision_mv,
+    interpolation_filter: prefix.interpolation_filter,
+    is_motion_mode_switchable: prefix.is_motion_mode_switchable,
+    use_ref_frame_mvs: prefix.use_ref_frame_mvs,
+    allow_warped_motion,
+    reference_select,
+    skip_mode_present,
+    skip_mode_frame,
+    gm_type,
+    gm_params,
+    prev_gm_params: prefix.prev_gm_params,
+    loop_filter_ref_deltas: prefix.loop_filter_ref_deltas,
+    loop_filter_mode_deltas: prefix.loop_filter_mode_deltas,
+    allow_intrabc: prefix.allow_intrabc,
+    render_width: prefix.render_width,
+    render_height: prefix.render_height,
   })
 }
 

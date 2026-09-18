@@ -625,6 +625,7 @@ fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
 fn av1_decode_frame_planes(
   data : Array[Byte],
   allow_monochrome? : Bool = false,
+  map? : Av1FrameMap,
 ) -> Av1FramePlanes? {
   let seq = match av1_sequence_info(data) {
     Some(value) => value
@@ -641,62 +642,89 @@ fn av1_decode_frame_planes(
   if frames.length() == 0 {
     return None
   }
-  let frame = match
-    av1_parse_stage1_frame(frames[0], seq, allow_highbd=true, allow_monochrome~) {
+  // A caller decoding a whole sequence supplies its own buffer; a one-shot
+  // image decode gets a scratch one, which is all a key frame needs.
+  let state = match map {
+    Some(value) => value
+    None => av1_frame_map()
+  }
+  let header = match
+    av1_parse_stage1_frame(
+      frames[0],
+      seq,
+      allow_highbd=true,
+      allow_monochrome~,
+      map=state,
+    ) {
     Some(value) => value
     None => return None
   }
-  let film_grain = frame.film_grain
+  // The reconstruction below is intra-only until the motion-compensation stage
+  // lands, so a frame that predicts from a reference is refused rather than
+  // decoded as if every block were intra.
+  if !header.frame_is_intra {
+    return None
+  }
+  let film_grain = header.film_grain
+  let frame_height = header.frame_height
   let sb_size = if seq.use_128x128_superblock { 128 } else { 64 }
   let cols = match
-    av1_frame_tile_starts(frame.tile_col_starts_sb, sb_size, frame.frame_width) {
+    av1_frame_tile_starts(
+      header.tile_col_starts_sb,
+      sb_size,
+      header.frame_width,
+    ) {
     Some(value) => value
     None => return None
   }
   let rows = match
-    av1_frame_tile_starts(frame.tile_row_starts_sb, sb_size, seq.height) {
+    av1_frame_tile_starts(header.tile_row_starts_sb, sb_size, frame_height) {
     Some(value) => value
     None => return None
   }
-  let (frame, _stripe_store) = match
+  let (decoded, _stripe_store) = match
     av1_decode_tile_planes(
-      frame.frame_width,
-      seq.height,
+      header.frame_width,
+      frame_height,
       cols,
       rows,
-      frame.tile_payload,
-      frame.tile_size_bytes,
-      frame.base_q_idx,
-      frame.disable_cdf_update,
-      frame.allow_screen_content_tools,
+      header.tile_payload,
+      header.tile_size_bytes,
+      header.base_q_idx,
+      header.disable_cdf_update,
+      header.allow_screen_content_tools,
       seq.full_range,
       seq.matrix_coefficients,
       seq.use_128x128_superblock,
       seq.bit_depth,
-      frame.reduced_tx_set,
+      header.reduced_tx_set,
       seq.enable_filter_intra,
-      frame.tx_mode_select,
-      frame.cdef,
+      header.tx_mode_select,
+      header.cdef,
       monochrome=seq.monochrome,
       enable_intra_edge_filter=seq.enable_intra_edge_filter,
-      loop_filter=frame.loop_filter,
-      restoration=frame.restoration,
-      upscaled_width=frame.upscaled_width,
-      superres_denom=frame.superres_denom,
-      quant_deltas=frame.quant_deltas,
+      loop_filter=header.loop_filter,
+      restoration=header.restoration,
+      upscaled_width=header.upscaled_width,
+      superres_denom=header.superres_denom,
+      quant_deltas=header.quant_deltas,
       subsampling_x=seq.subsampling_x,
       subsampling_y=seq.subsampling_y,
     ) {
     Some(value) => value
     None => return None
   }
+  // The reference buffer keeps the grain-free reconstruction: AV1 applies film
+  // grain only on the displayed picture, so a later frame must not predict
+  // from noisy samples.
+  av1_frame_map_update(state, header, decoded)
   // Film grain is the last step before colour conversion: it modifies the
   // displayed picture while the stored reference samples stay grain free.
   match film_grain {
-    None => Some(frame)
+    None => Some(decoded)
     Some(params) =>
       av1_frame_apply_grain(
-        frame,
+        decoded,
         params,
         seq.monochrome,
         seq.subsampling_x,

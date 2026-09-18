@@ -2,6 +2,74 @@
 
 ## Unreleased
 
+- Started Phase D (general frame syntax) with the inter-frame foundation. The
+  sequence parser now reads the whole general `sequence_header_obu` instead of
+  rejecting anything that is not a reduced still picture: operating points with
+  their timing and decoder-model lengths, frame-id numbering, and the inter tool
+  flags (`enable_order_hint`, `enable_ref_frame_mvs`, `enable_warped_motion`,
+  `enable_dual_filter`, `enable_jnt_comp`, `enable_masked_compound`,
+  `enable_interintra_compound`, `order_hint_bits`, the two `seq_force_*`
+  selectors). The frame parser gained the entire non-reduced prefix —
+  `show_existing_frame`, `frame_type`, `show_frame`, `showable_frame`,
+  `error_resilient_mode`, `frame_id`, `frame_size_override`, `order_hint`,
+  `primary_ref_frame`, `refresh_frame_flags`, `ref_order_hint`, `inter_refs`
+  (reference list, short signaling, `frame_size_with_refs`,
+  `allow_high_precision_mv`, `interpolation_filter`, `motion_field_mode`,
+  `use_ref_frame_mvs`, sign bias), `disable_frame_end_update_cdf`,
+  `reference_select`, `skip_mode_params`, `allow_warped_motion` and
+  `global_motion_params` with its raw-bit sub-exp coders — as one unified
+  grammar whose reduced-still path consumes exactly the bits it used to, so all
+  1063 earlier tests still pass. A `load_previous`/`setup_past_independence`
+  split now inherits the per-reference warp models and loop-filter deltas that
+  `segmentation`-free frames read back, and the loop filter takes its reference
+  and mode deltas as seeds instead of hard-coding the defaults.
+- Replaced the placeholder RGBA reference store with the real one.
+  `av1_frame_map.mbt` keeps eight slots of native bit-depth planes plus the
+  per-slot order hints, frame types, ids, dimensions and saved parameters,
+  implements `update_reference_map` over `refresh_frame_flags`, key-frame
+  buffer invalidation, the relative-distance sign-bias rule,
+  `frame_refs_short_signaling` derivation and show-existing lookup. The frame
+  driver stores the grain-free reconstruction, so a later frame never predicts
+  from film-grain samples.
+- Added the eight-tap subpel motion-compensation kernel.
+  `av1_interp_tables.mbt` carries the normative `Subpel_Filters` table
+  (six filter sets by sixteen 1/16-pel phases by eight taps) generated with the
+  source hash pinned, and `av1_mc.mbt` implements the two-pass
+  horizontal-then-vertical interpolation with the 1/1024-pel scaled walk,
+  reference-scaling ratios, the narrow-block four-tap substitution, per-direction
+  dual-filter selection, the 8/10/12-bit and single/compound intermediate
+  rounding exponents, and edge-replication by read-side clamping (the same
+  convention the superres scaler already uses, and equivalent to the spec's
+  border extension because the extension itself replicates).
+- Verified against two new general-header fixtures
+  (`tests/fixtures/av1-inter/`): a full-tool 64x64 encode whose second frame is
+  a real inter frame, and a stripped one with every inter tool disabled so the
+  derivation paths are exercised instead of the read paths. Every asserted
+  frame-header field is checked against the FFmpeg `trace_headers` transcript by
+  `scripts/generate-av1-inter-reference.py`, and the key frame of each is
+  compared sample-by-sample against dav1d at native depth through the new
+  general path — proving the reordered grammar lands on the right bits.
+  `av1_mc.mbt` is cross-checked by `_refs/mc_sim.py`, an independent Python
+  transcription of §7.11.3.4, on 58 vectors covering all six filter sets,
+  reachable subpel phases, mixed direction filters, compound rounding,
+  8/10/12-bit depths, 4x4 narrow blocks, out-of-frame motion and scaled
+  references. Inter frames still stop at the reconstruction boundary until the
+  mode tree and MV syntax land. 58 new tests, full suite: 1123/1123.
+
+- Fixed two silent-wrong-value traps found while verifying the above.
+  `force_integer_mv` was initialised to the sequence-level `SELECT` value (2)
+  rather than the frame-level 0, which made `allow_high_precision_mv` look
+  forced and drop a bit; the general header then desynced and reported
+  `base_q_idx` as 0. And `1 << (SCALE_SUBPEL_BITS - SUBPEL_BITS) / 2` parses as
+  `1 << 3` rather than `(1 << 6) / 2`, moving every walk origin by 24 units of
+  1/1024-pel.
+- Settled one spec-versus-reference question empirically. The loop filter's
+  `loop_filter_delta_update` is read unconditionally, even when
+  `error_resilient_mode` is set: flipping the bit that would otherwise be
+  `cdef_damping_minus_3` in an error-resilient stream makes dav1d abort with an
+  OBU buffer overrun, while the unmodified stream decodes. go-av1 and FFmpeg
+  agree with that reading.
+
 - Added 4:4:4 and 4:2:2 chroma support. The container now exposes both `av1C`
   subsampling flags instead of collapsing them into a 4:2:0 test, and the
   frame parser accepts profiles 1 and 2 (validating the profile/bit-depth
