@@ -35,6 +35,8 @@ pub(all) struct Av1FrameHeaderInfo {
   restoration : Av1RestorationConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
+  /// Film-grain parameters, or None when the sequence omitted the tool.
+  film_grain : Av1FilmGrainParams?
 }
 
 ///|
@@ -304,6 +306,242 @@ fn av1_frame_tile_group_payload(
 }
 
 ///|
+/// Parse film_grain_params (AV1 §5.9.30) after reduced_tx_set.
+///
+/// Only intra frames reach this path, so `update_grain` is never coded: the
+/// whole parameter set is always present. The AR coefficient counts follow the
+/// go-av1 reference, which is confirmed by byte alignment on encoder output:
+/// luma always carries `2 * lag * (lag + 1)` coefficients, and chroma adds the
+/// single centre tap whenever `num_y_points > 0`. See _refs/film_grain_sim.py.
+fn av1_parse_film_grain_params(
+  reader : Av1FrameBits,
+  monochrome : Bool,
+  subsampling_x : Bool,
+  subsampling_y : Bool,
+) -> Av1FilmGrainParams? {
+  let apply_grain = match reader.take(1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  let mut grain_seed = 0
+  let mut num_y_points = 0
+  let point_y_value : Array[Int] = []
+  let point_y_scaling : Array[Int] = []
+  let mut chroma_scaling_from_luma = false
+  let mut num_cb_points = 0
+  let point_cb_value : Array[Int] = []
+  let point_cb_scaling : Array[Int] = []
+  let mut num_cr_points = 0
+  let point_cr_value : Array[Int] = []
+  let point_cr_scaling : Array[Int] = []
+  let mut grain_scaling_minus8 = 0
+  let mut ar_coeff_lag = 0
+  let ar_coeffs_y : Array[Int] = []
+  let ar_coeffs_cb : Array[Int] = []
+  let ar_coeffs_cr : Array[Int] = []
+  let mut ar_coeff_shift_minus6 = 0
+  let mut grain_scale_shift = 0
+  let mut cb_mult = 0
+  let mut cb_luma_mult = 0
+  let mut cb_offset = 0
+  let mut cr_mult = 0
+  let mut cr_luma_mult = 0
+  let mut cr_offset = 0
+  let mut overlap_flag = false
+  let mut clip_to_restricted_range = false
+  if apply_grain {
+    grain_seed = match reader.take(16) {
+      Some(v) => v
+      None => return None
+    }
+    num_y_points = match reader.take(4) {
+      Some(v) => v
+      None => return None
+    }
+    if num_y_points > 14 {
+      num_y_points = 14
+    }
+    for _ in 0..<num_y_points {
+      let value = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      let scaling = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      point_y_value.push(value)
+      point_y_scaling.push(scaling)
+    }
+    if !monochrome {
+      chroma_scaling_from_luma = match reader.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+    if monochrome ||
+      chroma_scaling_from_luma ||
+      (subsampling_x && subsampling_y && num_y_points == 0) {
+      num_cb_points = 0
+      num_cr_points = 0
+    } else {
+      num_cb_points = match reader.take(4) {
+        Some(v) => v
+        None => return None
+      }
+      if num_cb_points > 10 {
+        num_cb_points = 10
+      }
+      for _ in 0..<num_cb_points {
+        let value = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        let scaling = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        point_cb_value.push(value)
+        point_cb_scaling.push(scaling)
+      }
+      num_cr_points = match reader.take(4) {
+        Some(v) => v
+        None => return None
+      }
+      if num_cr_points > 10 {
+        num_cr_points = 10
+      }
+      for _ in 0..<num_cr_points {
+        let value = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        let scaling = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        point_cr_value.push(value)
+        point_cr_scaling.push(scaling)
+      }
+    }
+    grain_scaling_minus8 = match reader.take(2) {
+      Some(v) => v
+      None => return None
+    }
+    ar_coeff_lag = match reader.take(2) {
+      Some(v) => v
+      None => return None
+    }
+    let num_pos_luma = 2 * ar_coeff_lag * (ar_coeff_lag + 1)
+    let num_pos_chroma = if num_y_points > 0 {
+      num_pos_luma + 1
+    } else {
+      num_pos_luma
+    }
+    if num_y_points > 0 {
+      for _ in 0..<num_pos_luma {
+        let value = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        ar_coeffs_y.push(value)
+      }
+    }
+    if chroma_scaling_from_luma || num_cb_points > 0 {
+      for _ in 0..<num_pos_chroma {
+        let value = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        ar_coeffs_cb.push(value)
+      }
+    }
+    if chroma_scaling_from_luma || num_cr_points > 0 {
+      for _ in 0..<num_pos_chroma {
+        let value = match reader.take(8) {
+          Some(v) => v
+          None => return None
+        }
+        ar_coeffs_cr.push(value)
+      }
+    }
+    ar_coeff_shift_minus6 = match reader.take(2) {
+      Some(v) => v
+      None => return None
+    }
+    grain_scale_shift = match reader.take(2) {
+      Some(v) => v
+      None => return None
+    }
+    if num_cb_points > 0 {
+      cb_mult = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      cb_luma_mult = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      cb_offset = match reader.take(9) {
+        Some(v) => v
+        None => return None
+      }
+    }
+    if num_cr_points > 0 {
+      cr_mult = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      cr_luma_mult = match reader.take(8) {
+        Some(v) => v
+        None => return None
+      }
+      cr_offset = match reader.take(9) {
+        Some(v) => v
+        None => return None
+      }
+    }
+    overlap_flag = match reader.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    clip_to_restricted_range = match reader.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+  }
+  Some({
+    apply_grain,
+    grain_seed,
+    num_y_points,
+    point_y_value,
+    point_y_scaling,
+    chroma_scaling_from_luma,
+    num_cb_points,
+    point_cb_value,
+    point_cb_scaling,
+    num_cr_points,
+    point_cr_value,
+    point_cr_scaling,
+    grain_scaling_minus8,
+    ar_coeff_lag,
+    ar_coeffs_y,
+    ar_coeffs_cb,
+    ar_coeffs_cr,
+    ar_coeff_shift_minus6,
+    grain_scale_shift,
+    cb_mult,
+    cb_luma_mult,
+    cb_offset,
+    cr_mult,
+    cr_luma_mult,
+    cr_offset,
+    overlap_flag,
+    clip_to_restricted_range,
+  })
+}
+
+///|
 /// Parses a reduced-still frame envelope and returns its entropy-coded tile
 /// group. Unsupported syntax is rejected before any bytes are exposed to the
 /// reconstruction stage.
@@ -331,8 +569,7 @@ pub fn av1_parse_stage1_frame(
       !sequence.monochrome
     ) ||
     !sequence.reduced_still_picture_header ||
-    sequence.separate_uv_delta_q ||
-    sequence.film_grain_params_present {
+    sequence.separate_uv_delta_q {
     return None
   }
   let r : Av1FrameBits = { data: frame_payload, bit_pos: 0, }
@@ -697,6 +934,22 @@ pub fn av1_parse_stage1_frame(
     Some(value) => value == 1
     None => return None
   }
+  // Reduced-still frames are always shown, so the grain syntax is present
+  // whenever the sequence enables the tool (AV1 section 5.9.30).
+  let film_grain : Av1FilmGrainParams? = if sequence.film_grain_params_present {
+    match
+      av1_parse_film_grain_params(
+        r,
+        sequence.monochrome,
+        sequence.subsampling_x,
+        sequence.subsampling_y,
+      ) {
+      Some(params) => Some(params)
+      None => return None
+    }
+  } else {
+    None
+  }
   let (offset, tile_payload) = match
     av1_frame_tile_group_payload(frame_payload, r.bit_pos, tile_cols, tile_rows) {
     Some(value) => value
@@ -724,6 +977,7 @@ pub fn av1_parse_stage1_frame(
     restoration,
     disable_cdf_update,
     allow_screen_content_tools: allow_tools,
+    film_grain,
   })
 }
 

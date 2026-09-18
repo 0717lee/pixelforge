@@ -22,6 +22,8 @@ pub const AV1_INTRA_V : Int = 1
 
 pub fn av1_apply_alpha(Image, Array[Byte]) -> Image?
 
+pub fn av1_apply_film_grain_planes(Array[Array[Int]], Int, Int, Int, Bool, Bool, Bool, Int, Av1FilmGrainParams) -> Unit?
+
 pub fn av1_cdef_filter_plane(Int, Int, Array[Int], Array[Av1CdefParams], bit_depth? : Int) -> Array[Int]?
 
 pub fn av1_cdef_filter_yuv420(Int, Int, Array[Int], Array[Int], Array[Int], Array[Av1CdefParams], Array[Av1CdefParams], bit_depth? : Int) -> (Array[Int], Array[Int], Array[Int])?
@@ -46,7 +48,7 @@ pub fn av1_decode_alpha(Array[Byte]) -> Array[Byte]?
 
 pub fn av1_decode_alpha_tile(Int, Int, Array[Byte], Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool, bit_depth? : Int, disable_cdf_update? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Array[Byte]?
 
-pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Image?
+pub fn av1_decode_dc_tile(Int, Int, Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, superres_denom? : Int) -> Image?
 
 pub fn av1_decode_partition_leaves(Array[Byte], Int, Int, disable_cdf_update? : Bool, use_128x128_superblock? : Bool) -> Array[Av1SbBlock]?
 
@@ -54,9 +56,9 @@ pub fn av1_decode_show_existing_frame(Array[Byte], Av1ReferenceState, Av1ShowExi
 
 pub fn av1_decode_split_tile_64x64(Array[Byte], Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, allow_screen_content_tools? : Bool) -> Image?
 
-pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int) -> Image?
+pub fn av1_decode_tile_group(Int, Int, Int, Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, superres_denom? : Int) -> Image?
 
-pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, monochrome? : Bool) -> Image?
+pub fn av1_decode_tile_group_with_boundaries(Int, Int, Array[Int], Array[Int], Int, Array[Byte], Int, Int, disable_cdf_update? : Bool, full_range? : Bool, matrix_coefficients? : Int, use_128x128_superblock? : Bool, bit_depth? : Int, allow_screen_content_tools? : Bool, tx_mode_select? : Bool, reduced_tx_set? : Bool, enable_filter_intra? : Bool, enable_intra_edge_filter? : Bool, cdef? : Av1CdefConfig?, loop_filter? : Av1LoopFilterConfig?, restoration? : Av1RestorationConfig?, upscaled_width? : Int, monochrome? : Bool, superres_denom? : Int) -> Image?
 
 pub fn av1_decode_tx_partition_tree_payload(Array[Byte], Av1TxNode, Int, disable_cdf_update? : Bool) -> Array[Av1TxLeaf]?
 
@@ -264,6 +266,36 @@ pub(all) struct Av1CdefParams {
   direction : Int
 }
 
+pub(all) struct Av1FilmGrainParams {
+  apply_grain : Bool
+  grain_seed : Int
+  num_y_points : Int
+  point_y_value : Array[Int]
+  point_y_scaling : Array[Int]
+  chroma_scaling_from_luma : Bool
+  num_cb_points : Int
+  point_cb_value : Array[Int]
+  point_cb_scaling : Array[Int]
+  num_cr_points : Int
+  point_cr_value : Array[Int]
+  point_cr_scaling : Array[Int]
+  grain_scaling_minus8 : Int
+  ar_coeff_lag : Int
+  ar_coeffs_y : Array[Int]
+  ar_coeffs_cb : Array[Int]
+  ar_coeffs_cr : Array[Int]
+  ar_coeff_shift_minus6 : Int
+  grain_scale_shift : Int
+  cb_mult : Int
+  cb_luma_mult : Int
+  cb_offset : Int
+  cr_mult : Int
+  cr_luma_mult : Int
+  cr_offset : Int
+  overlap_flag : Bool
+  clip_to_restricted_range : Bool
+}
+
 pub(all) struct Av1FrameHeaderInfo {
   frame_width : Int
   upscaled_width : Int
@@ -286,6 +318,7 @@ pub(all) struct Av1FrameHeaderInfo {
   restoration : Av1RestorationConfig?
   disable_cdf_update : Bool
   allow_screen_content_tools : Bool
+  film_grain : Av1FilmGrainParams?
 }
 
 pub(all) struct Av1FrameInfo {
@@ -322,12 +355,54 @@ pub(all) struct Av1RestorationLayout {
   unit_rows : Array[Int]
 }
 
+pub(all) struct Av1RestorationPlaneStripes {
+  count : Int
+  width : Int
+  height : Int
+  starts : Array[Int]
+  ends : Array[Int]
+  top : Array[Array[Int]]
+  bottom : Array[Array[Int]]
+}
+
+pub(all) struct Av1RestorationSourceView {
+  store : Av1RestorationStripeStore
+  frame : Array[Array[Int]]
+  frame_strides : Array[Int]
+}
+
+pub(all) struct Av1RestorationStripeStore {
+  planes : Array[Av1RestorationPlaneStripes]
+}
+
+pub(all) struct Av1RestorationTileState {
+  cdf_switchable : Array[Int]
+  cdf_wiener : Array[Int]
+  cdf_sgr : Array[Int]
+  ref_wiener : Array[Array[Array[Int]]]
+  ref_sgr : Array[Array[Int]]
+  units : Array[Av1RestorationUnitRecord]
+}
+
 pub(all) enum Av1RestorationType {
   Av1RestorationNone
   Av1RestorationWiener
   Av1RestorationSgrproj
   Av1RestorationSwitchable
 } derive(Eq, @debug.Debug)
+
+pub(all) enum Av1RestorationUnit {
+  Av1RestorationUnitNone
+  Av1RestorationUnitWiener(Array[Int], Array[Int])
+  Av1RestorationUnitSgrproj(Int, Array[Int])
+}
+
+pub(all) struct Av1RestorationUnitRecord {
+  plane : Int
+  unit_row : Int
+  unit_col : Int
+  unit : Av1RestorationUnit
+}
 
 pub(all) struct Av1SbBlock {
   row : Int
@@ -432,6 +507,7 @@ pub(all) struct Av1Stage1Input {
   matrix_coefficients : Int
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
+  film_grain : Av1FilmGrainParams?
 }
 
 pub(all) struct Av1TilePayload {

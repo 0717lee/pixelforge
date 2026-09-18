@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Added AV1 film-grain synthesis, the last missing still-picture tool. The
+  uncompressed header parses `film_grain_params` (AV1 5.9.30) after
+  `reduced_tx_set` and no longer rejects reduced-still streams that enable
+  the tool: `apply_grain`, the 16-bit seed, the luma and chroma scaling
+  point sets, the AR lag and coefficients, and the chroma multipliers and
+  offsets. Synthesis follows 7.18.3: a 16-bit LFSR drives the 73x82 luma and
+  44x38 chroma grain blocks from the 2048-entry Gaussian table, the
+  autoregressive pass walks the lag window up to the centre tap, the
+  per-plane scaling LUTs interpolate the point sets, and the noise image is
+  assembled from pseudo-random grain blocks with the optional horizontal and
+  vertical overlap blend before it is added to the reconstructed planes.
+  Synthesis streams its 32-row luma stripes (16 chroma rows) and keeps only
+  the previous stripe for the vertical overlap, so the working set stays
+  proportional to one stripe instead of the whole picture.
+- Verified the synthesis against dav1d pixel ground truth: a 64x64 8-bit
+  4:2:0 reduced-still aomenc encode (`--film-grain-test=1`) decodes
+  byte-identically to the dav1d CLI with grain synthesis enabled, matching
+  all 6,144 samples, while the `--filmgrain 0` control digests differently.
+  The AR coefficient counts follow the go-av1 reference rather than the
+  spec text: luma always carries `2 * lag * (lag + 1)` coefficients and
+  chroma adds the single centre tap when `num_y_points > 0`. Only the
+  go-av1 reading byte-aligns at the tile group, which
+  `_refs/film_grain_sim.py` demonstrates by parsing both candidates. Two new
+  tests lock the parameter parse and the pixel truth; full suite: 1054/1054.
+
 - Added the AV1 loop-restoration decode pipeline. The entropy layer grows
   `read_literal`, the finite-alphabet `ns(n)` decoder and the `subexp(n,k)`
   reader with the inverse recentering, all on the arithmetic decoder;

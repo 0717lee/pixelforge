@@ -121,6 +121,56 @@ fn av1_frame_pixel_starts_valid(
 }
 
 ///|
+/// Apply film grain to the visible picture after reconstruction.
+///
+/// Grain synthesis (AV1 §7.18.3) runs on the output picture, so the planes are
+/// cropped first. The grained samples are scattered back into the same padded
+/// layout, leaving the crop-on-convert path unchanged.
+fn av1_frame_apply_grain(
+  frame : Av1FramePlanes,
+  params : Av1FilmGrainParams,
+  monochrome : Bool,
+  subsampling_x : Bool,
+  subsampling_y : Bool,
+) -> Av1FramePlanes? {
+  if !params.apply_grain {
+    return Some(frame)
+  }
+  let cropped : Array[Array[Int]] = []
+  for p in 0..<frame.planes.length() {
+    cropped.push(av1_frame_crop(frame, p))
+  }
+  match
+    av1_apply_film_grain_planes(
+      cropped,
+      frame.width,
+      frame.height,
+      frame.bit_depth,
+      monochrome,
+      subsampling_x,
+      subsampling_y,
+      frame.matrix_coefficients,
+      params,
+    ) {
+    None => None
+    Some(_) => {
+      for p in 0..<frame.planes.length() {
+        let divisor = if p == 0 { 1 } else { 2 }
+        let w = (frame.width + divisor - 1) / divisor
+        let h = (frame.height + divisor - 1) / divisor
+        let stride = frame.coded_width / divisor
+        for y in 0..<h {
+          for x in 0..<w {
+            frame.planes[p][y * stride + x] = cropped[p][y * w + x]
+          }
+        }
+      }
+      Some(frame)
+    }
+  }
+}
+
+///|
 /// Entropy and prediction stay tile-local. Deblocking updates the assembled
 /// native frame vertically then horizontally; CDEF reads that completed result.
 /// Cropping and color conversion follow the frame filters.
@@ -247,13 +297,12 @@ fn av1_decode_tile_planes(
   // marks an unread grid position, distinct from a decoded-None unit.
   let lr_units : Array[Array[Av1RestorationUnit?]] = []
   match lr_layout {
-    Some(layout) => {
+    Some(layout) =>
       for plane in 0..<layout.config.modes.length() {
         let count = layout.unit_cols[plane] * layout.unit_rows[plane]
         let column : Array[Av1RestorationUnit?] = Array::make(count, None)
         lr_units.push(column)
       }
-    }
     None => ()
   }
   for tile in tiles {
@@ -371,13 +420,7 @@ fn av1_decode_tile_planes(
       if av1_restoration_active(config) {
         match
           av1_restoration_save_stripes(
-            planes,
-            coded_width,
-            width,
-            output_width,
-            height,
-            bit_depth,
-            monochrome,
+            planes, coded_width, width, output_width, height, bit_depth, monochrome,
           ) {
           Some(value) => Some(value)
           None => return None
@@ -421,10 +464,9 @@ fn av1_decode_tile_planes(
   // has a saved store, and filtering failure aborts the decode.
   let frame = match (stripe_store, lr_layout) {
     (Some(store), Some(layout)) => {
-      let strides : Array[Int] = Array::makei(
-        frame.planes.length(),
-        fn(i) { frame.coded_width / (if i == 0 { 1 } else { 2 }) },
-      )
+      let strides : Array[Int] = Array::makei(frame.planes.length(), fn(i) {
+        frame.coded_width / (if i == 0 { 1 } else { 2 })
+      })
       let view : Av1RestorationSourceView = {
         store,
         frame: frame.planes,
@@ -539,6 +581,7 @@ fn av1_decode_frame_planes(
     Some(value) => value
     None => return None
   }
+  let film_grain = frame.film_grain
   let sb_size = if seq.use_128x128_superblock { 128 } else { 64 }
   let cols = match
     av1_frame_tile_starts(frame.tile_col_starts_sb, sb_size, frame.frame_width) {
@@ -579,5 +622,17 @@ fn av1_decode_frame_planes(
     Some(value) => value
     None => return None
   }
-  Some(frame)
+  // Film grain is the last step before colour conversion: it modifies the
+  // displayed picture while the stored reference samples stay grain free.
+  match film_grain {
+    None => Some(frame)
+    Some(params) =>
+      av1_frame_apply_grain(
+        frame,
+        params,
+        seq.monochrome,
+        seq.subsampling_x,
+        seq.subsampling_y,
+      )
+  }
 }

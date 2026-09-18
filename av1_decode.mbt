@@ -73,6 +73,9 @@ pub(all) struct Av1Stage1Input {
   matrix_coefficients : Int
   use_128x128_superblock : Bool
   tile_payload : Array[Byte]
+  /// Film-grain parameters parsed from the frame header, or None when the
+  /// sequence disabled the tool. Applied after reconstruction.
+  film_grain : Av1FilmGrainParams?
 }
 
 ///|
@@ -652,6 +655,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
             matrix_coefficients: seq.matrix_coefficients,
             use_128x128_superblock: seq.use_128x128_superblock,
             tile_payload: frame.tile_payload,
+            film_grain: frame.film_grain,
           })
       }
     }
