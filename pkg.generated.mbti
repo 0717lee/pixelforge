@@ -64,6 +64,8 @@ pub fn av1_decode_tx_partition_tree_payload(Array[Byte], Av1TxNode, Int, disable
 
 pub fn av1_extract_tile_payloads(Array[Byte], Int, Int, Int) -> Array[Av1TilePayload]?
 
+pub fn av1_find_mv_stack(Av1MotionField, Av1MvBlock, Av1MvFrame, Bool) -> Av1MvStack
+
 pub fn av1_frame_info(Array[Byte]) -> Av1FrameInfo?
 
 pub fn av1_frame_map() -> Av1FrameMap
@@ -82,9 +84,15 @@ pub fn av1_inverse_dct_dc(Int, Int, Int) -> Array[Int]?
 
 pub fn av1_inverse_transform_2d(Av1TxType, Array[Int], Int, Int, Int, lossless? : Bool) -> Array[Int]?
 
+pub fn av1_motion_field(Int, Int) -> Av1MotionField
+
+pub fn av1_motion_field_store(Av1MotionField, Int, Int, Int, Int, Int, Array[Int], Array[Int], Array[Int]) -> Unit
+
 pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
 pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
+
+pub fn av1_mv_frame_of(Av1FrameHeaderInfo) -> Av1MvFrame
 
 pub fn av1_parse_show_existing_frame(Array[Byte], Av1ShowExistingFrameConfig) -> Av1ShowExistingFrameEnvelope?
 
@@ -398,6 +406,19 @@ pub(all) struct Av1LoopFilterConfig {
   mode_deltas : Array[Int]
 }
 
+pub(all) struct Av1MotionField {
+  cols : Int
+  rows : Int
+  width4 : Array[Int]
+  height4 : Array[Int]
+  y_modes : Array[Int]
+  is_inter : Array[Bool]
+  written : Array[Bool]
+  refs : Array[Int]
+  mv_rows : Array[Int]
+  mv_cols : Array[Int]
+}
+
 pub(all) struct Av1MotionRequest {
   reference : Av1RefFrame
   frame_width : Int
@@ -412,6 +433,45 @@ pub(all) struct Av1MotionRequest {
   filter_vertical : Int
   filter_horizontal : Int
   compound : Bool
+}
+
+pub(all) struct Av1MvBlock {
+  mi_row : Int
+  mi_col : Int
+  width4 : Int
+  height4 : Int
+  block_width : Int
+  block_height : Int
+  refs : Array[Int]
+  tile_row_start : Int
+  tile_row_end : Int
+  tile_col_start : Int
+  tile_col_end : Int
+}
+
+pub(all) struct Av1MvFrame {
+  allow_high_precision_mv : Bool
+  force_integer_mv : Int
+  gm_type : Array[Int]
+  gm_params : Array[Array[Int]]
+  ref_frame_sign_bias : Array[Int]
+}
+
+pub(all) struct Av1MvStack {
+  mv_rows : Array[Int]
+  mv_cols : Array[Int]
+  weights : Array[Int]
+  mut count : Int
+  mut newmv_count : Int
+  mut found_match : Int
+  mut close_matches : Int
+  mut total_matches : Int
+  mut zero_mv_context : Int
+  mut newmv_context : Int
+  mut refmv_context : Int
+  drl_contexts : Array[Int]
+  global_rows : Array[Int]
+  global_cols : Array[Int]
 }
 
 pub(all) struct Av1QuantDeltas {
