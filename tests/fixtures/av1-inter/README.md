@@ -97,19 +97,21 @@ happens never to be deblocked.
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the
-24-eighth-pel translation and the 232-eighth-pel reach-back). Classes 0, 2, 3 and
-5 through 10 are not coded by any fixture, and class 10 - the largest, which
-needs ten magnitude bits - is untested end to end.
-That is a gap in the encoder's availability, not a claim that the read is right.
-The cause is now measured rather than suspected: **this `aomenc` build searches
-about +/-32 pixels of motion**, and magnitude class 5 starts at 32 pixels, so a
-coded vector beyond class 4 is out of reach however the source is shaped. Two
-observations pin that ceiling: a source translated by 33 pixels is coded as
-magnitude 256 (class 4, i.e. the search stopped at the range limit), and sources
-translated by 40 pixels or more are coded as `NEARESTMV` with `mv = (0, 0)` on
-every block - the encoder prefers to hand back a verbatim copy of the key frame
-over spending bits on a vector it cannot find. Measured attempts, all with the
-minimal flag set, `-p1`, `--cpu-used=0`, `--cq-level=32`:
+24-eighth-pel translation and the 232-eighth-pel reach-back). The classes nobody
+codes fall into two different kinds of hole, and only the first one is the
+encoder's fault.
+
+**Classes 5 to 10 are out of reach of this build.** The cause is measured rather
+than suspected: **this `aomenc` searches about +/-32 pixels of motion**, and class
+5 is where the magnitudes pass 32 pixels, so a coded vector beyond class 4 does
+not exist however the source is shaped. Two observations pin that ceiling: a
+source translated by 33 pixels is coded as magnitude 256 (the top of class 4,
+i.e. the search stopped at its range limit), and sources translated by 40 pixels
+or more are coded as `NEARESTMV` with `mv = (0, 0)` on every block - the encoder
+prefers to hand back a verbatim copy of the key frame over spending bits on a
+vector it cannot find. Class 10 is the extreme case of the same unreachable band:
+it is the largest class, and it codes ten magnitude bits. Measured attempts, all
+with the minimal flag set, `-p1`, `--cpu-used=0`, `--cq-level=32`:
 
 - sawtooth sources cannot reach class 5 structurally: their 32-sample period
   makes a short vector predict exactly as well as a long one;
@@ -124,11 +126,29 @@ minimal flag set, `-p1`, `--cpu-used=0`, `--cq-level=32`:
 - `--static-thresh=0`, the only exposed knob that could push the motion search
   further, leaves the output byte-identical.
 
-So the class-bound handling in `read_mv_component` rests on the normative text
-(AV1 §5.11.25) plus classes 1 and 4 of real traffic. Closing the gap needs either
-an encoder build whose search range is configurable, or a synthetic tile whose
-bits are written by hand - the latter only proves the reader agrees with whatever
-writer produced the bits, so it is a regression fence, not external evidence.
+Closing that band needs either an encoder build whose search range is configurable,
+or a synthetic tile whose bits are written by hand - `scripts/craft_av1_fixture.py`
+already carries an `MsacEncoder`, so most of the tooling for the second route
+exists. But a hand-written tile only proves the reader agrees with whatever writer
+produced the bits, so it is a regression fence, not external evidence.
+
+**Classes 0, 2 and 3 are reachable and merely unused.** They sit *inside* the
+measured search ceiling, so nothing about the toolchain keeps them out of the
+suite: class 0 is the smallest band (1..16 eighth-pel per AV1 §5.11.25, so up to
+two pixels, and with `allow_high_precision_mv = 0` only on quarter-pel steps -
+which means a non-integer sub-2-pixel displacement), class 2 is a 4-8 pixel shift
+and class 3 an 8-16 one - less than `inter_edge_64x16` already asks its encoder
+for, not more. A fixture translating a non-periodic source by about 6 or 12 pixels
+is the obvious way to code them; that has not been tried, and it is a choice about
+content rather than a limit. Worth saying precisely, because it is easy to
+overclaim: class 4 already reads `mv_bit` rows 0 through 3, so these three classes
+would exercise **no** row index the fixtures do not already touch. What they would
+add is the class symbol itself - the eleven-symbol `mv_class` tree, class 0's
+separate `mv_class0_bit` / `mv_class0_fr` sub-syntax, and the magnitude arithmetic
+at the class boundaries.
+
+So the class-bound handling in `read_mv_component` rests today on the normative
+text (AV1 §5.11.25) plus classes 1 and 4 of real traffic.
 
 `inter_lf_delta_64x64` covers step 4.c, not step 4.b: the inter frame codes no
 intra blocks, so `loop_filter_ref_deltas[INTRA_FRAME]` and

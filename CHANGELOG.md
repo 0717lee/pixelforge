@@ -21,18 +21,23 @@
   is recorded in its README - step 4.b is never reached, because the frame codes no
   intra blocks, and the §7.14.2 `row | subY` / `col | subX` chroma widening makes
   no sample move on a frame this uniform.
-- Measured, and then documented as uncloseable here, the regression coverage of
-  `read_mv_component`: the committed fixtures code magnitude classes 1 and 4 only
-  (24 and 232 eighth-pel). The reason is the encoder's motion search range, about
-  +/-32 pixels in this `aomenc` build, which is exactly where class 5 begins - a
+- Measured, and then documented as two different kinds of gap, the regression
+  coverage of `read_mv_component`: the committed fixtures code magnitude classes 1
+  and 4 only (24 and 232 eighth-pel). Classes 5 to 10 are uncloseable with this
+  build, and the reason is the encoder's motion search range - about +/-32 pixels,
+  which is exactly where class 5 begins: a
   33-pixel displacement comes back as magnitude 256, and anything from 40 pixels
   up comes back as `NEARESTMV` with a zero vector, i.e. the inter frame is handed
   back as a copy of the key frame. Band-limited translated texture (the content
   that makes residual much dearer than one long vector) aborts the encoder at every
   contrast that still carries detail, sawtooth sources cannot reach class 5 at all
   because their period makes a short vector equally good, and `--static-thresh=0`
-  changes nothing. `tests/fixtures/av1-inter/README.md` records the attempts and
-  the two ways actually to close it, so the untested classes are not mistaken for
+  changes nothing. Classes 0, 2 and 3 are the other case: they sit *inside* that
+  ceiling (sub-2-pixel, 4-8 and 8-16 respectively), so they are reachable and just
+  not used - and the README says plainly that closing them would add the class
+  symbol and the class-boundary arithmetic but *no* new `mv_bit` row, because class
+  4 already reads rows 0 through 3. `tests/fixtures/av1-inter/README.md` records the
+  attempts and the two ways actually to close it, so the untested classes are not mistaken for
   covered.
 
 - A NEARMV block resolves to stacked candidate **1**, not candidate 0. §5.11.24
