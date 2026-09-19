@@ -31,11 +31,6 @@ let av1_mv_joint_hnzvnz : Int = 3
 let av1_class0_size : Int = 2
 
 ///|
-/// Number of magnitude classes, and so the number of bits the largest class
-/// codes.
-let av1_mv_classes : Int = 10
-
-///|
 /// Size_Group[ MiSize ] (AV1 §9.3): the context an intra block inside an inter
 /// frame uses for its luma mode, and the base of the inter-intra contexts. One
 /// row per size class.
@@ -570,8 +565,11 @@ fn av1_read_mv_component(
     return 0
   }
   let sign = decoder.symbol(cdfs.mv_sign[context][component])
-  let class = decoder.symbol(cdfs.mv_class[context][component])
-  if class < 0 || class >= av1_mv_classes {
+  let class_cdf = cdfs.mv_class[context][component]
+  let class = decoder.symbol(class_cdf)
+  // Bounded by the table, not a constant: the largest class is still a valid
+  // magnitude and codes one mv_bit per position below it.
+  if class < 0 || class >= class_cdf.length() - 1 {
     return 0
   }
   let mut magnitude = 0
@@ -592,13 +590,10 @@ fn av1_read_mv_component(
     }
     magnitude = ((bit << 3) | (fraction << 1) | high) + 1
   } else {
+    let bits_cdf = cdfs.mv_bit[context][component]
     let mut bits = 0
     for index in 0..<class {
-      if index >= cdfs.mv_bit[context].length() {
-        return 0
-      }
-      bits =
-        bits | (decoder.symbol(cdfs.mv_bit[context][component][index]) << index)
+      bits = bits | (decoder.symbol(bits_cdf[index]) << index)
     }
     let fraction = if info.frame.force_integer_mv != 0 {
       3

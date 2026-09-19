@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+- Fixed `read_mv_component` indexing its magnitude bits against the wrong axis:
+  the row is selected by bit position `i`, but the guard compared `i` against the
+  length of the *component* axis, so every motion vector of magnitude class 3 or
+  higher abandoned the read after two bits and returned a zero difference - the
+  remaining class bits were never consumed, so the tile desynchronised from there
+  on. The class bound now comes from the table (11 classes, the largest of which
+  codes 10 magnitude bits) instead of a constant that cut the range short. This
+  is the inter right-edge defect: `inter_edge_64x16` is now sample-exact on all
+  three planes and its test compares every sample rather than excluding the last
+  columns, because the last 4x16 strip reaches back into the frame with a large
+  negative vector instead of coding the wrap-around as residual.
+  `inter_minimal_64x64` decodes for the first time too - the dense 4x16 tree was
+  never a budget problem, just the same truncated read - and what it still gets
+  wrong is pinned as per-plane sample counts (144 luma, 248 U, 296 V) instead of
+  a frame refusal.
+
 - The inter right-edge defect now has committed evidence. `inter_edge_64x16` is a
   64x16 stream that decodes with a tile budget to spare, whose key frame is exact
   and whose inter frame is exact in every column except the last three luma
