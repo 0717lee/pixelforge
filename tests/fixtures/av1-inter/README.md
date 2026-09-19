@@ -15,13 +15,13 @@ are 64x64, and each fixture names its own input source and dimensions.
 Each fixture ships the raw OBU (`.obu`), the FFmpeg `trace_headers` transcript
 (`.trace.txt`) that acts as the syntax oracle, and dav1d's native planes
 (`.reference.yuv`, both frames). Five also ship the deterministic input
-(`.input.y4m`) they were encoded from; the spliced one is derived from another
-fixture's bytes instead. The generated white-box test
+(`.input.y4m`) they were encoded from; `inter_lf_delta_64x64` and
+`inter_primary_ref_64x64` are derived from another fixture's bytes instead. The generated white-box test
 `av1_inter_reference_wbtest.mbt` embeds the OBUs and both frames' planes, asserts
 every frame-header field against the transcript, and compares reconstruction
 against dav1d sample-for-sample.
 
-## The six fixtures
+## The seven fixtures
 
 `general_inter_64x64.obu` is one untouched libaom encode with the default tool
 set, so frame 1 is an inter frame that reads the whole general grammar:
@@ -94,6 +94,38 @@ V samples wrong. Both numbers were measured by mutating the decoder, so the
 assertions are evidence about the arithmetic and not a coincidence of a frame that
 happens never to be deblocked.
 
+`inter_primary_ref_64x64.obu` is the frame-context inheritance fixture, and unlike
+the loop-filter one it moves no bits at all: `patch_header_fields` rewrites two
+fixed-width header fields in place on `inter_minimal_64x64`, so the stream differs
+from its base in exactly two bytes (16 and 74) and every tile byte is untouched.
+AV1 5.11 reads a 3-bit `primary_ref_frame` on an inter frame that is not error
+resilient, and `PRIMARY_REF_NONE` (7) means "start from scratch" while any smaller
+value means "load the frame context of `ref_frame_idx[that]`" - the non-coefficient
+and coefficient distributions via `load_cdfs`, and the block context via
+`load_previous`. This encoder always answers 7, because inside a two-frame group
+there is nothing worth inheriting.
+
+The patch sets the inter frame's field to 0 (which names the key frame, since
+`ref_frame_idx[0]` is 0 and the key frame refreshed all eight slots) and *also*
+freezes the key frame's `disable_frame_end_update_cdf` to 1. The second half is not
+decoration: those tile bits were coded against freshly initialised distributions, so
+without freezing the key frame leaves its own adapted ones behind, and inheriting
+them makes the whole frame diverge - measured, 5035 of 6144 samples move. With the
+key frame's frame-end update frozen its stored distributions *are* the fresh ones,
+and dav1d's output on the patched stream is then **bit-identical to the base
+stream's** on both frames (verified for the `inter_minimal` and `inter_still`
+shapes alike), which is what makes this stream usable as a first rung: a real
+`primary_ref_frame != NONE` header that is decoded and compared sample-for-sample.
+
+What it pins is the branch - the field is read, the frame is not mis-lexed and is not
+refused. What it deliberately does **not** pin is the *contents* of a snapshot: the
+inherited distributions were chosen to equal a fresh start, and the inherited block
+context turns out to change no symbol either (measured, by freezing only the
+distributions - the movement in the 5035-sample case is entirely CDF-side, so
+`load_previous` is invisible on frames this small, whose first superblock spans the
+picture and overwrites the state before anything reads it). Both facts are recorded
+in "What these fixtures do not cover" below rather than left implied.
+
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the
@@ -159,6 +191,16 @@ are parsed and stored but never select a strength. Measured, not assumed: adding
 unit is not pinned either - removing the `| subX` / `| subY` leaves the fixture
 exact, because this frame's motion field is uniform across each chroma 8x8. Both
 need a fixture that mixes intra and inter blocks inside one chroma block.
+`inter_primary_ref_64x64` reaches the `primary_ref_frame != PRIMARY_REF_NONE`
+branch of AV1 5.11 but not the substance of it: the frame it inherits from was
+frozen (`disable_frame_end_update_cdf` = 1) so its stored distributions *are* the
+fresh ones, and the block context that `load_previous` would install changes no
+symbol in a frame this small. So the per-buffer CDF snapshot and restore - the thing
+real video leans on, and what the 5035-sample unfrozen variant would actually test -
+is still unproven here, and so is `load_previous_segment_ids`. A patch that leaves
+`disable_frame_end_update_cdf` at 0 is the fixture that would pin the CDF snapshot;
+it is queued behind the snapshot itself, because without it the decoder simply
+disagrees with dav1d everywhere.
 
 ## Reproduce and check
 

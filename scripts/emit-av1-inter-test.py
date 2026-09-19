@@ -33,6 +33,7 @@ NAMES = (
     "inter_shift_64x64",
     "inter_edge_64x16",
     "inter_lf_delta_64x64",
+    "inter_primary_ref_64x64",
 )
 # Listing a fixture here replaces its assertions with the diagnostic print
 # below, which is how a new fixture's header sizes and per-plane agreement are
@@ -188,6 +189,31 @@ SPECS = {
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
+    # The frame-context inheritance fixture: two header bits rewritten in place on
+    # inter_minimal_64x64 so the inter frame names a primary reference instead of
+    # starting from scratch. See the fixture README for what this can and cannot pin.
+    "inter_primary_ref_64x64": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "key_bytes": "9",
+        "inter_bytes": "14",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_counts": "0, 0, 0",
+        "inter_decodable": "true",
+        "inter_primary_ref": "0",
+        "inter_note": "inherited frame context: primary_ref_frame names the key frame",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
+    },
 }
 
 HEADER = (
@@ -296,7 +322,9 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
   assert_eq(inter.show_frame, true)
   assert_eq(inter.error_resilient, false)
   assert_eq(inter.order_hint, @INTER_ORDER_HINT@)
-  assert_eq(inter.primary_ref_frame, av1_primary_ref_none)
+  // Most fixtures here code PRIMARY_REF_NONE; the inheritance fixture names a
+  // reference instead, so the expected value is part of its spec.
+  assert_eq(inter.primary_ref_frame, @INTER_PRIMARY_REF@)
   assert_eq(inter.refresh_frame_flags, 2)
   assert_eq(inter.base_q_idx, @INTER_Q@)
   assert_eq(inter.header_bytes, @INTER_BYTES@)
@@ -687,6 +715,7 @@ def main():
             ("@REF_MVS@", spec["ref_mvs"]),
             ("@HINT_BITS@", spec["hint_bits"]),
             ("@INTER_ORDER_HINT@", spec["inter_order_hint"]),
+            ("@INTER_PRIMARY_REF@", spec.get("inter_primary_ref", "av1_primary_ref_none")),
             ("@SWITCHABLE@", spec["switchable_motion"]),
             ("@KEY_BYTES@", spec["key_bytes"]),
             ("@INTER_BYTES@", spec["inter_bytes"]),

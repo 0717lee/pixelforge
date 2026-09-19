@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+- Reached the `primary_ref_frame != PRIMARY_REF_NONE` branch of AV1 §5.11 with a
+  fixture instead of an implementation guess. `inter_primary_ref_64x64` rewrites two
+  same-width header fields in place on `inter_minimal_64x64` - the inter frame's
+  `primary_ref_frame` 7 → 0, which names the key frame through `ref_frame_idx[0]`,
+  and the key frame's `disable_frame_end_update_cdf` 0 → 1 - so the stream differs
+  from its base in exactly two bytes, every tile byte is untouched, and dav1d's
+  planes are *bit-identical* to the base's. Both halves are needed: inheriting
+  without freezing leaves the key frame's adapted distributions behind, and then the
+  whole frame diverges (5035 of 6144 samples). What that pins is the branch - the
+  field is read, the header is not mis-lexed, and the frame is decoded and compared
+  sample-for-sample instead of being refused - and the README says just as plainly
+  what it does not pin, namely the *contents* of a snapshot: the inherited
+  distributions were chosen to equal a fresh start, and a measured decomposition
+  (freeze the distributions, inherit only the block context, nothing moves) shows
+  `load_previous` is invisible on frames this small, where the first superblock
+  spans the picture and overwrites the state before anything reads it. The next rung
+  is the per-buffer CDF snapshot with the unfrozen variant as its fence. New
+  `patch_header_fields` helper in the generator; the emitter's
+  `inter.primary_ref_frame` assertion is now a per-spec value.
 - Inter edges are now deblocked with the strength AV1 §7.14.5 step 4.c specifies:
   `base + (loop_filter_ref_deltas[ref] << nShift) + (loop_filter_mode_deltas[modeType]
   << nShift)`, where `modeType` is 1 for any mode from `NEARESTMV` up except

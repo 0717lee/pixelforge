@@ -386,6 +386,62 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    # The frame-context inheritance fixture. Every stream this encoder produces
+    # here says primary_ref_frame = PRIMARY_REF_NONE, because within a two-frame
+    # group there is nothing worth inheriting, so the load_cdfs / load_previous
+    # branch of AV1 5.11 is otherwise unreachable. Two same-width header fields
+    # are rewritten in place to get there: the key frame's
+    # disable_frame_end_update_cdf becomes 1 (so the distributions it leaves
+    # behind are the fresh ones the inter frame's tile was in fact coded against)
+    # and the inter frame's primary_ref_frame becomes 0, which names that key
+    # frame through ref_frame_idx[0]. dav1d's planes are regenerated from the
+    # result; they measured identical to the base stream's, which is what makes
+    # this a usable first rung - see the README.
+    {
+        "name": "inter_primary_ref_64x64",
+        "patch": {
+            "base": "inter_minimal_64x64",
+            "patches": [
+                {
+                    "frame": 0,
+                    "bit": 24,
+                    "width": 1,
+                    "expect": 0,
+                    "value": 1,
+                },
+                {
+                    "frame": 1,
+                    "bit": 24,
+                    "width": 3,
+                    "expect": 7,
+                    "value": 0,
+                },
+            ],
+        },
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "primary_ref_frame": 0,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
@@ -680,6 +736,45 @@ def splice_loop_filter_deltas(spec: dict) -> bytes:
     return data[:start] + bytes(body) + data[payload_at + size :]
 
 
+def patch_header_fields(spec: dict) -> bytes:
+    """Rewrite fixed-width frame header fields in place, moving no other bit.
+
+    Each patch names a frame, the FFmpeg trace position of one of its uncompressed
+    header fields, that field's width and both the value found there in the base
+    stream and the value to write instead. Because the width is unchanged the tile
+    payload stays byte-for-byte identical, which is what makes this the cheap way
+    to reach a header value the encoder will not choose: ``primary_ref_frame`` is
+    always 7 (PRIMARY_REF_NONE) for these two-frame streams because libaom has
+    nothing to inherit from within its own two-frame group, and
+    ``disable_frame_end_update_cdf`` follows the same all-or-nothing logic.
+    """
+    base = os.path.join(FIXTURE_DIR, spec["base"] + ".obu")
+    data = open(base, "rb").read()
+    frames = frame_obus(data)
+    payloads = {}
+    for patch in spec["patches"]:
+        start, payload_at, size = frames[patch["frame"]]
+        bits = payloads.get(patch["frame"])
+        if bits is None:
+            bits = _split_bits(data[payload_at : payload_at + size])
+            payloads[patch["frame"]] = (bits, start, payload_at, size)
+        offset = patch["bit"] - (payload_at - start) * 8
+        found = 0
+        for bit in bits[offset : offset + patch["width"]]:
+            found = found * 2 + bit
+        assert found == patch["expect"], (
+            "%s frame %d field at bit %d is %d, expected %d"
+            % (spec["base"], patch["frame"], patch["bit"], found, patch["expect"])
+        )
+        for index, shift in enumerate(range(patch["width"] - 1, -1, -1)):
+            bits[offset + index] = (patch["value"] >> shift) & 1
+    # Every patch keeps its field's width, so the OBU offsets stay valid and the
+    # payloads can be spliced back in one at a time.
+    for bits, start, payload_at, size in payloads.values():
+        data = data[:payload_at] + _pack_bits(bits) + data[payload_at + size :]
+    return data
+
+
 def run(fixture: dict, check: bool) -> dict:
     """Encode one fixture and verify it against the declared evidence.
 
@@ -705,6 +800,10 @@ def run(fixture: dict, check: bool) -> dict:
         command = "hand-splice of %s (see splice_loop_filter_deltas)" % fixture["splice"]["base"]
         with open(scratch, "wb") as fh:
             fh.write(splice_loop_filter_deltas(fixture["splice"]))
+    elif "patch" in fixture:
+        command = "header field patch of %s (see patch_header_fields)" % fixture["patch"]["base"]
+        with open(scratch, "wb") as fh:
+            fh.write(patch_header_fields(fixture["patch"]))
     else:
         encode_input(y4m, fixture.get("input", "ramp"), width, height)
         cmd = [

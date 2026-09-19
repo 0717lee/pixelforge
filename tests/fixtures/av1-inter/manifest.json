@@ -36,6 +36,12 @@
       "name": "inter_lf_delta_64x64",
       "obu_sha256": "dabaa73be452ff826aaa1f7823b7f377afb758a5e82db41a04fe3151274659a7",
       "reference_sha256": "426662d82da1132a933e8d6c9eff066362bc1cf542a1e38e399b93c9790ef1da"
+    },
+    {
+      "command": "header field patch of inter_minimal_64x64 (see patch_header_fields)",
+      "name": "inter_primary_ref_64x64",
+      "obu_sha256": "3f51610d4d2de7c4991e715db128ce6038bb6386fbfc2ceabf9a6fe5db31363d",
+      "reference_sha256": "2bedab6e2fa08ae92e3c32ea597a5b1f70fa86eebd6cf5eb44f082399b1f4b00"
     }
   ],
   "frames_per_fixture": 2,
