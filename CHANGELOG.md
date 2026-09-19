@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- Measured, and then documented as uncloseable here, the regression coverage of
+  `read_mv_component`: the committed fixtures code magnitude classes 1 and 4 only
+  (24 and 232 eighth-pel), because this `aomenc` will not emit a long vector that
+  also decodes exactly - sawtooth sources make a short vector equally good, smooth
+  translated waves get answered with `NEARESTMV`, intra blocks or a verbatim copy
+  of the key frame, translated texture aborts the encoder at every width tried, and
+  `--static-thresh=0` changes nothing. `tests/fixtures/av1-inter/README.md` records
+  the attempts and names the two ways actually to close it (another encoder build,
+  or a hand-written tile), so the untested classes are not mistaken for covered.
+
 - A NEARMV block resolves to stacked candidate **1**, not candidate 0. §5.11.24
   assigns `RefMvIdx = 1` before the depth-reference-list loop of the nearmv tree,
   so that value has to stand even when the stack is too thin for a single

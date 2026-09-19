@@ -60,6 +60,34 @@ back into the frame. That vector is magnitude class 4, which is what exposed the
 `read_mv_component` row-index defect - the test therefore pins the whole picture,
 every sample of all three planes, against dav1d.
 
+## What these fixtures do not cover
+
+`read_mv_component` is only exercised at magnitude **class 1 and class 4** (the
+24-eighth-pel translation and the 232-eighth-pel reach-back). Classes 0, 2, 3 and
+5 through 10 are not coded by any fixture, and the eleventh class
+(`MV_CLASS_THRESHOLD`, which needs ten magnitude bits) is untested end to end.
+That is a gap in the encoder's availability, not a claim that the read is right:
+this `aomenc` will not produce a stream that both reaches a long vector and
+decodes exactly. Measured attempts, all with the minimal flag set, `-p1`,
+`--cpu-used=0`, `--cq-level=32`:
+
+- sawtooth sources cannot reach class 5 at all, because their 32-sample period
+  makes a short vector predict equally well;
+- smooth non-periodic waves translated by 33-48 pixels on 64x16/64x64/128x16
+  frames encode, but the encoder answers with `NEARESTMV`/class-4 vectors or with
+  intra blocks, and the ones that do move leave 15-53 luma samples wrong;
+- translations of 96-260 pixels on 256-512 wide frames either abort the encoder
+  (`0xC0000409`, the content-dependent teardown crash) or code the inter frame as
+  a copy of the key frame;
+- translated pseudo-random texture, which is the content most likely to force a
+  long vector, aborts the encoder at every width tried (128 through 1024);
+- `--static-thresh=0`, the only exposed knob that could push the motion search
+  further, leaves the output byte-identical.
+
+So the class-bound handling in `read_mv_component` rests on the normative text
+(AV1 §5.11.25) plus classes 1 and 4 of real traffic. Closing the gap needs either
+a different encoder build or a synthetic tile whose bits are written by hand.
+
 ## Reproduce and check
 
 ```powershell
