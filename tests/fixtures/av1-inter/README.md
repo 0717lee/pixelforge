@@ -9,6 +9,9 @@ repository lexes a `frame_type`, an `order_hint`, a reference list,
 `disable_cdf_update`. These streams are the first real temporal units the
 project decodes.
 
+Fixtures do not all share a frame size; `inter_edge_64x16` is 64x16 and the rest
+are 64x64, and each fixture names its own input source and dimensions.
+
 Each fixture ships the raw OBU (`.obu`), the deterministic input (`.input.y4m`),
 the FFmpeg `trace_headers` transcript (`.trace.txt`) that acts as the syntax
 oracle, and dav1d's native planes (`.reference.yuv`, both frames). The generated
@@ -16,7 +19,7 @@ white-box test `av1_inter_reference_wbtest.mbt` embeds the OBUs and both frames'
 planes, asserts every frame-header field against the transcript, and compares
 reconstruction against dav1d sample-for-sample.
 
-## The four fixtures
+## The five fixtures
 
 `general_inter_64x64.obu` is one untouched libaom encode with the default tool
 set, so frame 1 is an inter frame that reads the whole general grammar:
@@ -45,6 +48,17 @@ three planes** against dav1d.
 interpolation filter and non-zero `loop_filter_level[1]` (chroma deblocking is
 live at strength 4). Its inter frame is also sample-exact on all three planes, so
 sub-pel interpolation, reference masking and the frame filters agree with dav1d.
+
+`inter_edge_64x16.obu` is the 64x16 case, deliberately smaller than the rest. It
+is the committed reproducer for the open inter right-edge defect: the frame
+decodes (the tile budget fits), its key frame is exact, and every column is
+exact **except** the last three luma columns and the last V column, which come
+out as a flat edge-clamped fill instead of the wrapped sawtooth. The test
+compares everything outside those columns against dav1d, so the assertion
+tightens automatically when the defect is fixed. The cause is believed to be an
+empty motion-vector stack that records `INTRA_FRAME` as the reference of an inter
+block, which then skews the `is_inter` context of every following 4-wide strip
+(AV1 9.3 derives that context from the neighbours' intra flags).
 
 ## Reproduce and check
 

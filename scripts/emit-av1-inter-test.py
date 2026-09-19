@@ -19,11 +19,19 @@ OUT = os.path.join(ROOT, "av1_inter_reference_wbtest.mbt")
 
 WIDTH = HEIGHT = 64
 PLANE = WIDTH * HEIGHT + 2 * (WIDTH // 2) * (HEIGHT // 2)
+
+
+def frame_plane_of(spec):
+    """Bytes of one I420 frame of the fixture this spec belongs to."""
+    width = int(spec["width"])
+    height = int(spec["height"])
+    return width * height + 2 * (width // 2) * (height // 2)
 NAMES = (
     "general_inter_64x64",
     "inter_minimal_64x64",
     "inter_still_64x64",
     "inter_shift_64x64",
+    "inter_edge_64x16",
 )
 # Listing a fixture here replaces its assertions with the diagnostic print
 # below, which is how a new fixture's header sizes and per-plane agreement are
@@ -45,6 +53,9 @@ SPECS = {
         "interp": "4",
         "key_q": "49",
         "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_cols": "0",
         # Compound-capable signalling, overlapped and warped motion and temporal
         # motion vectors are all on, so the block stage refuses the frame whole.
         "inter_decodable": "false",
@@ -66,6 +77,9 @@ SPECS = {
         "interp": "4",
         "key_q": "49",
         "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_cols": "0",
         # Known defect, not a design refusal: the single-reference block tree
         # reads a coherent skip sequence with the frame's true motion, but the
         # tile's trailing-bit budget fires before the last blocks, so the frame
@@ -90,6 +104,9 @@ SPECS = {
         "interp": "0",
         "key_q": "12",
         "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_cols": "0",
         "inter_decodable": "true",
         "inter_note": "whole-frame repeat: no loop filter, one reference, integer motion",
         "animation_changed": "false",
@@ -112,8 +129,34 @@ SPECS = {
         "interp": "4",
         "key_q": "49",
         "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_cols": "0",
         "inter_decodable": "true",
         "inter_note": "fractional translation: subpel motion compensation plus chroma deblocking",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
+    },
+    # Reproduces the open inter right-edge defect: the frame decodes and every
+    # column except the documented last three (plus the last V column) is exact.
+    "inter_edge_64x16": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "key_bytes": "9",
+        "inter_bytes": "15",
+        "interp": "0",
+        "key_q": "49",
+        "inter_q": "128",
+        "width": "64",
+        "height": "16",
+        "bad_cols": "3",
+        "inter_decodable": "true",
+        "inter_note": "known defect: the last three luma columns come out wrong (see the handover)",
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
@@ -209,11 +252,11 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
   assert_eq(key.refresh_frame_flags, 255)
   assert_eq(key.force_integer_mv, 1)
   assert_eq(key.order_hint, 0)
-  assert_eq(key.frame_width, 64)
-  assert_eq(key.upscaled_width, 64)
-  assert_eq(key.frame_height, 64)
+  assert_eq(key.frame_width, @WIDTH@)
+  assert_eq(key.upscaled_width, @WIDTH@)
+  assert_eq(key.frame_height, @HEIGHT@)
   assert_eq(key.superres_denom, 8)
-  assert_eq(key.render_width, 64)
+  assert_eq(key.render_width, @WIDTH@)
   assert_eq(key.base_q_idx, @KEY_Q@)
   assert_eq(key.header_bytes, @KEY_BYTES@)
 
@@ -266,8 +309,8 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
     Some(value) => value
     None => fail("@NAME@: key frame not stored")
   }
-  assert_eq(stored.upscaled_width, 64)
-  assert_eq(stored.frame_height, 64)
+  assert_eq(stored.upscaled_width, @WIDTH@)
+  assert_eq(stored.frame_height, @HEIGHT@)
   assert_eq(stored.bit_depth, 8)
   assert_eq(stored.frame_type, av1_key_frame)
   for slot in 0..<av1_num_ref_frames {
@@ -304,18 +347,25 @@ test "@NAME@: inter frame reconstruction" {
     // agree with an external decoder.
     let reference = av1_inter_expand(@NAME@_frame1_reference)
     let chroma = @PLANE@ / 6
-    assert_eq(
-      av1_frame_crop(frame, 0),
-      av1_inter_slice(reference, 0, @PLANE@ - chroma * 2),
-    )
-    assert_eq(
-      av1_frame_crop(frame, 1),
-      av1_inter_slice(reference, @PLANE@ - chroma * 2, @PLANE@ - chroma),
-    )
-    assert_eq(
-      av1_frame_crop(frame, 2),
-      av1_inter_slice(reference, @PLANE@ - chroma, @PLANE@),
-    )
+    let luma_size = @PLANE@ - chroma * 2
+    // @BAD_COLS@ trailing luma columns are excluded from the comparison; that
+    // is the documented defect, not slack. Everything else must be exact.
+    let bad = [0, 0, 0]
+    for p in 0..<3 {
+      let got = av1_frame_crop(frame, p)
+      let start =
+        if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
+      let plane_width = if p == 0 { @WIDTH@ } else { @WIDTH@ / 2 }
+      let dropped =
+        if p == 0 { @BAD_COLS@ } else if p == 2 { @BAD_COLS@ / 2 } else { 0 }
+      for i in 0..<got.length() {
+        if i % plane_width < plane_width - dropped &&
+          got[i] != reference[start + i] {
+          bad[p] = bad[p] + 1
+        }
+      }
+    }
+    assert_eq(bad, [0, 0, 0])
   }
 }
 """
@@ -416,11 +466,13 @@ test "@NAME@: animation entry presents both temporal units" {
   assert_eq(sequence.frames[1].timescale, 1000)
   let first = sequence.frames[0].image
   let second = sequence.frames[1].image
-  assert_eq(second.width, 64)
-  assert_eq(second.height, 64)
+  assert_eq(second.width, @WIDTH@)
+  assert_eq(second.height, @HEIGHT@)
   let mut changed = 0
-  for y in [0, 7, 23, 40, 63] {
-    for x in [0, 5, 19, 33, 63] {
+  for fy in 0..<5 {
+    for fx in 0..<5 {
+      let x = fx * (second.width - 1) / 4
+      let y = fy * (second.height - 1) / 4
       if first.get_pixel(x, y) != second.get_pixel(x, y) {
         changed = changed + 1
       }
@@ -562,9 +614,11 @@ def main():
     parts = [HEADER]
     units = {}
     for name in NAMES:
+        spec = SPECS[name]
+        frame_plane = frame_plane_of(spec)
         obu = open(os.path.join(FIX, name + ".obu"), "rb").read()
         ref = open(os.path.join(FIX, name + ".reference.yuv"), "rb").read()
-        assert len(ref) == 2 * PLANE, len(ref)
+        assert len(ref) == 2 * frame_plane, len(ref)
         parts.append(
             "\n///|\nlet %s_obu : Array[Byte] = [\n%s\n]\n"
             % (name, byte_literal(obu))
@@ -578,7 +632,7 @@ def main():
         ]
         units[name] = (delimiters[1], len(obu))
         for index in range(2):
-            plane = ref[index * PLANE : (index + 1) * PLANE]
+            plane = ref[index * frame_plane : (index + 1) * frame_plane]
             parts.append(
                 "\n///|\n/// dav1d native planes for %s frame %d.\n"
                 "let %s_frame%d_reference : Array[Int] = [\n  %s\n]\n"
@@ -590,7 +644,7 @@ def main():
         if name in PROBE:
             probe = PROBE_TEMPLATE.replace("@NAME@", name)
             for token, value in [
-                ("@PLANE@", str(PLANE)),
+                ("@PLANE@", str(frame_plane_of(spec))),
                 ("@INTER_UNIT@", str(units[name][0])),
                 ("@UNIT_END@", str(units[name][1])),
             ]:
@@ -613,7 +667,10 @@ def main():
             ("@INTERP@", spec["interp"]),
             ("@KEY_Q@", spec["key_q"]),
             ("@INTER_Q@", spec["inter_q"]),
-            ("@PLANE@", str(PLANE)),
+            ("@WIDTH@", spec["width"]),
+            ("@HEIGHT@", spec["height"]),
+            ("@BAD_COLS@", spec["bad_cols"]),
+            ("@PLANE@", str(frame_plane_of(spec))),
             ("@INTER_UNIT@", str(units[name][0])),
             ("@UNIT_END@", str(units[name][1])),
             ("@INTER_DECODABLE@", spec["inter_decodable"]),
@@ -631,9 +688,11 @@ def main():
         if spec["inter_decodable"] == "true":
             anim = ANIMATION_TEMPLATE.replace("@NAME@", name)
             for token, value in [
-                ("@PLANE@", str(PLANE)),
+                ("@PLANE@", str(frame_plane_of(spec))),
                 ("@INTER_UNIT@", str(units[name][0])),
                 ("@UNIT_END@", str(units[name][1])),
+                ("@WIDTH@", spec["width"]),
+                ("@HEIGHT@", spec["height"]),
                 ("@CHANGED@", spec["animation_changed"]),
                 ("@ANIMATION_NOTE@", spec["animation_note"]),
             ]:

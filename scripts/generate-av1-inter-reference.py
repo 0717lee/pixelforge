@@ -288,10 +288,43 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    # A 64x16 frame is the smallest stream found so far that reproduces the
+    # inter right-edge defect: the frame decodes (the tile budget fits), the key
+    # frame is exact, and only the last three luma columns and the last chroma
+    # column are wrong. Keep this fixture even while the pixels are known-bad:
+    # it is the reproducer for the empty motion-vector-stack bug.
+    {
+        "name": "inter_edge_64x16",
+        "input": "strip",
+        "width": 64,
+        "height": 16,
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "show_existing_frame": 0,
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "show_existing_frame": 0,
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "primary_ref_frame": 7,
+                "refresh_frame_flags": 2,
+                "allow_high_precision_mv": 0,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
-def encode_input(path: str, kind: str = "ramp") -> None:
+def encode_input(path: str, kind: str = "ramp", width: int = 64, height: int = 64) -> None:
     """Write the deterministic 2-frame 4:2:0 source selected by ``kind``.
 
     A slowly translating ramp gives the encoder a clean single-reference motion
@@ -306,15 +339,27 @@ def encode_input(path: str, kind: str = "ramp") -> None:
     additionally forces a fractional motion vector, which is what exercises the
     8-tap interpolation kernel rather than a plain copy.
     """
-    cw, ch = WIDTH // 2, HEIGHT // 2
-    header = "YUV4MPEG2 W%d H%d F1:1 Ip A1:1 C420mpeg2\n" % (WIDTH, HEIGHT)
+    cw, ch = width // 2, height // 2
+    header = "YUV4MPEG2 W%d H%d F1:1 Ip A1:1 C420mpeg2\n" % (width, height)
     frames = []
     for n in range(FRAMES):
-        if kind == "still":
+        if kind == "strip":
+            # The sawtooth of ``ramp`` in strict raster order for every plane.
+            # Byte layout matters: this is the source that reproduces the
+            # right-edge inter defect on a 64x16 frame, where the ramp's own
+            # chroma layout does not.
+            luma = bytes(
+                max(0, min(255, 40 + ((x + n * 3) % 32)))
+                for y in range(height)
+                for x in range(width)
+            )
+            cb = bytes((128 + (y % 5) + n) & 0xFF for y in range(ch) for x in range(cw))
+            cr = bytes((120 + (x % 7) - n) & 0xFF for y in range(ch) for x in range(cw))
+        elif kind == "still":
             luma = bytes(
                 max(0, min(255, 96 + 3 * (y % 16) + (x % 8)))
-                for y in range(HEIGHT)
-                for x in range(WIDTH)
+                for y in range(height)
+                for x in range(width)
             )
             cb = bytes([(128 + (y % 6)) & 0xFF for _ in range(cw) for y in range(ch)])
             cr = bytes([(120 + (x % 6)) & 0xFF for y in range(ch) for x in range(cw)])
@@ -347,8 +392,8 @@ def encode_input(path: str, kind: str = "ramp") -> None:
             off = 2.5 * n
             luma = bytes(
                 smooth(float(x), float(y), off, 64.0, 10.0)
-                for y in range(HEIGHT)
-                for x in range(WIDTH)
+                for y in range(height)
+                for x in range(width)
             )
             # Chroma samples the same shape half as often horizontally, and keeps
             # the identical displacement in chroma units, i.e. five luma pixels.
@@ -365,12 +410,12 @@ def encode_input(path: str, kind: str = "ramp") -> None:
         else:
             luma = bytes(
                 max(0, min(255, 40 + ((x + n * 3) % 32)))
-                for _ in range(HEIGHT)
-                for x in range(WIDTH)
+                for _ in range(height)
+                for x in range(width)
             )
             cb = bytes([(128 + (y % 5) + n) & 0xFF for _ in range(cw) for y in range(ch)])
             cr = bytes([(120 + (x % 7) - n) & 0xFF for y in range(ch) for x in range(cw)])
-        assert len(luma) == WIDTH * HEIGHT
+        assert len(luma) == width * height
         assert len(cb) == cw * ch and len(cr) == cw * ch
         frames.append(luma + cb + cr)
     with open(path, "wb") as fh:
@@ -466,6 +511,8 @@ def run(fixture: dict, check: bool) -> dict:
     that moves any bit fails loudly here rather than in the MoonBit suite.
     """
     name = fixture["name"]
+    width = fixture.get("width", WIDTH)
+    height = fixture.get("height", HEIGHT)
     os.makedirs(FIXTURE_DIR, exist_ok=True)
     y4m = os.path.join(FIXTURE_DIR, name + ".input.y4m")
     obu = os.path.join(FIXTURE_DIR, name + ".obu")
@@ -477,14 +524,14 @@ def run(fixture: dict, check: bool) -> dict:
         committed_obu = open(obu, "rb").read()
         committed_ref = open(ref, "rb").read()
     scratch = os.path.join(FIXTURE_DIR, name + ".check.obu")
-    encode_input(y4m, fixture.get("input", "ramp"))
+    encode_input(y4m, fixture.get("input", "ramp"), width, height)
     cmd = [
         AOMENC,
         "--codec=av1",
         "--obu",
         "--i420",
-        "--width=%d" % WIDTH,
-        "--height=%d" % HEIGHT,
+        "--width=%d" % width,
+        "--height=%d" % height,
         "--bit-depth=8",
         "--fps=1/1",
         "--limit=%d" % FRAMES,
@@ -522,7 +569,7 @@ def run(fixture: dict, check: bool) -> dict:
     )
     if proc.returncode != 0:
         raise SystemExit("dav1d failed for %s:\n%s" % (name, proc.stdout + proc.stderr))
-    plane = WIDTH * HEIGHT + 2 * (WIDTH // 2) * (HEIGHT // 2)
+    plane = width * height + 2 * (width // 2) * (height // 2)
     fresh_obu = open(scratch, "rb").read()
     data = open(decoded, "rb").read()
     for path in (scratch, decoded):

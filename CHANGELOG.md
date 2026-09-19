@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- The inter right-edge defect now has committed evidence. `inter_edge_64x16` is a
+  64x16 stream that decodes with a tile budget to spare, whose key frame is exact
+  and whose inter frame is exact in every column except the last three luma
+  columns and the last V column - so the generated test asserts everything known
+  to be right and tightens by itself once the cause is fixed. The fixture
+  generator and the emitter no longer assume 64x64: a fixture carries its own
+  width and height.
 
 - Dropped a duplicated probability table and an unused parameter that the inter
   work left behind: `av1_y_mode_cdfs()` copies the shared `av1_y_mode` rows

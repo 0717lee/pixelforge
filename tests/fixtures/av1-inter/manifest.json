@@ -24,6 +24,12 @@
       "name": "inter_shift_64x64",
       "obu_sha256": "5c0dbe33cabcad438eb25e83373680a11863e680553008c90f32c02b3fa81186",
       "reference_sha256": "bf334130b8399bad6150adddff991ed983720f37d8513ff81a06e1a842daa6e4"
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=16 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_edge_64x16.check.obu C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_edge_64x16.input.y4m",
+      "name": "inter_edge_64x16",
+      "obu_sha256": "c9adbfc4c69e841eefe72a29147fc9414fcd920a29e2046ab21040655a067ba5",
+      "reference_sha256": "fba86baa603f61451681d624b08da3033761f008ca3c414a4e3e393ef77b3f40"
     }
   ],
   "frames_per_fixture": 2,
