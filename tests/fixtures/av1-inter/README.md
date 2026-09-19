@@ -12,14 +12,16 @@ project decodes.
 Fixtures do not all share a frame size; `inter_edge_64x16` is 64x16 and the rest
 are 64x64, and each fixture names its own input source and dimensions.
 
-Each fixture ships the raw OBU (`.obu`), the deterministic input (`.input.y4m`),
-the FFmpeg `trace_headers` transcript (`.trace.txt`) that acts as the syntax
-oracle, and dav1d's native planes (`.reference.yuv`, both frames). The generated
-white-box test `av1_inter_reference_wbtest.mbt` embeds the OBUs and both frames'
-planes, asserts every frame-header field against the transcript, and compares
-reconstruction against dav1d sample-for-sample.
+Each fixture ships the raw OBU (`.obu`), the FFmpeg `trace_headers` transcript
+(`.trace.txt`) that acts as the syntax oracle, and dav1d's native planes
+(`.reference.yuv`, both frames). Five also ship the deterministic input
+(`.input.y4m`) they were encoded from; the spliced one is derived from another
+fixture's bytes instead. The generated white-box test
+`av1_inter_reference_wbtest.mbt` embeds the OBUs and both frames' planes, asserts
+every frame-header field against the transcript, and compares reconstruction
+against dav1d sample-for-sample.
 
-## The five fixtures
+## The six fixtures
 
 `general_inter_64x64.obu` is one untouched libaom encode with the default tool
 set, so frame 1 is an inter frame that reads the whole general grammar:
@@ -48,9 +50,14 @@ three planes** against dav1d.
 
 `inter_shift_64x64.obu` translates a small-amplitude band-limited wave by a true
 2.5 luma pixels, which forces a fractional motion vector, a switchable
-interpolation filter and non-zero `loop_filter_level[1]` (chroma deblocking is
-live at strength 4). Its inter frame is also sample-exact on all three planes, so
-sub-pel interpolation, reference masking and the frame filters agree with dav1d.
+interpolation filter and a non-zero `loop_filter_level[1]` (4, on Y horizontal
+edges only - `loop_filter_level[2..3]` are both zero, so chroma is not deblocked).
+Its inter frame is also sample-exact on all three planes, so sub-pel
+interpolation, reference masking and the frame filters agree with dav1d. The
+strength itself buys nothing here: rewriting `loop_filter_level[1]` from 4 to 40
+or 63 leaves dav1d's output byte-identical, because a band-limited wave is locally
+linear and the deblocking kernels preserve a ramp. That is why the loop-filter
+fixture is not based on this stream.
 
 `inter_edge_64x16.obu` is the 64x16 case, deliberately smaller than the rest. Its
 content is the same sawtooth shifted by 3 pixels, so the last columns wrap around
@@ -60,12 +67,39 @@ back into the frame. That vector is magnitude class 4, which is what exposed the
 `read_mv_component` row-index defect - the test therefore pins the whole picture,
 every sample of all three planes, against dav1d.
 
+`inter_lf_delta_64x64.obu` is the loop-filter-delta fixture, and the only one that
+is not a verbatim encoder output: it is `inter_minimal_64x64.obu` with the inter
+frame's loop-filter fields rewritten bit by bit
+(`splice_loop_filter_deltas` in the generator). The rewrite is needed because this
+`aomenc` will not produce the syntax at all - it writes
+`loop_filter_delta_update = 0` whatever `--delta-lf-mode` says, and picks
+`loop_filter_level[0..1] = 0` for every stream here, which leaves the frame
+undeblocked (and `loop_filter_level[2..3]` unsignalled, AV1 §5.11 loop filter params). The splice touches only fixed-width fields at the start
+of the uncompressed header - four `f(6)` levels, ten `f(1)` flags and their
+`su(1+6)` values - and re-pads the header so that it still ends on a byte
+boundary; the tile's entropy-coded bytes are copied unchanged. FFmpeg's transcript
+then reads back exactly the configuration that was written, dav1d decodes the
+result, and its planes are the fixture's ground truth like every other fixture's.
+
+What it covers is AV1 §7.14.5 step 4.c: levels 30/33 on Y (so the two directions
+get different `nShift`, 0 and 1) and 20/16 on U/V, with
+`loop_filter_ref_deltas` +3, -6, +5, -2 on rows INTRA, LAST, BWDREF and BWDREF2
+and `loop_filter_mode_deltas` +2 and -4. The rows an inter block reaches - LAST
+and modeType 1 - are the negative ones, which is what makes the sign convention
+observable. `su(1+6)` is a seven-bit two's complement value: parsing the same bits
+as sign-and-magnitude turns -6 into -58 and -4 into -60, and that misread leaves
+108 U and 50 V samples wrong against dav1d. Skipping step 4.c altogether, so that
+every edge is filtered with the INTRA row and no mode delta, leaves 41 luma and 24
+V samples wrong. Both numbers were measured by mutating the decoder, so the
+assertions are evidence about the arithmetic and not a coincidence of a frame that
+happens never to be deblocked.
+
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the
 24-eighth-pel translation and the 232-eighth-pel reach-back). Classes 0, 2, 3 and
-5 through 10 are not coded by any fixture, and the eleventh class
-(`MV_CLASS_THRESHOLD`, which needs ten magnitude bits) is untested end to end.
+5 through 10 are not coded by any fixture, and class 10 - the largest, which
+needs ten magnitude bits - is untested end to end.
 That is a gap in the encoder's availability, not a claim that the read is right.
 The cause is now measured rather than suspected: **this `aomenc` build searches
 about +/-32 pixels of motion**, and magnitude class 5 starts at 32 pixels, so a
@@ -96,6 +130,16 @@ an encoder build whose search range is configurable, or a synthetic tile whose
 bits are written by hand - the latter only proves the reader agrees with whatever
 writer produced the bits, so it is a regression fence, not external evidence.
 
+`inter_lf_delta_64x64` covers step 4.c, not step 4.b: the inter frame codes no
+intra blocks, so `loop_filter_ref_deltas[INTRA_FRAME]` and
+`loop_filter_mode_deltas[0]` - and reference rows 4 to 7, which no block names -
+are parsed and stored but never select a strength. Measured, not assumed: adding
+20 to the intra branch leaves every sample of the fixture unchanged. Equally, the
+§7.14.2 widening that sends a chroma edge to the `row | subY`, `col | subX` luma
+unit is not pinned either - removing the `| subX` / `| subY` leaves the fixture
+exact, because this frame's motion field is uniform across each chroma 8x8. Both
+need a fixture that mixes intra and inter blocks inside one chroma block.
+
 ## Reproduce and check
 
 ```powershell
@@ -106,8 +150,10 @@ python scripts/emit-av1-inter-test.py
 
 The input regenerates byte-identically, so `--check` re-derives it, re-encodes
 with the manifest command and verifies the OBU, the per-field transcript
-expectations and dav1d's output length. The emitter turns the verified evidence
-into the committed MoonBit test.
+expectations and dav1d's output length. `inter_lf_delta_64x64` is re-spliced from
+the committed `inter_minimal_64x64.obu` instead of re-encoded, which makes the
+splice itself part of what `--check` proves. The emitter turns the verified
+evidence into the committed MoonBit test.
 
 ## Encoder constraint
 

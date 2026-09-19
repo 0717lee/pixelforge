@@ -1,6 +1,26 @@
 # Changelog
 
 ## Unreleased
+- Inter edges are now deblocked with the strength AV1 §7.14.5 step 4.c specifies:
+  `base + (loop_filter_ref_deltas[ref] << nShift) + (loop_filter_mode_deltas[modeType]
+  << nShift)`, where `modeType` is 1 for any mode from `NEARESTMV` up except
+  `GLOBALMV` and `GLOBAL_GLOBALMV`, and `nShift` is the *pre-delta* base level
+  shifted by five. Frame deblocking therefore takes the frame's motion field, so it
+  can ask which reference and which mode owns the block beside each edge;
+  `av1_loop_filter_edge_level` replaces the intra-only strength helper, and the
+  gates around it (§7.14.1 skips a chroma plane whose own level is zero; a frame
+  with two zero Y levels is not deblocked at all, which is what dav1d does) stay
+  *outside* that arithmetic because they are per-plane, not per-edge.
+  `inter_lf_delta_64x64` covers it: the encoder will not emit a delta-LF update at
+  this size, and picks zero levels for every stream here, so the fixture is
+  `inter_minimal_64x64` with its inter header's loop-filter fields rewritten by
+  hand and dav1d's planes regenerated. `su(1+6)` is a seven-bit two's complement
+  value, adjudicated by mutating the reader rather than by assertion: reading the
+  same bits as sign-and-magnitude costs 108 U and 50 V samples, and skipping step
+  4.c altogether costs 41 luma and 24 V. What the fixture provably does *not* pin
+  is recorded in its README - step 4.b is never reached, because the frame codes no
+  intra blocks, and the §7.14.2 `row | subY` / `col | subX` chroma widening makes
+  no sample move on a frame this uniform.
 - Measured, and then documented as uncloseable here, the regression coverage of
   `read_mv_component`: the committed fixtures code magnitude classes 1 and 4 only
   (24 and 232 eighth-pel). The reason is the encoder's motion search range, about

@@ -110,19 +110,32 @@ fn av1_parse_loop_filter_config(
 }
 
 ///|
-/// Effective strength for a pure-intra, segment-zero, no-delta-LF frame.
-/// Y gates both directions together; U and V each gate their own base level.
-/// Mode deltas apply to inter blocks only and therefore do not enter this sum.
-fn av1_loop_filter_intra_level(
+/// Strength selected for one edge (AV1 §7.14.5 step 4). The base level is the
+/// frame's own level for that plane and direction, then the reference and mode
+/// deltas are added *after* the shift.
+///
+/// The two gates below sit *outside* the delta arithmetic: a frame whose two Y
+/// levels are both zero is not deblocked at all, and §7.14.1 skips a chroma plane
+/// whose own level is zero. So a delta can lift an edge whose base is zero only
+/// when that plane is already being filtered; both gates were pinned down by
+/// measuring dav1d, since a positive delta on a zero level would otherwise start
+/// deblocking.
+/// Intra blocks and unwritten neighbourhoods take the `reference == INTRA_FRAME`
+/// branch and never see a mode delta, because §7.14.5 adds one only when the
+/// block codes from a reference frame.
+fn av1_loop_filter_edge_level(
   config : Av1LoopFilterConfig,
   plane : Int,
   direction : Int,
+  reference : Int,
+  mode_type : Int,
 ) -> Int? {
   if !av1_loop_filter_config_valid(config) ||
     plane < 0 ||
     plane > 2 ||
     direction < 0 ||
-    direction > 1 {
+    direction > 1 ||
+    (mode_type < 0 || mode_type > 1) && reference > av1_intra_frame {
     return None
   }
   if plane == 0 {
@@ -133,10 +146,31 @@ fn av1_loop_filter_intra_level(
     return Some(0)
   }
   let base = config.levels[if plane == 0 { direction } else { plane + 1 }]
-  let level = if config.delta_enabled {
-    base + config.ref_deltas[0] * (1 << (base >> 5))
-  } else {
+  let shift = base >> 5
+  let level = if !config.delta_enabled {
     base
+  } else if reference <= av1_intra_frame {
+    base + (config.ref_deltas[0] << shift)
+  } else if reference >= 8 {
+    return None
+  } else {
+    base + (config.ref_deltas[reference] << shift) +
+      (config.mode_deltas[mode_type] << shift)
   }
   Some(if level < 0 { 0 } else if level > 63 { 63 } else { level })
+}
+
+///|
+/// Effective strength for a pure-intra, segment-zero, no-delta-LF frame.
+/// Y gates both directions together; U and V each gate their own base level.
+/// Mode deltas apply to inter blocks only and therefore do not enter this sum.
+fn av1_loop_filter_intra_level(
+  config : Av1LoopFilterConfig,
+  plane : Int,
+  direction : Int,
+) -> Int? {
+  if plane < 0 || plane > 2 || direction < 0 || direction > 1 {
+    return None
+  }
+  av1_loop_filter_edge_level(config, plane, direction, av1_intra_frame, 0)
 }

@@ -32,6 +32,7 @@ NAMES = (
     "inter_still_64x64",
     "inter_shift_64x64",
     "inter_edge_64x16",
+    "inter_lf_delta_64x64",
 )
 # Listing a fixture here replaces its assertions with the diagnostic print
 # below, which is how a new fixture's header sizes and per-plane agreement are
@@ -158,6 +159,32 @@ SPECS = {
         "bad_counts": "0, 0, 0",
         "inter_decodable": "true",
         "inter_note": "periodic translation: the last strip reaches back with a large motion vector",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
+    },
+    # The loop-filter fixture: inter_minimal_64x64's verified bytes with the
+    # frame header's loop-filter fields rewritten by hand, because libaom will not
+    # emit a delta-LF update at this size. Every deblocking strength in the frame
+    # now comes from 4.c, so a reference or mode delta read from the wrong row -
+    # or with the wrong sign convention - moves samples dav1d leaves alone.
+    "inter_lf_delta_64x64": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "key_bytes": "9",
+        "inter_bytes": "22",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_counts": "0, 0, 0",
+        "inter_decodable": "true",
+        "inter_note": "hand-spliced loop-filter levels and deltas: every edge strength comes from the block's reference and mode",
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },

@@ -270,8 +270,10 @@ FIXTURES = [
                 "is_motion_mode_switchable": 0,
                 "reference_select": 0,
                 "delta_q_present": 0,
-                # Chroma filtering is live in this stream (level[1] is 4), which
-                # is the first fixture that needs the inter loop-filter deltas.
+                # Chroma levels are zero, so only Y is deblocked here - and this
+                # wave is so smooth that dav1d's output does not move whatever the
+                # Y level is, which is why the loop-filter fixture is not based on
+                # it.
                 "loop_filter_level[0]": 0,
                 "loop_filter_level[1]": 4,
                 "loop_filter_level[2]": 0,
@@ -316,6 +318,69 @@ FIXTURES = [
                 "is_motion_mode_switchable": 0,
                 "reference_select": 0,
                 "delta_q_present": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    # The encoder will not produce a loop-filter delta update at all here, so this
+    # fixture takes inter_minimal_64x64's verified bytes and rewrites the frame
+    # header's loop-filter fields by hand (see splice_loop_filter_deltas). Its
+    # pixels are dav1d's, regenerated from the spliced stream like any other
+    # fixture, and the FFmpeg transcript below is the syntax evidence.
+    #
+    # The base levels are not decorative: inter_minimal's sawtooth ramp varies
+    # only along x, so a vertical Y level is what makes deblocking visible, and
+    # the horizontal level is deliberately at the 32 boundary to give the two
+    # directions different nShift values.
+    {
+        "name": "inter_lf_delta_64x64",
+        "splice": {
+            "base": "inter_minimal_64x64",
+            "frame": 1,
+            "header_bytes": 14,
+            "level_bit": 76,
+            "delta_update_bit": 92,
+            "levels": [30, 33, 20, 16],
+            # The rows this frame actually reads carry the negative deltas: an
+            # inter block takes LAST and modeType 1, an intra block takes INTRA.
+            # Both signs therefore appear where a filtered edge can show them,
+            # and the four rows are distinct so a wrong index moves a sample.
+            "ref_deltas": {0: 3, 1: -6, 2: 5, 3: -2},
+            "mode_deltas": {0: 2, 1: -4},
+        },
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 0,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "primary_ref_frame": 7,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+                "loop_filter_level[0]": 30,
+                "loop_filter_level[1]": 33,
+                "loop_filter_level[2]": 20,
+                "loop_filter_level[3]": 16,
+                "loop_filter_sharpness": 0,
+                "loop_filter_delta_enabled": 1,
+                "loop_filter_delta_update": 1,
+                "loop_filter_ref_deltas[0]": 3,
+                "loop_filter_ref_deltas[1]": -6,
+                "loop_filter_ref_deltas[2]": 5,
+                "loop_filter_ref_deltas[3]": -2,
+                "loop_filter_mode_deltas[0]": 2,
+                "loop_filter_mode_deltas[1]": -4,
             },
         ],
         "sequence_expectations": None,
@@ -503,6 +568,118 @@ def check_expectations(label: str, fields: dict[str, int], expected: dict[str, i
             )
 
 
+def _split_bits(data: bytes) -> list[int]:
+    return [(byte >> i) & 1 for byte in data for i in range(7, -1, -1)]
+
+
+def _pack_bits(bits: list[int]) -> bytes:
+    while len(bits) % 8:
+        bits = bits + [0]
+    out = bytearray()
+    for start in range(0, len(bits), 8):
+        value = 0
+        for bit in bits[start : start + 8]:
+            value = (value << 1) | bit
+        out.append(value)
+    return bytes(out)
+
+
+def _leb128(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def frame_obus(data: bytes) -> list[tuple[int, int, int]]:
+    """Every OBU_FRAME, as (header start, payload start, payload length)."""
+    found: list[tuple[int, int, int]] = []
+    pos = 0
+    while pos < len(data):
+        header = data[pos]
+        kind = (header >> 3) & 0x0F
+        scan = pos + 1
+        if (header >> 2) & 1:
+            scan += 1
+        size = 0
+        shift = 0
+        if (header >> 1) & 1:
+            while True:
+                byte = data[scan]
+                size |= (byte & 0x7F) << shift
+                scan += 1
+                shift += 7
+                if not byte & 0x80:
+                    break
+        if kind == 6:
+            found.append((pos, scan, size))
+        pos = scan + size
+    return found
+
+
+def splice_loop_filter_deltas(spec: dict) -> bytes:
+    """Rewrite one verified frame header's loop filter configuration.
+
+    libaom will not emit what Phase D needs here: it writes
+    ``loop_filter_delta_update = 0`` whatever ``--delta-lf-mode`` says, and it
+    picks zero base levels for these tiny streams, which leaves the whole frame
+    undeblocked. Every field involved - ``f(6)`` levels,
+    ``f(1)`` flags and ``su(1+6)`` values - is a raw fixed-width bit field in the
+    uncompressed header, so rewriting them only shifts the following header
+    syntax. The tile's entropy-coded payload is copied unchanged, which is why
+    the inserted width has to come out a whole number of bytes.
+
+    ``level_bit`` and ``delta_update_bit`` are FFmpeg trace positions, which count
+    from the start of the OBU header, and ``header_bytes`` is the width of the
+    uncompressed header in the base stream.
+    """
+    base = os.path.join(FIXTURE_DIR, spec["base"] + ".obu")
+    data = open(base, "rb").read()
+    frames = frame_obus(data)
+    start, payload_at, size = frames[spec["frame"]]
+    header_bits = spec["header_bytes"] * 8
+    bits = _split_bits(data[payload_at : payload_at + size])
+    shift = (payload_at - start) * 8
+    level = spec["level_bit"] - shift
+    update = spec["delta_update_bit"] - shift
+    # The base stream must be in the configuration being left behind: both Y
+    # levels zero, so no chroma levels are coded and no filtering happens.
+    assert bits[level : level + 12] == [0] * 12, "%s already filters" % spec["base"]
+    assert bits[level + 15] == 1, "%s has loop_filter_delta_enabled = 0" % spec["base"]
+    assert bits[update] == 0, "%s already carries delta updates" % spec["base"]
+
+    inserted: list[int] = [1]
+    for index, values in (
+        (range(8), spec["ref_deltas"]),
+        (range(2), spec["mode_deltas"]),
+    ):
+        for i in index:
+            if i in values:
+                inserted.append(1)
+                # su(1+6) is a seven-bit two's complement value, so a negative
+                # delta is written with its top bit set.
+                for bit in range(6, -1, -1):
+                    inserted.append((values[i] & 0x7F) >> bit & 1)
+            else:
+                inserted.append(0)
+    written: list[int] = []
+    for value in spec["levels"]:
+        for bit in range(5, -1, -1):
+            written.append((value >> bit) & 1)
+    out = bits[:level] + written + bits[level + 12 : update] + inserted
+    out += bits[update + 1 : header_bits]
+    assert len(out) % 8 == 0, "splice would desynchronise the tile data"
+    payload = _pack_bits(out) + data[payload_at + header_bits // 8 : payload_at + size]
+    body = bytearray()
+    body.append((6 << 3) | (1 << 1))
+    body += _leb128(len(payload))
+    body += payload
+    return data[:start] + bytes(body) + data[payload_at + size :]
+
+
 def run(fixture: dict, check: bool) -> dict:
     """Encode one fixture and verify it against the declared evidence.
 
@@ -524,30 +701,36 @@ def run(fixture: dict, check: bool) -> dict:
         committed_obu = open(obu, "rb").read()
         committed_ref = open(ref, "rb").read()
     scratch = os.path.join(FIXTURE_DIR, name + ".check.obu")
-    encode_input(y4m, fixture.get("input", "ramp"), width, height)
-    cmd = [
-        AOMENC,
-        "--codec=av1",
-        "--obu",
-        "--i420",
-        "--width=%d" % width,
-        "--height=%d" % height,
-        "--bit-depth=8",
-        "--fps=1/1",
-        "--limit=%d" % FRAMES,
-        "--lag-in-frames=0",
-        "--threads=1",
-        "--cpu-used=0",
-        "--end-usage=q",
-        "--cq-level=32",
-        "--tile-columns=0",
-        "--tile-rows=0",
-        "--debug",
-        "--disable-warning-prompt",
-    ] + fixture["flags"] + ["-o", scratch, y4m]
-    proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-    if proc.returncode != 0:
-        raise SystemExit("aomenc failed for %s:\n%s" % (name, proc.stdout[-2000:]))
+    if "splice" in fixture:
+        command = "hand-splice of %s (see splice_loop_filter_deltas)" % fixture["splice"]["base"]
+        with open(scratch, "wb") as fh:
+            fh.write(splice_loop_filter_deltas(fixture["splice"]))
+    else:
+        encode_input(y4m, fixture.get("input", "ramp"), width, height)
+        cmd = [
+            AOMENC,
+            "--codec=av1",
+            "--obu",
+            "--i420",
+            "--width=%d" % width,
+            "--height=%d" % height,
+            "--bit-depth=8",
+            "--fps=1/1",
+            "--limit=%d" % FRAMES,
+            "--lag-in-frames=0",
+            "--threads=1",
+            "--cpu-used=0",
+            "--end-usage=q",
+            "--cq-level=32",
+            "--tile-columns=0",
+            "--tile-rows=0",
+            "--debug",
+            "--disable-warning-prompt",
+        ] + fixture["flags"] + ["-o", scratch, y4m]
+        command = " ".join(cmd)
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        if proc.returncode != 0:
+            raise SystemExit("aomenc failed for %s:\n%s" % (name, proc.stdout[-2000:]))
     trace = os.path.join(FIXTURE_DIR, name + ".trace.txt")
     frames = trace_fields(scratch, trace)
     if len(frames) != FRAMES:
@@ -590,7 +773,7 @@ def run(fixture: dict, check: bool) -> dict:
                 fh.write(blob)
     return {
         "name": name,
-        "command": " ".join(cmd),
+        "command": command,
         "obu_sha256": hashlib.sha256(fresh_obu).hexdigest(),
         "reference_sha256": hashlib.sha256(data).hexdigest(),
         "frame_planes": [data[i * plane : (i + 1) * plane] for i in range(FRAMES)],

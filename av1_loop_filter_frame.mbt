@@ -1,4 +1,48 @@
 ///|
+/// Reference and mode type of the block that owns the samples on the current
+/// side of one edge (AV1 §7.14.4 inputs `RefFrames[row][col][0]` and
+/// `YModes[row][col]`). Plane coordinates are converted back to the luma 4x4
+/// grid the motion field lives on, and §7.14.2 then widens a chroma edge to the
+/// bottom-right luma unit of its 2x2 group with `row | subY`, `col | subX`.
+/// `modeType` is the normative one: any coded mode from NEARESTMV upwards except
+/// the two global-motion modes, so intra blocks, GLOBALMV and never-written
+/// neighbourhoods all report 0.
+fn av1_loop_filter_block_state(
+  field : Av1MotionField?,
+  plane : Int,
+  x : Int,
+  y : Int,
+  sub_x : Int,
+  sub_y : Int,
+) -> (Int, Int) {
+  match field {
+    None => (av1_intra_frame, 0)
+    Some(motion) => {
+      let scale_x = if plane == 0 { 1 } else { 1 << sub_x }
+      let scale_y = if plane == 0 { 1 } else { 1 << sub_y }
+      let col = (x * scale_x / 4) | sub_x
+      let row = (y * scale_y / 4) | sub_y
+      if row < 0 ||
+        row >= motion.rows ||
+        col < 0 ||
+        col >= motion.cols {
+        (av1_intra_frame, 0)
+      } else {
+        let unit = row * motion.cols + col
+        let mode = motion.y_modes[unit]
+        let mode_type = if mode >= av1_mode_nearest_mv &&
+          mode != av1_mode_global_mv && mode != av1_mode_global_global_mv {
+          1
+        } else {
+          0
+        }
+        (motion.refs[unit * 2], mode_type)
+      }
+    }
+  }
+}
+
+///|
 /// Filter one four-sample edge segment. The scalar kernel receives only the
 /// selected filter's footprint: a four-tap edge must not inspect p2/q2.
 fn av1_loop_filter_frame_segment(
@@ -46,14 +90,18 @@ fn av1_loop_filter_frame_segment(
 }
 
 ///|
-/// Intra-only frame deblocking after tiles have been assembled and before
-/// CDEF. Maps store each actual TX's width | (height << 8) in every covered
-/// plane 4x4 cell, including skipped transforms and coded MI padding.
+/// Frame deblocking after tiles have been assembled and before CDEF. Maps store
+/// each actual TX's width | (height << 8) in every covered plane 4x4 cell,
+/// including skipped transforms and coded MI padding.
 ///
 /// The pinned libaom set_lpf_parameters uses the current transform's normal
 /// dimension mask to locate a TU edge, then the smaller normal dimension of
 /// its two transforms to choose Y 4/8/14 or UV 4/6. Intra skip flags never
 /// suppress these edges. Tile boundaries participate like other TU edges.
+///
+/// `field` is the frame's motion field: an inter frame selects each edge's
+/// strength from the reference and mode of the block beside it, so passing None
+/// on an inter frame would silently deblock it with the intra deltas.
 fn av1_loop_filter_frame(
   config : Av1LoopFilterConfig,
   width : Int,
@@ -65,6 +113,7 @@ fn av1_loop_filter_frame(
   tx_sizes : Array[Array[Int]],
   sub_x? : Int = 1,
   sub_y? : Int = 1,
+  field? : Av1MotionField? = None,
 ) -> Bool {
   if !av1_loop_filter_config_valid(config) ||
     width <= 0 ||
@@ -112,11 +161,24 @@ fn av1_loop_filter_frame(
     let cols = stride / 4
     let map = tx_sizes[plane]
     for direction in 0..<2 {
-      let level = match av1_loop_filter_intra_level(config, plane, direction) {
-        Some(value) => value
-        None => return false
+      // A whole direction can only be skipped when no reference and no mode
+      // delta could lift any of its edges above zero.
+      let mut inert = true
+      for reference in 0..<8 {
+        for mode_type in 0..<2 {
+          match av1_loop_filter_edge_level(
+              config,
+              plane,
+              direction,
+              reference,
+              mode_type,
+            ) {
+            Some(value) => if value > 0 { inert = false }
+            None => return false
+          }
+        }
       }
-      if level == 0 {
+      if inert {
         continue
       }
       let normal_extent = if direction == 0 {
@@ -143,6 +205,24 @@ fn av1_loop_filter_frame(
             current >> 8
           }
           if (normal & (dimension - 1)) == 0 {
+            let (reference, mode_type) = av1_loop_filter_block_state(
+              field,
+              plane,
+              x,
+              y,
+              sub_x,
+              sub_y,
+            )
+            let edge_level = match av1_loop_filter_edge_level(
+                config,
+                plane,
+                direction,
+                reference,
+                mode_type,
+              ) {
+              Some(value) => value
+              None => return false
+            }
             let previous = map[index - (if direction == 0 { 1 } else { cols })]
             let previous_dimension = if direction == 0 {
               previous & 255
@@ -163,14 +243,15 @@ fn av1_loop_filter_frame(
             } else {
               14
             }
-            if !av1_loop_filter_frame_segment(
+            if edge_level > 0 &&
+              !av1_loop_filter_frame_segment(
                 planes[plane],
                 stride,
                 x,
                 y,
                 direction,
                 filter_width,
-                level,
+                edge_level,
                 config.sharpness,
                 bit_depth,
               ) {

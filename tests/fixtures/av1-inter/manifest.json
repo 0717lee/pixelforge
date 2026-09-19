@@ -30,6 +30,12 @@
       "name": "inter_edge_64x16",
       "obu_sha256": "c9adbfc4c69e841eefe72a29147fc9414fcd920a29e2046ab21040655a067ba5",
       "reference_sha256": "fba86baa603f61451681d624b08da3033761f008ca3c414a4e3e393ef77b3f40"
+    },
+    {
+      "command": "hand-splice of inter_minimal_64x64 (see splice_loop_filter_deltas)",
+      "name": "inter_lf_delta_64x64",
+      "obu_sha256": "dabaa73be452ff826aaa1f7823b7f377afb758a5e82db41a04fe3151274659a7",
+      "reference_sha256": "426662d82da1132a933e8d6c9eff066362bc1cf542a1e38e399b93c9790ef1da"
     }
   ],
   "frames_per_fixture": 2,

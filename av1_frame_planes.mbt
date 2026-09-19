@@ -265,8 +265,24 @@ fn av1_decode_tile_planes(
     }
     for plane in 0..<(if monochrome { 1 } else { 3 }) {
       for direction in 0..<2 {
-        if av1_loop_filter_intra_level(config, plane, direction).unwrap() > 0 {
-          filter_active = true
+        // Any reference or mode delta can lift an edge, so the frame is only
+        // inert when none of the eight strengths selects a non-zero level.
+        for reference in 0..<8 {
+          for mode_type in 0..<2 {
+            let level = match av1_loop_filter_edge_level(
+                config,
+                plane,
+                direction,
+                reference,
+                mode_type,
+              ) {
+              Some(value) => value
+              None => 0
+            }
+            if level > 0 {
+              filter_active = true
+            }
+          }
         }
       }
     }
@@ -449,6 +465,12 @@ fn av1_decode_tile_planes(
       }
     }
   }
+  // An inter frame derives every edge's strength from the reference and mode of
+  // the block beside it, so deblocking needs the frame's motion field.
+  let field : Av1MotionField? = match inter {
+    Some(config) => Some(config.field)
+    None => None
+  }
   if filter_active &&
     !av1_loop_filter_frame(
       loop_filter.unwrap(),
@@ -461,6 +483,7 @@ fn av1_decode_tile_planes(
       tx_sizes,
       sub_x~,
       sub_y~,
+      field~,
     ) {
     return None
   }
