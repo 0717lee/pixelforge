@@ -1,6 +1,21 @@
 # Changelog
 
 ## Unreleased
+- Archived the fence for the entropy-state snapshot. `inter_cdf_inherit_64x64` is
+  `inter_minimal_64x64` with one byte rewritten - `primary_ref_frame` 7 to 0, the key
+  frame left free to keep its *adapted* distributions - which makes it a legal,
+  semantically determined stream whose dav1d truth differs from ours by 5762 samples
+  (3992 luma, 842 U, 928 V). Those counts are asserted explicitly instead of hidden,
+  and driving them to `0, 0, 0` is what storing and loading the frame context
+  (AV1 §7.20, §7.21 with §5.11's `load_cdfs`) now has to do.
+  Recorded beside it as a conclusion rather than a gap: `load_previous`'s *block*
+  context cannot be pinned by any fixture on a conforming single-tile stream, because
+  decode order guarantees every in-frame left/above neighbour is already written and
+  out-of-frame positions take the unavailable inference, while reaching into a
+  previous frame's samples is the §11 `ref_frame_mvs` mechanism instead. Evidence in
+  the fixture README: freezing only the distributions, so the inherited block state
+  is the sole difference, moved 0 of 6144 samples on both the `inter_minimal` and
+  `inter_still` shapes.
 - Reached the `primary_ref_frame != PRIMARY_REF_NONE` branch of AV1 §5.11 with a
   fixture instead of an implementation guess. `inter_primary_ref_64x64` rewrites two
   same-width header fields in place on `inter_minimal_64x64` - the inter frame's

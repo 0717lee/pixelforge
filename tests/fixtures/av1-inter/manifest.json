@@ -42,6 +42,12 @@
       "name": "inter_primary_ref_64x64",
       "obu_sha256": "3f51610d4d2de7c4991e715db128ce6038bb6386fbfc2ceabf9a6fe5db31363d",
       "reference_sha256": "2bedab6e2fa08ae92e3c32ea597a5b1f70fa86eebd6cf5eb44f082399b1f4b00"
+    },
+    {
+      "command": "header field patch of inter_minimal_64x64 (see patch_header_fields)",
+      "name": "inter_cdf_inherit_64x64",
+      "obu_sha256": "427a6ccde7d821896efeefdec3d431fbc07ee446e4d19876562d949e8244285e",
+      "reference_sha256": "47a875e3451a8e0671db7aa00c1d17aef62ea155fae06bccf1062003762313aa"
     }
   ],
   "frames_per_fixture": 2,

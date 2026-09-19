@@ -34,6 +34,7 @@ NAMES = (
     "inter_edge_64x16",
     "inter_lf_delta_64x64",
     "inter_primary_ref_64x64",
+    "inter_cdf_inherit_64x64",
 )
 # Listing a fixture here replaces its assertions with the diagnostic print
 # below, which is how a new fixture's header sizes and per-plane agreement are
@@ -214,6 +215,33 @@ SPECS = {
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
+    # The unfrozen twin of inter_primary_ref_64x64: one byte differs from
+    # inter_minimal_64x64, the key frame keeps its adapted distributions, and this
+    # decoder still starts the tile from scratch, so the disagreement with dav1d is
+    # pinned as explicit sample counts until the AV1 7.21 entropy-state snapshot
+    # exists. Those counts are the fence, not an acceptance.
+    "inter_cdf_inherit_64x64": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "inter_primary_ref": "0",
+        "key_bytes": "9",
+        "inter_bytes": "14",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
+        "width": "64",
+        "height": "64",
+        "bad_counts": "3992, 842, 928",
+        "inter_decodable": "true",
+        "inter_note": "inherited entropy state not implemented yet: these counts are the fence and must fall to 0, 0, 0",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
+    },
 }
 
 HEADER = (
@@ -223,16 +251,19 @@ HEADER = (
     "/// General (non reduced-still) AV1 headers carrying real inter frames, checked\n"
     "/// field-by-field against the FFmpeg `trace_headers` transcripts in\n"
     "/// tests/fixtures/av1-inter, plus dav1d's native planes for both frames.\n"
-    "/// Five of the six reconstruct their inter frame sample-exactly on all three\n"
+    "/// Six of the eight reconstruct their inter frame sample-exactly on all three\n"
     "/// planes: a whole-frame skip with integer motion, a fractional translation\n"
     "/// with a switchable interpolation filter, a sawtooth whose right-hand strips\n"
-    "/// reach back into the frame, a dense 4x16 tree, and `inter_lf_delta_64x64`,\n"
-    "/// whose hand-spliced loop-filter levels make every edge strength come from\n"
-    "/// the reference and the mode of the block beside it. `general_inter_64x64`\n"
-    "/// parses completely and is then refused whole, because it needs tools the\n"
-    "/// block stage does not have yet (compound, warped and global motion,\n"
-    "/// temporal motion vectors); a partial reconstruction would be worse than no\n"
-    "/// picture.\n"
+    "/// reach back into the frame, a dense 4x16 tree, `inter_lf_delta_64x64`, whose\n"
+    "/// hand-spliced loop-filter levels make every edge strength come from the\n"
+    "/// reference and the mode of the block beside it, and `inter_primary_ref_64x64`,\n"
+    "/// whose patched header inherits a frame context. `inter_cdf_inherit_64x64`\n"
+    "/// decodes but is deliberately *not* exact: it inherits distributions this\n"
+    "/// decoder does not snapshot yet, so its test pins the per-plane sample counts\n"
+    "/// it gets wrong as the target for that work. `general_inter_64x64` parses\n"
+    "/// completely and is then refused whole, because it needs tools the block stage\n"
+    "/// does not have yet (compound, warped and global motion, temporal motion\n"
+    "/// vectors); a partial reconstruction would be worse than no picture.\n"
 )
 
 HELPERS = r"""

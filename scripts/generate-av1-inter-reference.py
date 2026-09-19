@@ -442,6 +442,51 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    # The same field rewritten on its own, with the key frame left alone: this is
+    # the stream that actually *needs* the inherited entropy state. Its tile bits
+    # were coded against freshly initialised distributions, but the header now
+    # loads the key frame's adapted ones, so a decoder that starts from scratch
+    # disagrees with dav1d over most of the picture. Measured at generation time,
+    # that disagreement is pinned in the test as explicit per-plane sample counts
+    # until the snapshot in AV1 7.21 exists; the counts are the fence.
+    {
+        "name": "inter_cdf_inherit_64x64",
+        "patch": {
+            "base": "inter_minimal_64x64",
+            "patches": [
+                {
+                    "frame": 1,
+                    "bit": 24,
+                    "width": 3,
+                    "expect": 7,
+                    "value": 0,
+                },
+            ],
+        },
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 0,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "primary_ref_frame": 0,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
