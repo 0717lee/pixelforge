@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+- A NEARMV block resolves to stacked candidate **1**, not candidate 0. §5.11.24
+  assigns `RefMvIdx = 1` before the depth-reference-list loop of the nearmv tree,
+  so that value has to stand even when the stack is too thin for a single
+  `drl_mode` symbol to be read - the old code initialised it to 0 and only wrote
+  it inside the loop, which quietly turned every NEARMV block into a NEARESTMV
+  one. The two trees are now entered only by the modes that actually have one, so
+  no mode reads `drl_mode` syntax it should not.
+  `inter_minimal_64x64` is exact on all three planes with this: its sawtooth
+  repeats every 32 samples, so its right-hand blocks can be served by a +3 or a
+  -29 pixel vector and the encoder picks the second, which only candidate 1
+  carries. Every general-syntax inter frame in the package is now sample-exact
+  against dav1d.
+
 - Fixed `read_mv_component` indexing its magnitude bits against the wrong axis:
   the row is selected by bit position `i`, but the guard compared `i` against the
   length of the *component* axis, so every motion vector of magnitude class 3 or

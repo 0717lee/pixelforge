@@ -32,13 +32,13 @@ a switchable `interpolation_filter`, `is_motion_mode_switchable`,
 MVs, dual filter and every compound and global-motion variant, so each of those
 frame-header fields turns from a *read* into a *derivation* and the pair covers
 both sides of every gate. Its input is a 3-pixel translating sawtooth ramp, which
-makes aom answer with a dense tree of 4x16 strips inside an 11-byte tile. That
-tree is the only fixture here with a *switchable* interpolation filter, and it
-decodes; it is not yet sample-exact, so its test pins the remaining disagreement
-as per-plane sample counts (144 luma, 248 U, 296 V out of 4096, 1024, 1024). The
-wrong luma samples are the last three columns below the first 16 rows and the
-wrong chroma sits in that same quadrant, off by 1-2 - the later strips still miss
-the far motion vector their top-row twins reach.
+makes aom answer with a dense tree of 4x16 strips inside an 11-byte tile. It is
+also the only fixture here whose `interpolation_filter` is *switchable*, so every
+block of it reads its own subpel filter choice. Its inter frame is sample-exact on
+all three planes. Because the ramp repeats every 32 samples, the right-hand blocks
+can be served either by the +3-pixel vector or by a −29-pixel one, and the
+encoder picks the latter: this is the fixture that checks a NEARMV block resolving
+to stacked candidate 1 rather than candidate 0.
 
 `inter_still_64x64.obu` repeats one frame verbatim. The encoder answers with an
 18-byte temporal unit whose fixed `interpolation_filter` is the 8-tap smooth

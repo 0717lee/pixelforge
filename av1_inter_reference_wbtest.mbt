@@ -43827,7 +43827,7 @@ test "inter_minimal_64x64: inter frame reconstruction" {
   if av1_decode_frame_planes(key_unit, map=map) is None {
     fail("inter_minimal_64x64: key frame decode rejected")
   }
-  // dense tree with switchable interpolation: still short of sample-exact, counts pinned. A frame that needs a missing tool must be refused whole:
+  // dense tree with switchable interpolation: every block exact. A frame that needs a missing tool must be refused whole:
   // a partial reconstruction would be worse than no picture at all.
   let inter = av1_decode_frame_planes(inter_unit, map=map, sequence=sequence)
   assert_eq(inter is Some(_), true)
@@ -43855,7 +43855,7 @@ test "inter_minimal_64x64: inter frame reconstruction" {
         }
       }
     }
-    assert_eq(bad, [144, 248, 296])
+    assert_eq(bad, [0, 0, 0])
   }
 }
 

@@ -79,16 +79,12 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "64",
-        # The dense partition tree no longer blows the tile budget: the frame
-        # decodes, and the pinned counts are its remaining disagreement with
-        # dav1d. Luma is wrong only in the last three columns of the 48 rows
-        # below the first 16, chroma only in that same quadrant and by 1-2
-        # samples, which is the signature of the later 4x16 strips not reaching
-        # the far motion vector their top-row twins use. This frame is switchable
-        # interpolation, the one tool the exact fixtures do not exercise.
-        "bad_counts": "144, 248, 296",
+        # The dense 4x16 tree is no longer a problem: every block of this frame
+        # is now exact. It is also the only fixture whose interpolation filter is
+        # switchable, so the per-block filter syntax is read here and nowhere else.
+        "bad_counts": "0, 0, 0",
         "inter_decodable": "true",
-        "inter_note": "dense tree with switchable interpolation: still short of sample-exact, counts pinned",
+        "inter_note": "dense tree with switchable interpolation: every block exact",
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },

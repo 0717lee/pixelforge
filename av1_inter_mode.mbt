@@ -463,16 +463,25 @@ fn av1_has_nearmv(mode : Int) -> Bool {
 ///|
 /// The depth reference list index (AV1 §5.11.24): walk the stacked candidates
 /// and stop at the first one the bitstream selects. The two entry points differ
-/// on purpose, which is why a NEARMV block can never reach candidate zero.
+/// on purpose, which is why a NEARMV block can never reach candidate zero: its
+/// index starts at 1 before any symbol is read, so a thin stack still yields the
+/// candidate the global motion vector was parked in.
 fn av1_read_drl_idx(
   decoder : Av1SymbolDecoder,
   info : Av1InterInfo,
   block : Av1InterBlock,
   stack : Av1MvStack,
 ) -> Bool {
-  block.ref_mv_idx = 0
-  let mut index = if block.y_mode == av1_mode_new_mv { 0 } else { 1 }
-  let limit = if av1_has_nearmv(block.y_mode) { 3 } else { 2 }
+  let new_mv = block.y_mode == av1_mode_new_mv
+  let near_mv = av1_has_nearmv(block.y_mode)
+  if !new_mv && !near_mv {
+    // Only those two trees exist; every other mode names its candidate already.
+    block.ref_mv_idx = 0
+    return true
+  }
+  block.ref_mv_idx = if near_mv { 1 } else { 0 }
+  let mut index = if new_mv { 0 } else { 1 }
+  let limit = if near_mv { 3 } else { 2 }
   while index < limit {
     if stack.count <= index + 1 {
       return true
