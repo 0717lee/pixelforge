@@ -32,10 +32,13 @@ a switchable `interpolation_filter`, `is_motion_mode_switchable`,
 MVs, dual filter and every compound and global-motion variant, so each of those
 frame-header fields turns from a *read* into a *derivation* and the pair covers
 both sides of every gate. Its input is a 3-pixel translating sawtooth ramp, which
-makes aom answer with a dense tree of 4x16 strips inside an 11-byte tile; the
-block stage reads a coherent skip sequence with the true motion but overruns the
-tile's trailing-bit budget, so that frame is still refused. That overrun is the
-open defect, not a design refusal.
+makes aom answer with a dense tree of 4x16 strips inside an 11-byte tile. That
+tree is the only fixture here with a *switchable* interpolation filter, and it
+decodes; it is not yet sample-exact, so its test pins the remaining disagreement
+as per-plane sample counts (144 luma, 248 U, 296 V out of 4096, 1024, 1024). The
+wrong luma samples are the last three columns below the first 16 rows and the
+wrong chroma sits in that same quadrant, off by 1-2 - the later strips still miss
+the far motion vector their top-row twins reach.
 
 `inter_still_64x64.obu` repeats one frame verbatim. The encoder answers with an
 18-byte temporal unit whose fixed `interpolation_filter` is the 8-tap smooth
@@ -49,16 +52,13 @@ interpolation filter and non-zero `loop_filter_level[1]` (chroma deblocking is
 live at strength 4). Its inter frame is also sample-exact on all three planes, so
 sub-pel interpolation, reference masking and the frame filters agree with dav1d.
 
-`inter_edge_64x16.obu` is the 64x16 case, deliberately smaller than the rest. It
-is the committed reproducer for the open inter right-edge defect: the frame
-decodes (the tile budget fits), its key frame is exact, and every column is
-exact **except** the last three luma columns and the last V column, which come
-out as a flat edge-clamped fill instead of the wrapped sawtooth. The test
-compares everything outside those columns against dav1d, so the assertion
-tightens automatically when the defect is fixed. The cause is believed to be an
-empty motion-vector stack that records `INTRA_FRAME` as the reference of an inter
-block, which then skews the `is_inter` context of every following 4-wide strip
-(AV1 9.3 derives that context from the neighbours' intra flags).
+`inter_edge_64x16.obu` is the 64x16 case, deliberately smaller than the rest. Its
+content is the same sawtooth shifted by 3 pixels, so the last columns wrap around
+to the values at the left edge: no clamped motion compensation can produce them,
+and aom instead codes a large negative vector for the final 4x16 strip to reach
+back into the frame. That vector is magnitude class 4, which is what exposed the
+`read_mv_component` row-index defect - the test therefore pins the whole picture,
+every sample of all three planes, against dav1d.
 
 ## Reproduce and check
 

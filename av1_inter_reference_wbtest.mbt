@@ -43701,25 +43701,21 @@ test "general_inter_64x64: inter frame reconstruction" {
       Some(value) => value
       None => fail("general_inter_64x64: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(general_inter_64x64_frame1_reference)
     let chroma = 6144 / 6
     let luma_size = 6144 - chroma * 2
-    // 0 trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { 64 } else { 64 / 2 }
-      let dropped =
-        if p == 0 { 0 } else if p == 2 { 0 / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }
@@ -43831,40 +43827,83 @@ test "inter_minimal_64x64: inter frame reconstruction" {
   if av1_decode_frame_planes(key_unit, map=map) is None {
     fail("inter_minimal_64x64: key frame decode rejected")
   }
-  // tile budget overrun (see .workbuddy/memory handover). A frame that needs a missing tool must be refused whole:
+  // dense tree with switchable interpolation: still short of sample-exact, counts pinned. A frame that needs a missing tool must be refused whole:
   // a partial reconstruction would be worse than no picture at all.
   let inter = av1_decode_frame_planes(inter_unit, map=map, sequence=sequence)
-  assert_eq(inter is Some(_), false)
-  if false {
+  assert_eq(inter is Some(_), true)
+  if true {
     let frame = match inter {
       Some(value) => value
       None => fail("inter_minimal_64x64: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(inter_minimal_64x64_frame1_reference)
     let chroma = 6144 / 6
     let luma_size = 6144 - chroma * 2
-    // 0 trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { 64 } else { 64 / 2 }
-      let dropped =
-        if p == 0 { 0 } else if p == 2 { 0 / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }
     }
-    assert_eq(bad, [0, 0, 0])
+    assert_eq(bad, [144, 248, 296])
   }
+}
+
+///|
+/// The animated-AVIF seam: one stateful decoder walks the temporal units of a
+/// sequence, and a later unit may carry neither the sequence header nor a
+/// key frame. The second sample is a translated picture, so the presented pixels must differ.
+test "inter_minimal_64x64: animation entry presents both temporal units" {
+  let whole = inter_minimal_64x64_obu
+  let key_unit = av1_inter_slice_bytes(whole, 0, 69)
+  let inter_unit = av1_inter_slice_bytes(whole, 69, 98)
+  let samples = avif_decode_animation_samples(
+    1000,
+    [0, 40],
+    [40, 40],
+    [key_unit, inter_unit],
+  )
+  let sequence = match samples {
+    Some(value) => value
+    None => fail("inter_minimal_64x64: animation sequence rejected")
+  }
+  assert_eq(sequence.timescale, 1000)
+  assert_eq(sequence.frames.length(), 2)
+  assert_eq(sequence.frames[0].index, 0)
+  assert_eq(sequence.frames[0].timestamp, 0)
+  assert_eq(sequence.frames[1].index, 1)
+  assert_eq(sequence.frames[1].timestamp, 40)
+  assert_eq(sequence.frames[1].duration, 40)
+  assert_eq(sequence.frames[1].timescale, 1000)
+  let first = sequence.frames[0].image
+  let second = sequence.frames[1].image
+  assert_eq(second.width, 64)
+  assert_eq(second.height, 64)
+  let mut changed = 0
+  for fy in 0..<5 {
+    for fx in 0..<5 {
+      let x = fx * (second.width - 1) / 4
+      let y = fy * (second.height - 1) / 4
+      if first.get_pixel(x, y) != second.get_pixel(x, y) {
+        changed = changed + 1
+      }
+    }
+  }
+  assert_eq(changed > 0, true)
+  // The inter unit is not self-contained: it names no sequence header of its
+  // own and predicts from a buffer only the first unit filled. A cold decoder
+  // must refuse it rather than present a picture built from nothing.
+  assert_eq(av1_video_decode_frame(av1_video_decoder(), inter_unit) is None, true)
 }
 
 ///|
@@ -43979,25 +44018,21 @@ test "inter_still_64x64: inter frame reconstruction" {
       Some(value) => value
       None => fail("inter_still_64x64: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(inter_still_64x64_frame1_reference)
     let chroma = 6144 / 6
     let luma_size = 6144 - chroma * 2
-    // 0 trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { 64 } else { 64 / 2 }
-      let dropped =
-        if p == 0 { 0 } else if p == 2 { 0 / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }
@@ -44165,25 +44200,21 @@ test "inter_shift_64x64: inter frame reconstruction" {
       Some(value) => value
       None => fail("inter_shift_64x64: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(inter_shift_64x64_frame1_reference)
     let chroma = 6144 / 6
     let luma_size = 6144 - chroma * 2
-    // 0 trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { 64 } else { 64 / 2 }
-      let dropped =
-        if p == 0 { 0 } else if p == 2 { 0 / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }
@@ -44342,7 +44373,7 @@ test "inter_edge_64x16: inter frame reconstruction" {
   if av1_decode_frame_planes(key_unit, map=map) is None {
     fail("inter_edge_64x16: key frame decode rejected")
   }
-  // known defect: the last three luma columns come out wrong (see the handover). A frame that needs a missing tool must be refused whole:
+  // periodic translation: the last strip reaches back with a large motion vector. A frame that needs a missing tool must be refused whole:
   // a partial reconstruction would be worse than no picture at all.
   let inter = av1_decode_frame_planes(inter_unit, map=map, sequence=sequence)
   assert_eq(inter is Some(_), true)
@@ -44351,25 +44382,21 @@ test "inter_edge_64x16: inter frame reconstruction" {
       Some(value) => value
       None => fail("inter_edge_64x16: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(inter_edge_64x16_frame1_reference)
     let chroma = 1536 / 6
     let luma_size = 1536 - chroma * 2
-    // 3 trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { 64 } else { 64 / 2 }
-      let dropped =
-        if p == 0 { 3 } else if p == 2 { 3 / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }

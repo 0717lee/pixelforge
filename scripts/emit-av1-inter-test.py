@@ -55,7 +55,7 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "64",
-        "bad_cols": "0",
+        "bad_counts": "0, 0, 0",
         # Compound-capable signalling, overlapped and warped motion and temporal
         # motion vectors are all on, so the block stage refuses the frame whole.
         "inter_decodable": "false",
@@ -79,14 +79,18 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "64",
-        "bad_cols": "0",
-        # Known defect, not a design refusal: the single-reference block tree
-        # reads a coherent skip sequence with the frame's true motion, but the
-        # tile's trailing-bit budget fires before the last blocks, so the frame
-        # is still refused. Flip this to "true" when the budget is exact; the
-        # assertions below are then the first sample-exact inter evidence.
-        "inter_decodable": "false",
-        "inter_note": "tile budget overrun (see .workbuddy/memory handover)",
+        # The dense partition tree no longer blows the tile budget: the frame
+        # decodes, and the pinned counts are its remaining disagreement with
+        # dav1d. Luma is wrong only in the last three columns of the 48 rows
+        # below the first 16, chroma only in that same quadrant and by 1-2
+        # samples, which is the signature of the later 4x16 strips not reaching
+        # the far motion vector their top-row twins use. This frame is switchable
+        # interpolation, the one tool the exact fixtures do not exercise.
+        "bad_counts": "144, 248, 296",
+        "inter_decodable": "true",
+        "inter_note": "dense tree with switchable interpolation: still short of sample-exact, counts pinned",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
     # A repeated frame: the encoder answers with whole-frame skips, so the tree
     # stays coarse and the frame carries no deblocking at all. This is the
@@ -106,7 +110,7 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "64",
-        "bad_cols": "0",
+        "bad_counts": "0, 0, 0",
         "inter_decodable": "true",
         "inter_note": "whole-frame repeat: no loop filter, one reference, integer motion",
         "animation_changed": "false",
@@ -131,14 +135,15 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "64",
-        "bad_cols": "0",
+        "bad_counts": "0, 0, 0",
         "inter_decodable": "true",
         "inter_note": "fractional translation: subpel motion compensation plus chroma deblocking",
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
-    # Reproduces the open inter right-edge defect: the frame decodes and every
-    # column except the documented last three (plus the last V column) is exact.
+    # The periodic content forces the last strip to reach back into the frame
+    # instead of coding a residual, which is what pins the magnitude-class bits
+    # of read_mv_component to the right CDF rows.
     "inter_edge_64x16": {
         "order_hint": "false",
         "warped": "false",
@@ -154,9 +159,9 @@ SPECS = {
         "inter_q": "128",
         "width": "64",
         "height": "16",
-        "bad_cols": "3",
+        "bad_counts": "0, 0, 0",
         "inter_decodable": "true",
-        "inter_note": "known defect: the last three luma columns come out wrong (see the handover)",
+        "inter_note": "periodic translation: the last strip reaches back with a large motion vector",
         "animation_changed": "true",
         "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
@@ -342,30 +347,26 @@ test "@NAME@: inter frame reconstruction" {
       Some(value) => value
       None => fail("@NAME@: supported inter frame rejected")
     }
-    // dav1d's native planes for the inter frame: the first sample-exact
-    // evidence that motion compensation, the residual and the frame filters
-    // agree with an external decoder.
+    // dav1d's native planes for the inter frame: sample-exact evidence that
+    // motion compensation, the residual and the frame filters agree with an
+    // external decoder. Every sample of every plane is counted, so a fixture
+    // that is not exact yet carries its disagreement as an explicit number
+    // rather than as an excluded region.
     let reference = av1_inter_expand(@NAME@_frame1_reference)
     let chroma = @PLANE@ / 6
     let luma_size = @PLANE@ - chroma * 2
-    // @BAD_COLS@ trailing luma columns are excluded from the comparison; that
-    // is the documented defect, not slack. Everything else must be exact.
     let bad = [0, 0, 0]
     for p in 0..<3 {
       let got = av1_frame_crop(frame, p)
       let start =
         if p == 0 { 0 } else if p == 1 { luma_size } else { luma_size + chroma }
-      let plane_width = if p == 0 { @WIDTH@ } else { @WIDTH@ / 2 }
-      let dropped =
-        if p == 0 { @BAD_COLS@ } else if p == 2 { @BAD_COLS@ / 2 } else { 0 }
       for i in 0..<got.length() {
-        if i % plane_width < plane_width - dropped &&
-          got[i] != reference[start + i] {
+        if got[i] != reference[start + i] {
           bad[p] = bad[p] + 1
         }
       }
     }
-    assert_eq(bad, [0, 0, 0])
+    assert_eq(bad, [@BAD_COUNTS@])
   }
 }
 """
@@ -669,7 +670,7 @@ def main():
             ("@INTER_Q@", spec["inter_q"]),
             ("@WIDTH@", spec["width"]),
             ("@HEIGHT@", spec["height"]),
-            ("@BAD_COLS@", spec["bad_cols"]),
+            ("@BAD_COUNTS@", spec["bad_counts"]),
             ("@PLANE@", str(frame_plane_of(spec))),
             ("@INTER_UNIT@", str(units[name][0])),
             ("@UNIT_END@", str(units[name][1])),
