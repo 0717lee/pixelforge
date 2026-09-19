@@ -66,27 +66,35 @@ every sample of all three planes, against dav1d.
 24-eighth-pel translation and the 232-eighth-pel reach-back). Classes 0, 2, 3 and
 5 through 10 are not coded by any fixture, and the eleventh class
 (`MV_CLASS_THRESHOLD`, which needs ten magnitude bits) is untested end to end.
-That is a gap in the encoder's availability, not a claim that the read is right:
-this `aomenc` will not produce a stream that both reaches a long vector and
-decodes exactly. Measured attempts, all with the minimal flag set, `-p1`,
-`--cpu-used=0`, `--cq-level=32`:
+That is a gap in the encoder's availability, not a claim that the read is right.
+The cause is now measured rather than suspected: **this `aomenc` build searches
+about +/-32 pixels of motion**, and magnitude class 5 starts at 32 pixels, so a
+coded vector beyond class 4 is out of reach however the source is shaped. Two
+observations pin that ceiling: a source translated by 33 pixels is coded as
+magnitude 256 (class 4, i.e. the search stopped at the range limit), and sources
+translated by 40 pixels or more are coded as `NEARESTMV` with `mv = (0, 0)` on
+every block - the encoder prefers to hand back a verbatim copy of the key frame
+over spending bits on a vector it cannot find. Measured attempts, all with the
+minimal flag set, `-p1`, `--cpu-used=0`, `--cq-level=32`:
 
-- sawtooth sources cannot reach class 5 at all, because their 32-sample period
-  makes a short vector predict equally well;
+- sawtooth sources cannot reach class 5 structurally: their 32-sample period
+  makes a short vector predict exactly as well as a long one;
 - smooth non-periodic waves translated by 33-48 pixels on 64x16/64x64/128x16
-  frames encode, but the encoder answers with `NEARESTMV`/class-4 vectors or with
-  intra blocks, and the ones that do move leave 15-53 luma samples wrong;
-- translations of 96-260 pixels on 256-512 wide frames either abort the encoder
-  (`0xC0000409`, the content-dependent teardown crash) or code the inter frame as
-  a copy of the key frame;
-- translated pseudo-random texture, which is the content most likely to force a
-  long vector, aborts the encoder at every width tried (128 through 1024);
+  frames encode, but the answer is a class-4 vector, `NEARESTMV`, or intra blocks,
+  and the ones that do move leave 15-53 luma samples wrong;
+- band-limited translated texture (sums of mutually incommensurate sinusoids),
+  which is the content that makes residual far more expensive than one long
+  vector, aborts the encoder at 64x16 and at every width from 160 to 512 whenever
+  the total swing reaches roughly 44 codes; at amplitudes low enough to survive it
+  collapses to the `mv = (0, 0)` copy described above;
 - `--static-thresh=0`, the only exposed knob that could push the motion search
   further, leaves the output byte-identical.
 
 So the class-bound handling in `read_mv_component` rests on the normative text
 (AV1 §5.11.25) plus classes 1 and 4 of real traffic. Closing the gap needs either
-a different encoder build or a synthetic tile whose bits are written by hand.
+an encoder build whose search range is configurable, or a synthetic tile whose
+bits are written by hand - the latter only proves the reader agrees with whatever
+writer produced the bits, so it is a regression fence, not external evidence.
 
 ## Reproduce and check
 
