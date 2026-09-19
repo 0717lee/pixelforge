@@ -4,14 +4,16 @@
 /// General (non reduced-still) AV1 headers carrying real inter frames, checked
 /// field-by-field against the FFmpeg `trace_headers` transcripts in
 /// tests/fixtures/av1-inter, plus dav1d's native planes for both frames.
-/// `inter_still_64x64` and `inter_shift_64x64` reconstruct their inter frames
-/// sample-exactly on all three planes, the first end-to-end motion-compensated
-/// evidence in the package: one whole-frame skip with integer motion, one true
-/// half-pixel translation with a switchable interpolation filter and live
-/// chroma deblocking. The other two fixtures parse completely and are then
-/// refused whole, because they need tools the block stage does not have yet
-/// (compound, warped and global motion, temporal motion vectors) or the tile
-/// budget fix; a partial reconstruction would be worse than no picture.
+/// Five of the six reconstruct their inter frame sample-exactly on all three
+/// planes: a whole-frame skip with integer motion, a fractional translation
+/// with a switchable interpolation filter, a sawtooth whose right-hand strips
+/// reach back into the frame, a dense 4x16 tree, and `inter_lf_delta_64x64`,
+/// whose hand-spliced loop-filter levels make every edge strength come from
+/// the reference and the mode of the block beside it. `general_inter_64x64`
+/// parses completely and is then refused whole, because it needs tools the
+/// block stage does not have yet (compound, warped and global motion,
+/// temporal motion vectors); a partial reconstruction would be worse than no
+/// picture.
 
 ///|
 let general_inter_64x64_obu : Array[Byte] = [
