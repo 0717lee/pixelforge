@@ -1191,22 +1191,5 @@ let av1_y_mode : Array[Array[Int]] = [
 /// Fresh DefaultYModeCdf rows for one tile, so that probability adaptation cannot
 /// corrupt these defaults. Retain the result for the tile's lifetime.
 fn av1_y_mode_cdfs() -> Array[Array[Int]] {
-  [
-    [
-      22801, 23489, 24293, 24756, 25601, 26123, 26606, 27418, 27945, 29228, 29685,
-      30349, 32768, 0,
-    ],
-    [
-      18673, 19845, 22631, 23318, 23950, 24649, 25527, 27364, 28152, 29701, 29984,
-      30852, 32768, 0,
-    ],
-    [
-      19770, 20979, 23396, 23939, 24241, 24654, 25136, 27073, 27830, 29360, 29730,
-      30659, 32768, 0,
-    ],
-    [
-      20155, 21301, 22838, 23178, 23261, 23533, 23703, 24804, 25352, 26575, 27016,
-      28049, 32768, 0,
-    ],
-  ]
+  Array::makei(av1_y_mode.length(), i => Array::copy(av1_y_mode[i]))
 }

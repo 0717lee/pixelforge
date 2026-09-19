@@ -15,9 +15,11 @@ normative inter probabilities. Each innermost slice is one CDF: its final slot
 is the mutable adaptation counter, preceded by the 32768 terminator. Because a
 tile must adapt probabilities without corrupting the defaults, every table is
 emitted twice: as the shared `av1_<name>` literal and as an `av1_<name>_cdfs()`
-factory whose body re-allocates every row on each call. MoonBit's standalone
-`moonfmt` formats the generated text through a pipe; no package-wide formatter
-or build is invoked.
+factory that hands out fresh rows on each call. For a table the decoder uses
+verbatim (nothing replicates its rows across contexts) the factory copies the
+shared literal instead of carrying a second copy of every probability; see
+DERIVE_FACTORIES. MoonBit's standalone `moonfmt` formats the generated text
+through a pipe; no package-wide formatter or build is invoked.
 """
 
 from __future__ import annotations
@@ -204,6 +206,11 @@ DOCS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Tables whose rows are never re-shaped by the decoder (no [mv_ctx][comp]
+# replication) get a factory that copies the shared literal instead of a second
+# copy of every probability, which would otherwise sit unused next to it.
+DERIVE_FACTORIES = {"DefaultYModeCdf"}
+
 TERMINATOR = (32768, 0)
 
 LICENSE = """BSD 2-Clause License
@@ -348,6 +355,7 @@ def parse_tables(source_dir: str) -> list[dict]:
                     "name": moonbit_name(go_name),
                     "depth": depth,
                     "values": values,
+                    "derive": go_name in DERIVE_FACTORIES,
                 }
             )
     if not tables:
@@ -394,7 +402,13 @@ def render(tables: list[dict]) -> tuple[str, str, list[str]]:
         lines.append("/// Fresh %s rows for one tile, so that probability adaptation cannot" % table["go"])
         lines.append("/// corrupt these defaults. Retain the result for the tile's lifetime.")
         lines.append("fn %s_cdfs() -> %s {" % (table["name"], moon_type))
-        lines.append(literal(table["values"], 1))
+        if table["derive"]:
+            lines.append(
+                "  Array::makei(%s.length(), i => Array::copy(%s[i]))"
+                % (table["name"], table["name"])
+            )
+        else:
+            lines.append(literal(table["values"], 1))
         lines.append("}")
     blocks = []
     for index, line in enumerate(lines):

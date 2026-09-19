@@ -640,7 +640,6 @@ fn av1_inter_reference(info : Av1InterInfo, name : Int) -> Av1RefFrame? {
 fn av1_inter_residual(
   decoder : Av1SymbolDecoder,
   state : Av1IntraState,
-  info : Av1InterInfo,
   block : Av1InterBlock,
   tile_block : Av1SbBlock,
   luma_width : Int,
@@ -1017,7 +1016,6 @@ fn av1_inter_tile_block(
   if !av1_inter_residual(
       decoder,
       state,
-      info,
       current,
       block,
       tx_width,

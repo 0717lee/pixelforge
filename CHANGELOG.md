@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Dropped a duplicated probability table and an unused parameter that the inter
+  work left behind: `av1_y_mode_cdfs()` copies the shared `av1_y_mode` rows
+  instead of carrying a second literal, which the table generator can now do per
+  table (`DERIVE_FACTORIES`), and `av1_inter_residual` no longer takes the frame
+  state it never read.
 - Inter frames now reconstruct. Two new general-syntax fixtures carry the first
   sample-exact motion-compensated evidence in the package, on all three planes,
   against dav1d: `inter_still_64x64` repeats one frame verbatim (fixed smooth
