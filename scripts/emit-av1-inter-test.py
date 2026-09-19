@@ -19,7 +19,17 @@ OUT = os.path.join(ROOT, "av1_inter_reference_wbtest.mbt")
 
 WIDTH = HEIGHT = 64
 PLANE = WIDTH * HEIGHT + 2 * (WIDTH // 2) * (HEIGHT // 2)
-NAMES = ("general_inter_64x64", "inter_minimal_64x64")
+NAMES = (
+    "general_inter_64x64",
+    "inter_minimal_64x64",
+    "inter_still_64x64",
+    "inter_shift_64x64",
+)
+# Listing a fixture here replaces its assertions with the diagnostic print
+# below, which is how a new fixture's header sizes and per-plane agreement are
+# discovered before they are pinned in SPECS. Keep this empty in committed work:
+# the generated test must not print.
+PROBE = ()
 
 SPECS = {
     "general_inter_64x64": {
@@ -32,6 +42,9 @@ SPECS = {
         "switchable_motion": "true",
         "key_bytes": "9",
         "inter_bytes": "15",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
         # Compound-capable signalling, overlapped and warped motion and temporal
         # motion vectors are all on, so the block stage refuses the frame whole.
         "inter_decodable": "false",
@@ -50,6 +63,9 @@ SPECS = {
         "switchable_motion": "false",
         "key_bytes": "9",
         "inter_bytes": "14",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
         # Known defect, not a design refusal: the single-reference block tree
         # reads a coherent skip sequence with the frame's true motion, but the
         # tile's trailing-bit budget fires before the last blocks, so the frame
@@ -57,6 +73,49 @@ SPECS = {
         # assertions below are then the first sample-exact inter evidence.
         "inter_decodable": "false",
         "inter_note": "tile budget overrun (see .workbuddy/memory handover)",
+    },
+    # A repeated frame: the encoder answers with whole-frame skips, so the tree
+    # stays coarse and the frame carries no deblocking at all. This is the
+    # cleanest end-to-end inter reconstruction the encoder will produce.
+    "inter_still_64x64": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "key_bytes": "9",
+        "inter_bytes": "14",
+        "interp": "0",
+        "key_q": "12",
+        "inter_q": "128",
+        "inter_decodable": "true",
+        "inter_note": "whole-frame repeat: no loop filter, one reference, integer motion",
+        "animation_changed": "false",
+        "animation_note": "The second sample repeats the first, so the presented pixels must be identical.",
+    },
+    # A true half-pixel translation of a band-limited wave: fractional motion
+    # vectors and the per-block interpolation filter, but chroma deblocking is
+    # live (loop_filter_level[1] is 4) so the chroma plane also needs the inter
+    # loop-filter deltas.
+    "inter_shift_64x64": {
+        "order_hint": "false",
+        "warped": "false",
+        "dual": "false",
+        "ref_mvs": "false",
+        "hint_bits": "0",
+        "inter_order_hint": "0",
+        "switchable_motion": "false",
+        "key_bytes": "10",
+        "inter_bytes": "16",
+        "interp": "4",
+        "key_q": "49",
+        "inter_q": "128",
+        "inter_decodable": "true",
+        "inter_note": "fractional translation: subpel motion compensation plus chroma deblocking",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a translated picture, so the presented pixels must differ.",
     },
 }
 
@@ -66,10 +125,15 @@ HEADER = (
     "///\n"
     "/// General (non reduced-still) AV1 headers carrying real inter frames, checked\n"
     "/// field-by-field against the FFmpeg `trace_headers` transcripts in\n"
-    "/// tests/fixtures/av1-inter, plus dav1d's native planes for both frames. The\n"
-    "/// minimal fixture's inter frame is the first sample-exact motion-compensated\n"
-    "/// reconstruction; the general fixture still exercises tools the block stage\n"
-    "/// refuses, so its inter frame must parse and then be rejected whole.\n"
+    "/// tests/fixtures/av1-inter, plus dav1d's native planes for both frames.\n"
+    "/// `inter_still_64x64` and `inter_shift_64x64` reconstruct their inter frames\n"
+    "/// sample-exactly on all three planes, the first end-to-end motion-compensated\n"
+    "/// evidence in the package: one whole-frame skip with integer motion, one true\n"
+    "/// half-pixel translation with a switchable interpolation filter and live\n"
+    "/// chroma deblocking. The other two fixtures parse completely and are then\n"
+    "/// refused whole, because they need tools the block stage does not have yet\n"
+    "/// (compound, warped and global motion, temporal motion vectors) or the tile\n"
+    "/// budget fix; a partial reconstruction would be worse than no picture.\n"
 )
 
 HELPERS = r"""
@@ -150,7 +214,7 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
   assert_eq(key.frame_height, 64)
   assert_eq(key.superres_denom, 8)
   assert_eq(key.render_width, 64)
-  assert_eq(key.base_q_idx, 49)
+  assert_eq(key.base_q_idx, @KEY_Q@)
   assert_eq(key.header_bytes, @KEY_BYTES@)
 
   let inter = headers[1]
@@ -161,7 +225,7 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
   assert_eq(inter.order_hint, @INTER_ORDER_HINT@)
   assert_eq(inter.primary_ref_frame, av1_primary_ref_none)
   assert_eq(inter.refresh_frame_flags, 2)
-  assert_eq(inter.base_q_idx, 128)
+  assert_eq(inter.base_q_idx, @INTER_Q@)
   assert_eq(inter.header_bytes, @INTER_BYTES@)
   assert_eq(inter.ref_frame_idx.length(), av1_refs_per_frame)
   for slot in inter.ref_frame_idx {
@@ -170,7 +234,7 @@ test "@NAME@: general frame headers parse and the key frame matches dav1d" {
   }
   assert_eq(inter.allow_high_precision_mv, false)
   // A switchable frame defers the interpolation filter to each block.
-  assert_eq(inter.interpolation_filter, 4)
+  assert_eq(inter.interpolation_filter, @INTERP@)
   assert_eq(inter.allow_warped_motion, @WARPED@)
   assert_eq(inter.use_ref_frame_mvs, @REF_MVS@)
   assert_eq(inter.is_motion_mode_switchable, @SWITCHABLE@)
@@ -253,6 +317,120 @@ test "@NAME@: inter frame reconstruction" {
       av1_inter_slice(reference, @PLANE@ - chroma, @PLANE@),
     )
   }
+}
+"""
+
+
+PROBE_TEMPLATE = r"""
+///|
+/// Diagnostic only: prints what the decoder actually reports for this fixture.
+test "@NAME@: probe" {
+  let map = av1_frame_map()
+  let whole = @NAME@_obu
+  let key_unit = av1_inter_slice_bytes(whole, 0, @INTER_UNIT@)
+  let inter_unit = av1_inter_slice_bytes(whole, @INTER_UNIT@, @UNIT_END@)
+  let sequence = match av1_sequence_info(key_unit) {
+    Some(value) => value
+    None => fail("@NAME@: no sequence header")
+  }
+  let payloads = av1_obu_payloads(key_unit, 6)
+  let kh = match av1_parse_stage1_frame(
+    payloads[0],
+    sequence,
+    allow_highbd=true,
+    map=map,
+  ) {
+    Some(value) => value
+    None => fail("@NAME@: key header")
+  }
+  println("PROBE @NAME@ key_bytes=\{kh.header_bytes} key_q=\{kh.base_q_idx}")
+  if av1_decode_frame_planes(key_unit, map=map) is None {
+    fail("@NAME@: key frame decode rejected")
+  }
+  let units = av1_obu_payloads(inter_unit, 6)
+  let ih = match av1_parse_stage1_frame(
+    units[0],
+    sequence,
+    allow_highbd=true,
+    map=map,
+  ) {
+    Some(value) => value
+    None => fail("@NAME@: inter header")
+  }
+  println("PROBE @NAME@ inter_bytes=\{ih.header_bytes} inter_q=\{ih.base_q_idx}")
+  println("PROBE @NAME@ interp=\{ih.interpolation_filter}")
+  let inter = av1_decode_frame_planes(inter_unit, map=map, sequence=sequence)
+  if inter is None {
+    println("PROBE @NAME@ refused")
+  } else {
+    let frame = match inter {
+      Some(value) => value
+      None => fail("unreachable")
+    }
+    let reference = av1_inter_expand(@NAME@_frame1_reference)
+    let chroma = @PLANE@ / 6
+    let bad = [0, 0, 0]
+    for p in 0..<3 {
+      let got = av1_frame_crop(frame, p)
+      let start = if p == 0 { 0 } else if p == 1 { @PLANE@ - chroma * 2 } else { @PLANE@ - chroma }
+      for i in 0..<got.length() {
+        if got[i] != reference[start + i] {
+          bad[p] = bad[p] + 1
+        }
+      }
+    }
+    println(
+      "PROBE @NAME@ decoded mismatches y=\{bad[0]} u=\{bad[1]} v=\{bad[2]}",
+    )
+  }
+}
+"""
+
+
+ANIMATION_TEMPLATE = r"""
+///|
+/// The animated-AVIF seam: one stateful decoder walks the temporal units of a
+/// sequence, and a later unit may carry neither the sequence header nor a
+/// key frame. @ANIMATION_NOTE@
+test "@NAME@: animation entry presents both temporal units" {
+  let whole = @NAME@_obu
+  let key_unit = av1_inter_slice_bytes(whole, 0, @INTER_UNIT@)
+  let inter_unit = av1_inter_slice_bytes(whole, @INTER_UNIT@, @UNIT_END@)
+  let samples = avif_decode_animation_samples(
+    1000,
+    [0, 40],
+    [40, 40],
+    [key_unit, inter_unit],
+  )
+  let sequence = match samples {
+    Some(value) => value
+    None => fail("@NAME@: animation sequence rejected")
+  }
+  assert_eq(sequence.timescale, 1000)
+  assert_eq(sequence.frames.length(), 2)
+  assert_eq(sequence.frames[0].index, 0)
+  assert_eq(sequence.frames[0].timestamp, 0)
+  assert_eq(sequence.frames[1].index, 1)
+  assert_eq(sequence.frames[1].timestamp, 40)
+  assert_eq(sequence.frames[1].duration, 40)
+  assert_eq(sequence.frames[1].timescale, 1000)
+  let first = sequence.frames[0].image
+  let second = sequence.frames[1].image
+  assert_eq(second.width, 64)
+  assert_eq(second.height, 64)
+  let mut changed = 0
+  for y in [0, 7, 23, 40, 63] {
+    for x in [0, 5, 19, 33, 63] {
+      if first.get_pixel(x, y) != second.get_pixel(x, y) {
+        changed = changed + 1
+      }
+    }
+  }
+  assert_eq(changed > 0, @CHANGED@)
+  // The inter unit is not self-contained: it names no sequence header of its
+  // own and predicts from a buffer only the first unit filled. A cold decoder
+  // must refuse it rather than present a picture built from nothing.
+  assert_eq(av1_video_decode_frame(av1_video_decoder(), inter_unit) is None, true)
 }
 """
 
@@ -409,6 +587,17 @@ def main():
     parts.append(HELPERS)
     for name in NAMES:
         spec = SPECS[name]
+        if name in PROBE:
+            probe = PROBE_TEMPLATE.replace("@NAME@", name)
+            for token, value in [
+                ("@PLANE@", str(PLANE)),
+                ("@INTER_UNIT@", str(units[name][0])),
+                ("@UNIT_END@", str(units[name][1])),
+            ]:
+                probe = probe.replace(token, value)
+            assert "@" not in probe, probe
+            parts.append(probe)
+            continue
         body = TEST_TEMPLATE.replace("@NAME@", name)
         inter = INTER_TEMPLATE.replace("@NAME@", name)
         for token, value in [
@@ -421,6 +610,9 @@ def main():
             ("@SWITCHABLE@", spec["switchable_motion"]),
             ("@KEY_BYTES@", spec["key_bytes"]),
             ("@INTER_BYTES@", spec["inter_bytes"]),
+            ("@INTERP@", spec["interp"]),
+            ("@KEY_Q@", spec["key_q"]),
+            ("@INTER_Q@", spec["inter_q"]),
             ("@PLANE@", str(PLANE)),
             ("@INTER_UNIT@", str(units[name][0])),
             ("@UNIT_END@", str(units[name][1])),
@@ -436,6 +628,18 @@ def main():
         assert "@" not in inter, inter
         parts.append(body)
         parts.append(inter)
+        if spec["inter_decodable"] == "true":
+            anim = ANIMATION_TEMPLATE.replace("@NAME@", name)
+            for token, value in [
+                ("@PLANE@", str(PLANE)),
+                ("@INTER_UNIT@", str(units[name][0])),
+                ("@UNIT_END@", str(units[name][1])),
+                ("@CHANGED@", spec["animation_changed"]),
+                ("@ANIMATION_NOTE@", spec["animation_note"]),
+            ]:
+                anim = anim.replace(token, value)
+            assert "@" not in anim, anim
+            parts.append(anim)
     body = SEQUENCE_TEST
     for token, value in sequence_tokens(
         open(os.path.join(FIX, NAMES[0] + ".obu"), "rb").read()

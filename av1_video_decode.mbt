@@ -21,10 +21,10 @@ pub fn av1_video_decoder() -> Av1VideoDecoder {
 
 ///|
 /// Decode the next temporal unit and return the image its first frame presents.
-/// A unit without its own sequence header reuses the one already latched.
-/// Frames that predict from a reference are still refused until motion
-/// compensation is wired into the block stage, but their header still updates
-/// the reference buffer bookkeeping.
+/// A unit without its own sequence header reuses the one already latched, and an
+/// inter unit reads the reference buffer the earlier units filled, so a sequence
+/// only decodes in order. A unit that needs a tool the block stage cannot act on
+/// is refused whole rather than presented partially.
 pub fn av1_video_decode_frame(
   decoder : Av1VideoDecoder,
   data : Array[Byte],

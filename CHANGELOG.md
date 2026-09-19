@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Inter frames now reconstruct. Two new general-syntax fixtures carry the first
+  sample-exact motion-compensated evidence in the package, on all three planes,
+  against dav1d: `inter_still_64x64` repeats one frame verbatim (fixed smooth
+  8-tap filter, `loop_filter_level[0..1]` both zero, so `loop_filter_level[2..3]`
+  are not signalled at all - AV1 §6.8.2), and `inter_shift_64x64` translates a
+  band-limited wave by a true 2.5 luma pixels, which forces a fractional motion
+  vector, a switchable interpolation filter and live chroma deblocking
+  (`loop_filter_level[1]` is 4). Sub-pel interpolation, reference masking at the
+  frame edge and the in-loop filters therefore agree with an external decoder.
+- `scripts/generate-av1-inter-reference.py` selects its input source per fixture,
+  because aom's partition search on the translating ramp descends into 4x16
+  strips and the low-complexity sources keep a tree coarse enough to debug
+  entropy against. The same build segfaults at teardown on some two-frame
+  encodes, so the wave's amplitude and periods are pinned rather than chosen for
+  looks; candidate content gets probed with a throwaway encode first.
+- FFmpeg's muxing summary is cut from the committed transcripts. It carries a heap
+  address and a speed figure, so every generator run rewrote two evidence files
+  for no reason.
+- Narrowed the remaining `inter_minimal_64x64` defect. The partition symbol
+  indices and 4-way geometry were re-checked against the normative text (§6.4.1
+  `decode_partition` and the §9.3 `split_or_horz`/`split_or_vert` gather sets,
+  which pin `VERT_4` to index 9 and `HORZ_4` to 8), and that frame's loop filter
+  is provably inert, so what is left is the tile's trailing-bit budget on dense
+  trees and nothing else.
+- `av1_video_decode_frame` now documents what it actually does: an inter unit
+  reads the reference buffer the earlier units filled, so a sequence decodes only
+  in order. Two generated tests drive the animated-AVIF seam
+  (`avif_decode_animation_samples`) over a fixture's real temporal units and
+  assert the second sample presents the motion-compensated picture, that a
+  repeat sample presents identical pixels, and that a cold decoder refuses an
+  inter unit rather than inventing one from nothing.
 - Wired inter-frame block decoding end to end. `av1_inter_mode.mbt` reads the
   syntax (AV1 §5.11.20-§5.11.30): `is_inter` over the four intra-neighbour
   contexts, the six-node single-reference tree where every node carries its own

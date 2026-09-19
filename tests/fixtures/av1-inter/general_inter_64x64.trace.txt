@@ -232,11 +232,3 @@ Frame Header
 134         is_global[7]                                                0 = 0
 135         zero_bit                                                    0 = 0
 Tile Group
-Output #0, null, to 'pipe:':
-  Metadata:
-    encoder         : Lavf63.1.101
-  Stream #0:0: Video: wrapped_avframe, yuv420p(tv, progressive), 64x64 [SAR 1:1 DAR 1:1], q=2-31, 200 kb/s, 25 fps, 25 tbn
-    Metadata:
-      encoder         : Lavc63.1.101 wrapped_avframe
-[out#0/null @ 000002797b6e0600] video:1KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
-frame=    2 fps=0.0 q=-0.0 Lsize=N/A time=00:00:00.08 bitrate=N/A speed=8.03x elapsed=0:00:00.00    

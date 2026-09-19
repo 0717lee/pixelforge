@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -191,27 +192,184 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    # Two fixtures whose inter tree stays coarse on purpose: the sub-8-tap and
+    # entropy work is easiest to settle where aom does not answer a whole-frame
+    # motion with a thicket of 4x16 strips (see inter_minimal_64x64, which does).
+    {
+        "name": "inter_still_64x64",
+        "input": "still",
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "show_existing_frame": 0,
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 0,
+            },
+            {
+                "show_existing_frame": 0,
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "disable_cdf_update": 0,
+                "allow_screen_content_tools": 0,
+                "primary_ref_frame": 7,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                # A repeated frame needs no switchable filter, so this fixture
+                # also covers the fixed `interpolation_filter` path.
+                "is_filter_switchable": 0,
+                "interpolation_filter": 0,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+                # Both levels zero means loop_filter_level[2..3] are not even
+                # signalled (see AV1 6.8.2), so deblocking is a no-op here.
+                "loop_filter_level[0]": 0,
+                "loop_filter_level[1]": 0,
+                "loop_filter_delta_enabled": 1,
+                "loop_filter_delta_update": 0,
+                "cdef_bits": 0,
+                "lr_type[0]": 0,
+                "lr_type[1]": 0,
+                "lr_type[2]": 0,
+                "reduced_tx_set": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    {
+        "name": "inter_shift_64x64",
+        "input": "shift",
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "show_existing_frame": 0,
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 0,
+            },
+            {
+                "show_existing_frame": 0,
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "disable_cdf_update": 0,
+                "allow_screen_content_tools": 0,
+                "primary_ref_frame": 7,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                # The fractional translation makes aom switch the interpolation
+                # filter on, so the per-block filter symbol is exercised.
+                "is_filter_switchable": 1,
+                "is_motion_mode_switchable": 0,
+                "reference_select": 0,
+                "delta_q_present": 0,
+                # Chroma filtering is live in this stream (level[1] is 4), which
+                # is the first fixture that needs the inter loop-filter deltas.
+                "loop_filter_level[0]": 0,
+                "loop_filter_level[1]": 4,
+                "loop_filter_level[2]": 0,
+                "loop_filter_level[3]": 0,
+                "loop_filter_delta_enabled": 1,
+                "loop_filter_delta_update": 0,
+                "cdef_bits": 0,
+                "lr_type[0]": 0,
+                "lr_type[1]": 0,
+                "lr_type[2]": 0,
+                "reduced_tx_set": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
-def encode_input(path: str) -> None:
-    """Write the deterministic 2-frame 4:2:0 source.
+def encode_input(path: str, kind: str = "ramp") -> None:
+    """Write the deterministic 2-frame 4:2:0 source selected by ``kind``.
 
     A slowly translating ramp gives the encoder a clean single-reference motion
     field, which is what the first inter milestone needs; the chroma planes
     shift per frame so chroma motion compensation is exercised too.
+
+    The two additional sources exist because aom's partition search on ``ramp``
+    descends into narrow 4x16 strips, which is the hardest possible tree to
+    debug entropy against.  ``still`` (frame 1 repeats frame 0 exactly) and
+    ``shift`` (a true half-pixel translation of a band-limited sinusoid, so no
+    discontinuity invites fine splits) keep the inter tree coarse; ``shift``
+    additionally forces a fractional motion vector, which is what exercises the
+    8-tap interpolation kernel rather than a plain copy.
     """
     cw, ch = WIDTH // 2, HEIGHT // 2
     header = "YUV4MPEG2 W%d H%d F1:1 Ip A1:1 C420mpeg2\n" % (WIDTH, HEIGHT)
     frames = []
     for n in range(FRAMES):
-        luma = bytes(
-            max(0, min(255, 40 + ((x + n * 3) % 32)))
-            for _ in range(HEIGHT)
-            for x in range(WIDTH)
-        )
-        cb = bytes([(128 + (y % 5) + n) & 0xFF for _ in range(cw) for y in range(ch)])
-        cr = bytes([(120 + (x % 7) - n) & 0xFF for y in range(ch) for x in range(cw)])
+        if kind == "still":
+            luma = bytes(
+                max(0, min(255, 96 + 3 * (y % 16) + (x % 8)))
+                for y in range(HEIGHT)
+                for x in range(WIDTH)
+            )
+            cb = bytes([(128 + (y % 6)) & 0xFF for _ in range(cw) for y in range(ch)])
+            cr = bytes([(120 + (x % 6)) & 0xFF for y in range(ch) for x in range(cw)])
+        elif kind == "shift":
+            # Frame 1 is sampled 2.5 luma pixels further along a small-amplitude
+            # horizontal sinusoid, so the true motion is fractional and uniform
+            # over the whole frame and no discontinuity invites fine splits.
+            #
+            # The amplitude and periods are not cosmetic: this libaom build
+            # segfaults at encoder teardown on higher-contrast translations
+            # (a 44-count, period-48 wave of the same shape crashes), so the
+            # source stays deliberately gentle.
+            def smooth(
+                x: float, y: float, off: float, period: float, vertical: float
+            ) -> int:
+                return max(
+                    0,
+                    min(
+                        255,
+                        int(
+                            round(
+                                128.0
+                                + 8.0 * math.sin(2.0 * math.pi * (x - off) / period)
+                                + vertical * math.sin(2.0 * math.pi * y / 32.0)
+                            )
+                        ),
+                    ),
+                )
+
+            off = 2.5 * n
+            luma = bytes(
+                smooth(float(x), float(y), off, 64.0, 10.0)
+                for y in range(HEIGHT)
+                for x in range(WIDTH)
+            )
+            # Chroma samples the same shape half as often horizontally, and keeps
+            # the identical displacement in chroma units, i.e. five luma pixels.
+            cb = bytes(
+                smooth(2.0 * x, float(y), off, 128.0, 2.0)
+                for y in range(ch)
+                for x in range(cw)
+            )
+            cr = bytes(
+                smooth(2.0 * x, float(y), off, 128.0, 2.0)
+                for y in range(ch)
+                for x in range(cw)
+            )
+        else:
+            luma = bytes(
+                max(0, min(255, 40 + ((x + n * 3) % 32)))
+                for _ in range(HEIGHT)
+                for x in range(WIDTH)
+            )
+            cb = bytes([(128 + (y % 5) + n) & 0xFF for _ in range(cw) for y in range(ch)])
+            cr = bytes([(120 + (x % 7) - n) & 0xFF for y in range(ch) for x in range(cw)])
         assert len(luma) == WIDTH * HEIGHT
         assert len(cb) == cw * ch and len(cr) == cw * ch
         frames.append(luma + cb + cr)
@@ -244,6 +402,12 @@ def trace_fields(obu: str, committed: str) -> list[dict[str, int]]:
         errors="replace",
     )
     text = re.sub(r"\[trace_headers @ [0-9a-f]+\] ", "", proc.stdout + proc.stderr)
+    # FFmpeg appends its own muxing summary, which carries a heap address and a
+    # speed figure.  Neither is evidence, and leaving them in rewrote the
+    # committed transcripts on every run.
+    cut = text.find("Output #")
+    if cut >= 0:
+        text = text[:cut].rstrip() + "\n"
     with open(committed, "w", encoding="utf-8") as fh:
         fh.write(text)
     frames: list[dict[str, int]] = []
@@ -313,7 +477,7 @@ def run(fixture: dict, check: bool) -> dict:
         committed_obu = open(obu, "rb").read()
         committed_ref = open(ref, "rb").read()
     scratch = os.path.join(FIXTURE_DIR, name + ".check.obu")
-    encode_input(y4m)
+    encode_input(y4m, fixture.get("input", "ramp"))
     cmd = [
         AOMENC,
         "--codec=av1",
@@ -394,7 +558,7 @@ def main() -> None:
     if args.check:
         print("verified %d fixtures against their committed evidence" % len(built))
         return
-    with open(os.path.join(FIXTURE_DIR, "manifest.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(FIXTURE_DIR, "manifest.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump(
             {
                 "encoder": AOMENC,
