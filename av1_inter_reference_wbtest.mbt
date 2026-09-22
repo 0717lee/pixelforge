@@ -14749,10 +14749,12 @@ test "inter_compound_64x64: compound inter frame reconstructs" {
   if av1_decode_frame_planes(key_unit, map~) is None {
     fail("inter_compound_64x64: key frame decode rejected")
   }
-  // With reference_select patched on, the block layer reads comp_mode and the
-  // frame decodes compound blocks: two references, two motion vectors, and the
-  // COMPOUND_AVERAGE blend the frame's sequence flags allow. A wedge or
-  // distance-weighted block would still refuse the frame whole.
+  // With reference_select patched on, the block layer reads comp_mode instead
+  // of the single-reference tree. Measured with instrumented dav1d: exactly one
+  // block of the frame is wide enough to read the symbol at all, and it decodes
+  // zero, so no compound block is coded here and the blend itself is exercised
+  // by inter_skipmode_64x64, whose skip-mode blocks are compound by definition.
+  // A wedge or distance-weighted block would still refuse the frame whole.
   let inter = av1_decode_frame_planes(inter_unit, map~, sequence~)
   assert_eq(inter is Some(_), true)
   if true {

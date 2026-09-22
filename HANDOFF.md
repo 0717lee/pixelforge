@@ -3818,3 +3818,54 @@ sha256 一致。`--check` 仍是 18 个样本。
   `wedge_sign`，interintra 恒为 0），但 `enable_masked_compound` 的帧级门
   仍拒绝，且触发器无解（第五十次补充记录了 50 个候选的搜索结论）。
 - segmentation、全局运动仍拒绝。
+
+# 第五十五次推进补充（2026-09-22，实测 inter_compound_64x64 的真实覆盖：compound 块不存在）
+
+## 一、动机
+
+阶段 C 还剩 compound 的 wedge/DIFFWTD 掩码（`enable_masked_compound` 帧级
+门）。想复用 interintra 的成功配方——序列头等宽位补丁打开语法、让 dav1d
+自己走进去——于是拿 `inter_compound_64x64` 和 `inter_distcomp_64x64`
+（README 说它们"解码 compound 块"）做实验。
+
+## 二、插桩实测结论：这两个样本一个 compound 块都没有
+
+本地插桩 dav1d（`C:/Users/谦友Lee/AppData/Local/Temp/dav1dbuild/`，MSVC，
+`cmd //c build3.bat`，可执行文件在 `build/tools/dav1d.exe`，需要把
+`build/src/dav1d.dll` 拷到 `build/tools/` 旁边），在 `decode_b` 的三处加计数：
+
+1. `is_comp = msac_decode_bool_adapt(cdf.comp[ctx])` 之后：打印
+   `ZZCOMP is_comp bs BW BH`；
+2. `read_compound_type` 的 mask 分支入口：打印 `ZZSEG wedge_allowed bs`；
+3. 选中 COMP_INTER_WEDGE 时：打印 `ZZWEDGE idx sign bs`。
+
+再把序列头 **bit 70**（`enable_masked_compound`，绝对位，payload 从第 4 字节
+开始，故 payload bit = 70-16 = 54；bit 69 是 `enable_interintra_compound`）
+等宽 0→1，结果：
+
+| 样本 | ZZCOMP | ZZSEG | ZZWEDGE | 输出变化 |
+| --- | --- | --- | --- | --- |
+| inter_compound_64x64 | 1 条，`is_comp=0` | 0 | 0 | 与基线逐字节相同 |
+| inter_distcomp_64x64 | 1 条，`is_comp=0` | 0 | 0 | 与基线逐字节相同 |
+
+结论：`reference_select` 置位只让**一个**块读 `comp_mode`（只有
+`imin(bw4,bh4) > 1` 的块会读），而它解出 0。所以
+
+- 这两个样本从未进入 compound 语法，README/测试注释里"解码 compound 块、
+  pin 住整条 compound 路径"是**错的**（已在本轮改正为实测结论）；
+- compound 的 wedge/DIFFWTD 掩码**不能**靠序列头补丁触发：没有 compound 块，
+  `read_compound_type` 根本不会被调用；
+- compound blend 的真实覆盖只有 `inter_skipmode_64x64`——skip mode 块按规范
+  强制 compound（`skip_mode_present` ⇒ `is_comp=1`、`compound_type=
+  COMPOUND_AVERAGE`），那条路径是真的。
+
+## 三、下一轮的真正门槛
+
+要触发 masked compound，需要**三个参考**且某一块真的选中 compound：即
+第五十次补充记录的"三帧拼接 + 两条参考 order hint 分列当前帧两侧"的配方
+（`inter_skipmode_64x64` 的生成器已有三帧拼接能力，但那个流里 compound 只
+来自 skip mode，而 skip mode 直接指定 `COMPOUND_AVERAGE`，绕过
+`read_compound_type`）。在拿到这样的流之前，compound wedge/DIFFWTD 只能
+按"未核验"处理，或者退而做 Dav1d 掩码表级单元测试（把
+`dav1d_wedge_masks[...]` 全表 dump 出来对拍），这把位运算钉住但不能替代
+像素核验。

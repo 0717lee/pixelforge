@@ -141,13 +141,18 @@ semantically determined, and dav1d's planes are its truth like every other one's
 `inter_compound_64x64.obu` is `inter_shift_64x64` with `reference_select`
 patched from 0 to 1 - again **one byte**, and again a stream libaom would not
 emit (it never picks compound for this two-frame group). With the flag on, the
-block layer reads `comp_mode` and the tile bytes that were coded for a
-single-reference frame are decoded as compound ones, so this fixture pins the
-whole compound path against dav1d: `comp_ref_type`'s unidirectional or
-bidirectional pair, both reference names, both motion vectors (fresh
-`read_mv` per list or the nearest candidate of each), the `compound_mode`
-symbol, the interpolation-filter context's compound row group, and the
-COMPOUND_AVERAGE blend itself. The frame's sequence header has both
+block layer reads `comp_mode` where the base read the single-reference
+tree, so this fixture pins the grammar switch itself against dav1d.
+
+It is worth recording plainly what this fixture does **not** cover: measured
+with instrumented dav1d, exactly one block of the inter frame is wide enough
+to read `comp_mode` at all (`reference_select` is only consulted when
+`imin(bw4, bh4) > 1`), and that symbol decodes **zero** - no compound block is
+coded anywhere in the frame, so `comp_ref_type`, the per-list `read_mv`, the
+`compound_mode` symbol and the COMPOUND_AVERAGE blend are never entered here.
+The blend itself is pinned by `inter_skipmode_64x64`, whose skip-mode blocks
+are compound by construction, and by `inter_distcomp_64x64`, whose frames
+carry the same situation. The frame's sequence header has both
 masked-compound switches off, so `read_compound_type` resolves to
 COMPOUND_AVERAGE without a symbol; a stream that asks for a wedge or a
 distance weighting is still refused whole.
