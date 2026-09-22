@@ -3237,3 +3237,77 @@ dav1d 的相加恰为 32768（`f = 32768 - cdf[s]` 的“正向累积”存储 v
 | native / js / wasm-gc | 各 **1242/1242** |
 | `av1_cdf_load_enabled` | `true` |
 | OBU / `reference.yuv` / 其它样本围栏 | 未改动 |
+
+---
+
+# 第四十四次推进补充（2026-09-22，阶段 C 下一刀的具体入口：compound 预测）
+
+阶段 B 已闭合（第四十三次）。本轮只做定位，不动实现，给下一轮留一个可以直接开工的入口。
+
+## 一、现状盘点（哪些门还关着）
+
+`av1_inter_frame_supported`（av1_inter_tile.mbt:1262）目前仍拒绝：
+
+| 头字段 | 含义 | 现状 |
+| --- | --- | --- |
+| `reference_select` | 块级 comp_mode 语法 | 未实现（本轮目标） |
+| `skip_mode_present` | 依赖 reference_select，成对处理 | 未实现 |
+| `enable_interintra_compound` | intra/inter 混合块 | 未实现 |
+| `enable_masked_compound` | wedge / distance-weighted 混合 | 未实现 |
+
+`general_inter_64x64` 仍整帧拒绝，它需要的就是这批工具里剩下的
+compound 与全局运动（warped、temporal MV 已在阶段 C 前几轮落地）。
+
+## 二、样本现实：现有 14 个 inter 样本全部 `reference_select = 0`
+
+用 FFmpeg `trace_headers` 逐个核过 frame header：没有一条流开
+`reference_select`。本轮还实测：把 `--enable-order-hint=1` +
+`--enable-onesided-comp=1` 打开重编码 ramp 源，`reference_select` 仍是 0
+（平滑内容下 RDO 不选 compound）。⇒ 下一轮必须先解决样本来源，三条路：
+
+1. **头补丁法**（`inter_cdf_inherit` 用过的最省事路径）：把某个双帧样本的
+   inter 帧 `reference_select` 从 0 改成 1，码流其余字节不动。块级随后会读
+   `comp_mode` 符号（读到的是原流里的符号/补位），dav1d 与我们对同一条补丁流
+   的解码必须一致——验收含义与 cdf_inherit 相同：逐样本复现 dav1d。
+   补丁点的定位方法见 `scripts/generate-av1-inter-reference.py` 的
+   `_split_bits` + trace 定位注释。
+2. **多帧噪声源**：compound 需要两个不同参考，至少 3 帧；本轮试过 5 帧 +
+   1/3 噪声源，aomenc 直接崩溃（rc 0xC0000005），未验证是否真能诱导出
+   compound。
+3. **encoder 侧强制**：libaom 没有 "force compound" 开关，只能靠内容。
+
+## 三、实现入口（按依赖顺序）
+
+1. **读路径**（av1_inter_mode.mbt）：
+   - `av1_read_ref_frames`（约 300-420 行的 single_ref 树旁边）：按规范
+     `read_ref_frames`（_refs/av1spec06.md:2681）加 `comp_mode`（条件
+     `reference_select && min(bw4,bh4) >= 2`，CDF `TileCompModeCdf[ctx]`）、
+     `comp_ref_type`（UNIDIR/BIDIR）、以及 `comp_ref`/`comp_bwdref`/
+     `uni_comp_*` 系列符号； deux 个参考名写进 block 的 ref0/ref1。
+   - `av1_read_mv`（558）：compound 时候选栈由两个参考的邻近块共同构成
+     （规范 `compound_type_candidates`），diff MV 的 clamp 也要按
+     compound 语义；`av1_mv_oracle_wbtest.mbt` 已有单参考候选的测试形状可抄。
+   - `av1_read_interp_filter`（770）：compound 下 interp 读法不同
+     （两个方向同一个索引 + joint 类型），注意 `enable_dual_filter` 分支。
+   - `compound_type`（_refs/av1spec09.md:1564，`TileCompoundTypeCdf[MiSize]`）：
+     wedge / DISTWTD 属于 masked compound，本轮**先拒绝**（保留
+     `enable_masked_compound` 门），只实现 COMPOUND_AVERAGE。
+2. **预测路径**（av1_mc.mbt / av1_inter_tile.mbt）：
+   - `Av1MotionRequest.compound` 字段已存在，`av1_inter_rounds`（av1_mc.mbt:119）
+     已按 compound 给出 round1=7 的取整——低层支持已就位。
+   - 缺的是：对两个参考各做一次 `av1_motion_compensate`，按规范
+     `compound_average`（`(pred0 + pred1 + 4) >> 3` 之类的带 clamp 平均）
+     混合，再叠残差。OBMC 路径传 `compound: false` 不要动。
+3. **门解除**：`reference_select` 与 `skip_mode_present` 成对移除；
+   `skip_mode` 本身（`SkipModeFrame[0]/[1]` + 复制运动）也要实现，
+   顺序依赖见 av1spec06.md 的 `read_ref_frames` 首支。
+4. **验收**：用插桩 dav1d（第四十三次）对同一 OBU 逐符号对比；
+   样本像素对 `reference.yuv` 逐样本一致；三目标全绿。
+
+## 四、状态
+
+| 检查 | 结果 |
+| --- | --- |
+| native / js / wasm-gc | 各 1242/1242 |
+| `inter_cdf_inherit_64x64` | `[0,0,0]`（已提交，0f058a1） |
+| 下一刀 | 本补充第三节 |
