@@ -88,6 +88,10 @@ priv struct Av1InterCdfs {
   comp_ref : Array[Array[Array[Int]]]
   comp_bwd_ref : Array[Array[Array[Int]]]
   compound_type : Array[Array[Int]]
+  inter_intra : Array[Array[Int]]
+  inter_intra_mode : Array[Array[Int]]
+  wedge_inter_intra : Array[Array[Int]]
+  wedge_index : Array[Array[Int]]
 }
 
 ///|
@@ -143,6 +147,10 @@ fn av1_inter_cdfs() -> Av1InterCdfs {
     comp_ref: av1_comp_ref_cdfs(),
     comp_bwd_ref: av1_comp_bwd_ref_cdfs(),
     compound_type: av1_compound_type_cdfs(),
+    inter_intra: av1_inter_intra_cdfs(),
+    inter_intra_mode: av1_inter_intra_mode_cdfs(),
+    wedge_inter_intra: av1_wedge_inter_intra_cdfs(),
+    wedge_index: av1_wedge_index_cdfs(),
   }
 }
 
@@ -163,6 +171,7 @@ priv struct Av1InterInfo {
   skip_mode_frame : Array[Int]
   /// `reference_select`: whether `read_ref_frames` may read `comp_mode` at all.
   reference_select : Bool
+  enable_interintra_compound : Bool
   /// Each reference name's distance from this frame's order hint, clipped to
   /// `[0, MAX_FRAME_DISTANCE]`. The distance-weighted compound blend weighs the
   /// two predictions with these (AV1 §7.11.3.15).
@@ -208,6 +217,14 @@ pub(all) struct Av1InterBlock {
   /// The second motion vector of a compound block, in its reference's units.
   mut mv_row1 : Int
   mut mv_col1 : Int
+  /// `read_interintra_mode`: whether this inter block also codes an intra
+  /// prediction, and which one. Only the symbols are read here; a block that
+  /// selects one makes the frame be refused, because the blend needs the intra
+  /// predictor wired into the inter path.
+  mut interintra : Int
+  mut interintra_mode : Int
+  mut wedge_interintra : Int
+  mut wedge_index_ii : Int
   /// `read_compound_type`: which blend a compound block uses.
   mut compound_type : Int
   /// The masked-compound symbols the block read, for its neighbours' contexts.
@@ -261,6 +278,10 @@ fn av1_inter_block(
     mv_col: 0,
     mv_row1: 0,
     mv_col1: 0,
+    interintra: 0,
+    interintra_mode: 0,
+    wedge_interintra: 0,
+    wedge_index_ii: 0,
     compound_type: av1_compound_average,
     compound_idx: 1,
     comp_group_idx: 0,
@@ -1346,6 +1367,9 @@ fn av1_inter_block_motion(
   if !av1_assign_mv(decoder, info, block, stack) {
     return false
   }
+  if !av1_read_interintra_mode(decoder, info, block) {
+    return false
+  }
   if !av1_read_motion_mode(decoder, info, block) {
     return false
   }
@@ -1354,6 +1378,87 @@ fn av1_inter_block_motion(
   }
   av1_read_interp_filter(decoder, info, block)
   true
+}
+
+///|
+/// read_interintra_mode( isCompound ) (AV1 §5.11.25): an inter block between
+/// 8x8 and 32x32 codes one symbol saying whether it also mixes in an intra
+/// prediction. The row is dav1d's `ymode_size_context` minus one (the mapping
+/// table is in the handoff); a block that picks the mode needs the intra
+/// predictor and the blend, so the frame is refused rather than averaged from
+/// a prediction this decoder does not have.
+fn av1_read_interintra_mode(
+  decoder : Av1SymbolDecoder,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+) -> Bool {
+  block.interintra = 0
+  if !info.enable_interintra_compound || block.ref_frame1 > av1_intra_frame {
+    return true
+  }
+  if !(block.width4 >= 2 && block.height4 >= 2 &&
+    block.width4 <= 8 &&
+    block.height4 <= 8) {
+    return true
+  }
+  let group = av1_ymode_size_context(block.width4 * 4, block.height4 * 4)
+  if group < 1 || group > 3 {
+    return true
+  }
+  let ctx = group - 1
+  if ctx >= info.cdfs.inter_intra.length() {
+    return false
+  }
+  if decoder.symbol(info.cdfs.inter_intra[ctx]) == 0 {
+    return true
+  }
+  block.interintra = 1
+  if ctx >= info.cdfs.inter_intra_mode.length() {
+    return false
+  }
+  block.interintra_mode = decoder.symbol(info.cdfs.inter_intra_mode[ctx])
+  let wedge_ctx = av1_wedge_shape(block.width4 * 4, block.height4 * 4)
+  if wedge_ctx < 0 || wedge_ctx >= info.cdfs.wedge_inter_intra.length() {
+    return false
+  }
+  block.wedge_interintra = decoder.symbol(info.cdfs.wedge_inter_intra[wedge_ctx])
+  if block.wedge_interintra != 0 {
+    if wedge_ctx >= info.cdfs.wedge_index.length() {
+      return false
+    }
+    block.wedge_index_ii = decoder.symbol(info.cdfs.wedge_index[wedge_ctx])
+  }
+  false
+}
+
+///|
+/// dav1d's `dav1d_ymode_size_context` (`src/tables.c:250`): 0 for the sub-8x8
+/// blocks, 1 for 8x8..16x8/32x8, 2 for 16x16..64x16, 3 for the rest. The
+/// interintra and interintra-mode rows are indexed by it minus one.
+fn av1_ymode_size_context(width : Int, height : Int) -> Int {
+  let small = if width < height { width } else { height }
+  let big = if width < height { height } else { width }
+  if small <= 4 {
+    0
+  } else if small == 8 {
+    1
+  } else if small == 16 {
+    2
+  } else {
+    3
+  }
+}
+
+///|
+/// dav1d's wedge-codebook shape row: 0 tall, 1 wide, 2 square.
+fn av1_wedge_shape(width : Int, height : Int) -> Int {
+  if height > width {
+    0
+  } else if height < width {
+    1
+  } else {
+    2
+  }
 }
 
 ///|
@@ -1553,6 +1658,7 @@ pub(all) struct Av1InterFrame {
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
   reference_select : Bool
+  enable_interintra_compound : Bool
   ref_distances : Array[Int]
   enable_masked_compound : Bool
   enable_jnt_comp : Bool
@@ -1613,6 +1719,7 @@ pub fn av1_inter_frame_of(
     skip_mode_present: header.skip_mode_present,
     skip_mode_frame: header.skip_mode_frame,
     reference_select: header.reference_select,
+    enable_interintra_compound: sequence.enable_interintra_compound,
     ref_distances: av1_ref_distances(sequence, header),
     enable_masked_compound: sequence.enable_masked_compound,
     enable_jnt_comp: sequence.enable_jnt_comp,
@@ -1644,6 +1751,7 @@ fn av1_inter_info(
     skip_mode_present: config.skip_mode_present,
     skip_mode_frame: config.skip_mode_frame,
     reference_select: config.reference_select,
+    enable_interintra_compound: config.enable_interintra_compound,
     ref_distances: config.ref_distances,
     enable_masked_compound: config.enable_masked_compound,
     enable_jnt_comp: config.enable_jnt_comp,

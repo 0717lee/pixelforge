@@ -3721,3 +3721,42 @@ dav1d 用 `dav1d_ymode_size_context[bs]`（`src/tables.c:250`）作行号：
 `av1_inter_intra_mode` 已在仓库）+ `wedge_interintra` + `wedge_index`（表
 `av1_wedge_inter_intra` 已在仓库）+ 接**块内 intra 预测核** + §7.11.3.17 的混合
 权重。触发器（序列头等宽补丁）已验证有效。
+
+---
+
+# 第五十三次推进补充（2026-09-22，interintra 语法落地：读取 + 门解除 + 拒绝式围栏）
+
+## 一、已落地
+
+- **`av1_read_interintra_mode`**：按规范顺序插在 `assign_mv` 与
+  `read_motion_mode` 之间（av1spec06.md:2617）。读 `interintra`
+  （`TileInterIntraCdf[ymode_size_context-1]`，我们的 3 行表即 dav1d 第 1..3
+  行）；为 1 时续读 `interintra_mode`（4 符号）、`wedge_interintra`（1 符号）、
+  `wedge_interintra=1` 时再读 `wedge_index`（16 符号）。
+- **门**：`av1_inter_frame_supported` 里 `enable_interintra_compound` 的拒绝
+  已移除；`enable_masked_compound` 仍拒绝（wedge/DISTWTD 的 mask 未实现）。
+  块级选了 interintra  ⇒ `read_interintra_mode` 返回 false ⇒ **整帧拒绝**
+  （混合需要把 intra 预测接进 inter 路径，宁可拒绝不解半张）。
+- 新表全部接进 `Av1InterCdfs`：`inter_intra` / `inter_intra_mode` /
+  `wedge_inter_intra` / `wedge_index`（本来就在 `av1_inter_tables.mbt`，
+  只是没接线）。
+- 生成器 `build_patched_encode` 增加**序列头补丁**能力（`seq_patch`：位号、
+  宽度、期望值；等宽改写，不动后续任何位）——`inter_interintra_64x64`
+  即 `ramp` 组 + 序列头 bit 69 改写。
+
+## 二、样本
+
+`inter_interintra_64x64`：序列头该位 0→1 后，实测 inter 帧与基线相比
+3299/6144 个样本不同（`interintra` 符号确实被读且改变解码），dav1d 三次
+解码 md5 一致；我们的解码器**按设计拒绝**。测试断言两点：① 头部位与关键帧
+对 dav1d 一致；② inter 帧被整帧拒绝。`--check` 已验证该样本可重放
+（18 个样本）。
+
+## 三、下一轮（混合本体）
+
+1. 把现有 intra 预测核接进 inter 块路径（`interintra_mode` 四种
+   II_DC/II_V/II_H/II_SMOOTH，规范 §7.11.3.17 的权重表）；
+2. `wedge_interintra` 的楔形掩码可复用 wedge 机制（同一张
+   `Wedge_Codebook`，只是 `wedge_sign=0`）；
+3. 随后把 `read_interintra_mode` 末尾的 `false` 改成正常返回，围栏测试改成
+   `[0,0,0]`。

@@ -1344,7 +1344,7 @@ pub fn av1_inter_frame_supported(
   // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
   // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
   // same stream is refused rather than decoded.
-  if sequence.enable_interintra_compound || sequence.enable_masked_compound {
+  if sequence.enable_masked_compound {
     return false
   }
   if !header.frame_is_intra && header.tile_payload.is_empty() {

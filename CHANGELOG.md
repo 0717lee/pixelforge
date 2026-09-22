@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- Implemented the interintra grammar and opened its gate. A frame whose
+  sequence header carries `enable_interintra_compound` now reads
+  `interintra` for every inter block from 8x8 to 32x32, with
+  `interintra_mode`, `wedge_interintra` and `wedge_index` when a block
+  selects it; the row is dav1d's `ymode_size_context` minus one, which is
+  not the spec's `Size_Group - 1` for every block size (the handoff records
+  the mapping, and the earlier note that the three references disagreed on
+  the default table was wrong - dav1d's `CDF1(x)` is `32768 - x`, so the
+  tables agree). A block that actually selects the mode refuses the frame
+  whole, because the blend needs the intra predictor in the inter path.
+  `inter_interintra_64x64` pins it: one equal-width bit in the sequence
+  header, the grammar read, the frame refused, dav1d's planes committed.
 - Implemented the distance-weighted compound blend and its syntax, and fixed a
   real bug found on the way: `compound_idx` and `compound_type` are different
   symbols with different tables (AV1 §5.11.25 / §8.3). The distance-versus-

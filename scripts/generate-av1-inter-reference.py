@@ -650,6 +650,31 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    {
+        "name": "inter_interintra_64x64",
+        "patched_encode": {
+            "append_frame_copy": False,
+            "input": "ramp",
+            "flags": list(MINIMAL_FLAGS),
+            # One equal-width bit in the sequence header turns the interintra
+            # grammar on for a group libaom never picks it for.
+            "seq_patch": {"bit": 69, "width": 1, "expect": 0, "value": 1},
+            "patches": [],
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
@@ -1001,6 +1026,47 @@ def build_patched_encode(spec: dict, base: bytes) -> bytes:
     like the other patched fixtures.
     """
     data = base
+    seq = spec.get("seq_patch")
+    if seq is not None:
+        # The sequence header is its own OBU ahead of the first frame; an
+        # equal-width bit there reaches a frame-level switch without moving
+        # any later bit, which is how a frame grammar the encoder never picks
+        # gets pinned.
+        start = payload_at = None
+        i = 0
+        while i < len(data):
+            h = data[i]
+            typ = (h >> 3) & 15
+            has_size = (h >> 1) & 1
+            j = i + 1
+            if has_size:
+                size = 0
+                shift = 0
+                while True:
+                    b = data[j]
+                    j += 1
+                    size |= (b & 0x7F) << shift
+                    shift += 7
+                    if not (b & 0x80):
+                        break
+                if typ == 1:
+                    start, payload_at, obu_size = i, j, size
+                    break
+                i = j + size
+            else:
+                i = j
+        bits = _split_bits(data[payload_at : payload_at + obu_size])
+        off = seq["bit"] - (payload_at - start) * 8
+        found = 0
+        for bit in bits[off : off + seq["width"]]:
+            found = found * 2 + bit
+        assert found == seq["expect"], (
+            "%s sequence field at bit %d is %d, expected %d"
+            % (spec["name"], seq["bit"], found, seq["expect"])
+        )
+        for index, shift in enumerate(range(seq["width"] - 1, -1, -1)):
+            bits[off + index] = (seq["value"] >> shift) & 1
+        data = data[:payload_at] + _pack_bits(bits) + data[payload_at + obu_size :]
     if spec.get("append_frame_copy", False):
         frames = frame_obus(data)
         last_start, _, _ = frames[-1]

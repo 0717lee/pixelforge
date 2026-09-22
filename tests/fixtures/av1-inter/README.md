@@ -185,6 +185,14 @@ average of a picture with itself), and the patched bits happen to decode
 remains unexercised; the HANDOFF records how to build the stream that would
 exercise it.
 
+`inter_interintra_64x64` reaches the interintra grammar: one equal-width bit in
+the sequence header (`enable_interintra_compound`, bit 69 of that OBU) is
+rewritten on the `ramp` group, so the block layer reads the `interintra`
+symbol where libaom would not. Its inter frame is refused whole - a block
+selects the mode, and the blend needs the intra predictor wired into the
+inter path - so this fixture is the fence for that work, like the other
+tool gates. dav1d's planes for the same stream are committed as its truth.
+
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the

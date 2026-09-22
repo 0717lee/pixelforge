@@ -16452,3 +16452,64 @@ test "inter_distcomp_64x64: distance-weighted inter frame reconstructs" {
     assert_eq(bad, [0, 0, 0])
   }
 }
+let inter_interintra_64x64_obu : Array[Byte] = [
+  b'\x12', b'\x00', b'\x0A', b'\x09', b'\x00', b'\x00', b'\x00', b'\x02', b'\xAF', b'\xFF', b'\xBC', b'\x36', b'\x01', b'\x32', b'\x36', b'\x10',
+  b'\x4C', b'\x40', b'\x00', b'\x01', b'\x00', b'\x00', b'\x01', b'\x00', b'\x4A', b'\x87', b'\x0D', b'\x41', b'\x72', b'\x8A', b'\xC7', b'\x08',
+  b'\xC8', b'\x34', b'\x39', b'\x7C', b'\x4D', b'\x14', b'\x70', b'\x19', b'\x10', b'\x64', b'\x6E', b'\x87', b'\xB9', b'\x83', b'\xD7', b'\xB2',
+  b'\xB4', b'\xBB', b'\x83', b'\xCC', b'\x71', b'\xC3', b'\x2A', b'\x9B', b'\x35', b'\x4A', b'\xC5', b'\x2E', b'\xCE', b'\x4F', b'\xB7', b'\x12',
+  b'\x3C', b'\xCE', b'\xA0', b'\xDC', b'\x80', b'\x12', b'\x00', b'\x32', b'\x19', b'\x30', b'\xE0', b'\x40', b'\x00', b'\x00', b'\x26', b'\x00',
+  b'\x00', b'\x00', b'\x14', b'\x00', b'\x00', b'\x00', b'\x00', b'\xCF', b'\xE5', b'\xCC', b'\x22', b'\x61', b'\xE1', b'\x5D', b'\x1D', b'\x8F',
+  b'\x01', b'\x34',
+]
+
+///|
+/// One header bit in the sequence header turns the interintra grammar on for a
+/// group libaom never picks it for, so the block layer reads `interintra` and
+/// some block selects it.
+test "inter_interintra_64x64: interintra frame headers parse and the key frame matches dav1d" {
+  let (seq, headers, map) = av1_inter_parse(
+    inter_interintra_64x64_obu, "inter_interintra_64x64",
+  )
+  // The one patched bit.
+  assert_eq(seq.enable_interintra_compound, true)
+
+  let key = headers[0]
+  assert_eq(key.frame_type, av1_key_frame)
+  assert_eq(key.frame_is_intra, true)
+  assert_eq(key.primary_ref_frame, av1_primary_ref_none)
+  assert_eq(key.refresh_frame_flags, 255)
+
+  let inter = headers[1]
+  assert_eq(inter.frame_type, av1_inter_frame)
+  assert_eq(inter.frame_is_intra, false)
+  assert_eq(inter.primary_ref_frame, 7)
+  assert_eq(inter.refresh_frame_flags, 2)
+  assert_eq(inter.reference_select, false)
+  for typ in inter.gm_type {
+    assert_eq(typ, av1_gm_identity)
+  }
+
+  assert_eq(av1_frame_map_show(map, 0) is None, true)
+}
+
+///|
+/// The grammar is read and the frame is then refused whole: a block that
+/// selects the mode needs the intra predictor wired into the inter path and
+/// the blend weights, and a partial reconstruction would be worse than no
+/// picture. dav1d decodes the same stream; the refusal is the fence for that
+/// work, exactly like the other tool gates.
+test "inter_interintra_64x64: the interintra frame is refused whole" {
+  let map = av1_frame_map()
+  let whole = inter_interintra_64x64_obu
+  let key_unit = av1_inter_slice_bytes(whole, 0, 84)
+  let inter_unit = av1_inter_slice_bytes(whole, 84, whole.length())
+  let sequence = match av1_sequence_info(key_unit) {
+    Some(value) => value
+    None => fail("inter_interintra_64x64: no sequence header")
+  }
+  if av1_decode_frame_planes(key_unit, map=map) is None {
+    fail("inter_interintra_64x64: key frame decode rejected")
+  }
+  let inter = av1_decode_frame_planes(inter_unit, map=map, sequence=sequence)
+  assert_eq(inter is Some(_), false)
+}
