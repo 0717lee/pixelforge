@@ -3590,3 +3590,46 @@ odd/even/vertical）、`Wedge_Codebook[3][16][3]={dir,xoff,yoff}`、母表生成
 | `inter_distcomp_64x64` | `[0,0,0]`（只覆盖 comp_mode 读法与单参考回退） |
 | DISTANCE 混合 | 代码就位、**未核验** |
 | wedge / DIFFWTD | 仍未实现（`comp_group_idx=1` 时整帧拒绝） |
+
+---
+
+# 第五十次推进补充（2026-09-22，DISTANCE 混合核验的完整搜索记录：约 50 个候选全部落空）
+
+## 一、本轮做了什么
+
+为验证距离加权混合，需要一条"order hint 开（jnt_comp 的前提）+ 某块
+comp_mode=1（compound 块）+ 该块 compound_idx=0"的流。用插桩 dav1d 的符号流
+直接数 `comp_mode` 的 CDF 行（默认值 26828/24035/12031/10640/2901 可唯一
+识别），全程约 50 个候选：
+
+| 搜索维度 | 结果 |
+| --- | --- |
+| kind ∈ {ramp, shift, strip, still} × cq ∈ {32,36,40,44,48,52,60}（两帧 + `reference_select` 补丁） | 27 个编码成功（3 个 aomenc 崩溃）；**只有 still×{40,44} 读到 comp_mode，值都是 0**；其余 0 次读取 |
+| 自定义平面源（4 个基准电平 × 3 个 shift，cq=40） | 12 个里 8 个成功，全部 0 次 comp_mode 读取 |
+| 头部宽度变体（`--tile-columns=1`、`+tile-rows=1`、`--sb-size=64/128`） | 均 0 次读取 |
+| 三帧拼接（still 源，cq ∈ {28..52}，K/I1/I2 hint 补丁 + `ref_frame_idx[1]`） | 8 个，全部 0 次 comp_mode 读取 |
+
+**规律**：order hint 关时（`inter_compound`）tile 位对齐到基流 single_ref_p1
+的位置，comp_mode 能读出 1；order hint 开时头部宽 7 位（`order_hint`）＋帧头
+里的 `skip_mode_present`（三帧时），tile 位整体平移，我搜过的所有源在该对齐下
+要么读不到 comp_mode（块尺寸都 < 8x8），要么读到 0。
+
+## 二、结论与留给下一轮的两条路
+
+1. **不要为了“看起来闭合”而假称 DISTANCE 已核验**：当前 `inter_distcomp_64x64`
+   只覆盖头部位法与单参考回退，混合代码是 libdav1d 的忠实移植但**未被执行**。
+   已如实写进 CHANGELOG / fixture README / HANDOFF 第四十九次补充。
+2. 两条可能的路（都需要超过一格的预算）：
+   - **更猛的搜索**：把源内容的每一位都当自由参数（pipe7 式的周期/相位参数
+     化），对 `comp_mode` 的值做内容二分——`inter_compound` 证明“内容 ⇒ comp_mode
+     值”的映射确实存在 1 的解，只是 order-hint 开时还没撞上；
+   - **编码侧**：找一台 libaom 不崩的环境跑三帧并用内容诱导 distance-weighted
+     compound（libaom 在两参考不同距时确实会选择它）——本机 aomenc 三帧必崩。
+
+## 三、状态
+
+| 检查 | 结果 |
+| --- | --- |
+| native / js / wasm-gc | 各 1247/1247 |
+| DISTANCE 混合 | 代码就位，**未核验**（搜索记录如上） |
+| wedge / DIFFWTD | 未实现 |
