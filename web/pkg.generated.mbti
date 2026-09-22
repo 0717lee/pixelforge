@@ -15,4 +15,3 @@ pub fn luma_histogram(FixedArray[Byte], Int, Int) -> FixedArray[Int]
 // Type aliases
 
 // Traits
-

@@ -3432,3 +3432,51 @@ skip-mode 的推导要求两条参考的 order hint 一前一后（`d<0` 与 `d>
 若其中某一帧的两条参考携带不同 order hint（libaom 的 animation 路径不开
 order hint 的话此路不通，先查它的 sequence header），则可以直接在其上打
 `reference_select` + `skip_mode_present` 两个位，省掉拼接与 hint 补丁。
+
+---
+
+# 第四十七次推进补充（2026-09-22，skip_mode 闭合：三帧拼接样本 + 门解除）
+
+## 一、结果
+
+- **skip_mode 闭合**：`inter_skipmode_64x64` 三帧全部 `[0,0,0]`，
+  `skip_mode_present` 门已从 `av1_inter_frame_supported` 移除。
+- native / js / wasm-gc 各 **1245/1245**；`--check` 现验证 10 个样本。
+
+## 二、样本配方（第四十六次补充的配方已全部落实并写进生成器）
+
+新增生成器机制 `build_skipmode_stream`（`scripts/generate-av1-inter-reference.py`）：
+
+1. 以 `--enable-order-hint=1`（其余 MINIMAL_FLAGS）编码 shift 源 → 两帧流；
+2. 在该流后追加 `[TD, 末帧副本]`，得到三帧流（副本的头部位号与原帧逐位相同）；
+3. 打 5 个位级补丁（spec 里的 `patches`，用 trace 位号 + `expect` 断言）：
+   - frame 0 `order_hint`(bit 23, 7 位) 0 → **7**
+   - frame 2 `order_hint`(bit 24, 7 位) 1 → **2**
+   - frame 2 `ref_frame_idx[1]`(bit 46, 3 位) 0 → **1**（LAST2 指到 slot 1）
+   - frame 2 `reference_select`(bit 136) 0 → **1**
+   - frame 2 `skip_mode_present`(bit 137) 0 → **1**
+   `run()` 增加 `frame_count`（本样本 3），trace 检查、dav1d 字节数、
+   `frame_planes` 切片都按它走。非检查模式会重新编码+拼接+打补丁；
+   检查模式重放并逐字节比对，已实测两次一致。
+
+## 三、位号为什么稳定
+
+副本与 frame 1 的头布局逐位相同 ⇒ 补丁用的 trace 位号对副本同样成立；
+所有补丁都是**等宽改写**，不移动后续语法 ⇒ 追加副本后位号不变。
+推导核对：frame 2(hint=2) 看 K(hint=7) `rel=+5>0`（backward），
+看 I1(hint=1) `rel=-1<0`（forward）⇒ `skipModeAllowed=1`，
+`SkipModeFrames = (LAST+min, LAST+max)`（已按 `_refs/av1spec06.md:1449` 核对）。
+
+## 四、测试
+
+`inter_skipmode_64x64: skip-mode frame headers parse and the key frame matches
+dav1d` 一个测试顺序解码三帧并逐帧比 `[0,0,0]`——第三帧是 skip-mode 帧，
+前两帧同时钉住跨帧参考槽状态（阶段 D 的"三帧以上"覆盖也顺带有了）。
+
+## 五、下一步
+
+帧门现在只剩两个拒绝条件：`enable_interintra_compound` /
+`enable_masked_compound`。下一刀建议 **masked compound**
+（wedge / distance-weighted）：需要 mask 生成（规范 7.11.3.14 +
+`Wedge_Bits`/`Wedge_Master`/`Diffwtd_Master` 表）与 `compound_type` 符号读取，
+go-av1 的 `decode/compound.go` 的 `buildWedgeMask`/`buildDiffwtdMask` 有现成形状。

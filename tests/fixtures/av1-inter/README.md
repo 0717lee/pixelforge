@@ -152,6 +152,21 @@ masked-compound switches off, so `read_compound_type` resolves to
 COMPOUND_AVERAGE without a symbol; a stream that asks for a wedge or a
 distance weighting is still refused whole.
 
+`inter_skipmode_64x64` is the only three-frame fixture here, and it has to be:
+skip mode's derivation needs two references with order hints on either side of
+the frame's own hint, which a two-frame encode cannot express. The generator
+encodes the usual two-frame `shift` stream with `--enable-order-hint=1`,
+appends a **byte-for-byte copy** of the last inter frame behind a fresh
+temporal delimiter, and rewrites five header bits: the key frame's order hint
+moves ahead of the copy's, the copy's `LAST2` is repointed at the middle
+frame's slot, the copy's own hint is set between the two, and
+`reference_select` plus `skip_mode_present` are set. All three tile payloads
+are untouched, so the appended frame decodes compound-free blocks that name
+their references and vectors from the SkipModeFrames pair. Its test compares
+**all three frames**, which also pins the reference-slot state carried across
+them. libaom cannot produce this stream itself - it never emits skip mode on
+these tiny groups and this build crashes past two frames.
+
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the

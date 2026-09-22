@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+- Implemented skip mode and closed its gate. A skip-mode block now names both
+  of its references from the frame's SkipModeFrames pair (AV1 §5.11.25), which
+  the compound machinery then predicts from - NEAREST_NEARESTMV takes the
+  nearest candidate of each list - and the frame-level derivation
+  (`skip_mode_params`, §6.8.14) picks that pair from the order hints.
+  `inter_skipmode_64x64` pins it: the generator encodes the two-frame `shift`
+  stream with order hints on, appends a copy of its last inter frame, and
+  rewrites five header bits so the derivation finds one reference on either
+  side of the copy's own hint and `skip_mode_present` is read. All three
+  frames compare against dav1d at [0, 0, 0], which also pins the
+  reference-slot state carried across three frames.
 - Implemented compound inter prediction and closed the `reference_select` gate.
   A block with `reference_select` set now reads `comp_mode` (AV1 §5.11.24,
   `TileCompModeCdf` with the §8.3 context), and a compound block then reads its
