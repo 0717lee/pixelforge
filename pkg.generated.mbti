@@ -156,6 +156,12 @@ pub fn av1_relative_dist(Av1SequenceInfo, Int, Int) -> Int
 
 pub fn av1_restoration_active(Av1RestorationConfig) -> Bool
 
+pub let av1_seg_level_ref_frame : Int
+
+pub let av1_segment_levels : Int
+
+pub let av1_segments : Int
+
 pub fn av1_sequence_info(Array[Byte]) -> Av1SequenceInfo?
 
 pub fn av1_tx_children(Av1TxNode, Av1TxPartition) -> Array[Av1TxNode]
@@ -377,6 +383,7 @@ pub(all) struct Av1FrameHeaderInfo {
   allow_screen_content_tools : Bool
   film_grain : Av1FilmGrainParams?
   quant_deltas : Av1QuantDeltas
+  segmentation : Av1SegmentationParams
   frame_type : Int
   frame_is_intra : Bool
   show_frame : Bool
@@ -723,6 +730,17 @@ pub(all) struct Av1SbPartitionNode {
 pub fn Av1SbPartitionNode::edge_forces_split(Self) -> Bool
 pub fn Av1SbPartitionNode::has_cols(Self) -> Bool
 pub fn Av1SbPartitionNode::has_rows(Self) -> Bool
+
+pub(all) struct Av1SegmentationParams {
+  enabled : Bool
+  update_map : Bool
+  temporal_update : Bool
+  update_data : Bool
+  feature_enabled : Array[Array[Bool]]
+  feature_data : Array[Array[Int]]
+  seg_id_pre_skip : Bool
+  last_active_seg_id : Int
+}
 
 pub(all) struct Av1SequenceInfo {
   profile : Int

@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+- `segmentation_params` is now parsed in full (AV1 §6.10.9): the enable bit,
+  the update-map/temporal/data flags, and all eight segments' eight feature
+  levels with the `su`/`f` value reads and the clip. The parsed result is kept
+  on the frame header. The frame is still refused when a map update or any
+  feature is active, because the per-block `segment_id` symbol and the feature
+  application are not implemented; a segmentation that updates nothing and
+  enables nothing decodes unchanged. Closing the gate for real needs a stream
+  whose encoder emits segmentation, and this aomenc build has no switch for it:
+  patching the enable bit alone makes every non-skip block read a `segment_id`
+  symbol, which shifts the tile entropy enough that even dav1d rejects the
+  frame.
 - `inter_diffwtd_64x64` pins the difference-weighted blend end to end against
   dav1d at [0, 0, 0]. It needs three bit rewrites, the third of which is a new
   capability in the generator: `tile_patches` flips one bit inside a frame's

@@ -4015,3 +4015,44 @@ sim 的 frame helper 模板同时也落后于 `Av1MvFrame` 的字段，已同步
   全局运动（`gm_type != IDENTITY`），以及 wedge 变体的像素级验证（掩码表已
   144/144 钉住，但还没有触发 wedge 的流——DIFFWTD 的流里那个块读的是
   `compound_type=1`；再找一个 bit 翻转让 `wedge_comp` 解出 0 即可）。
+
+# 第五十九次推进补充（2026-09-23，segmentation 语法落地但流仍被围栏挡住）
+
+## 一、wedge 触发器：确认不可达，收手
+
+2026-09-23 用尽办法为 COMPOUND_WEDGE 造流：
+
+- 单比特瓦片补丁 ~800 个位置/翻转组合（inter payload 20 字节 × 8、key payload 68
+  字节 × 8、两两组合），**没有一个**让 `wedge_comp` 解出 0；只有
+  `compound_type=3`（DIFFWTD）出现。
+- 插桩 dav1d 直接读 `wedge_comp` 的解码结果：`ZZWEDGEVAL ct=3 ctx=8 cdf0=25067`
+  ——CDF 已自适应到 P(0)=76%，但符号恒定是 1。且 `mask_comp`/`wedge_comp` 两次
+  连续读取的窗口高度相关：能读到 `is_segwedge=1` 的状态，下一步的 bool 也必定是
+  1。这不是概率问题，是算术窗的结构性耦合，靠翻位解不开。
+
+结论：wedge 变体维持"语法已实现 + 掩码表 144/144 对 dav1d 钉住 + 混合公式与
+DIFFWTD 共用"，但**没有像素级触发流**。DIFFWTD 那条链验证的是同一套 blend
+（§7.11.3.14 的掩码混合）与同一张 luma→chroma 掩码下采样，差别只在掩码来源。
+
+## 二、segmentation：语法全量落地，门从"整帧拒绝"下移到"用到才拒绝"
+
+`av1_frame_header.mbt` 新增 `av1_parse_segmentation_params`：按 §6.10.9 读
+`segmentation_enabled`、`update_map`/`temporal_update`/`update_data`（primary
+ref 帧为 PRIMARY_REF_NONE 时按规范取 1/0/1）、8 段 × 8 层的 feature_enabled
+与 feature_value（`su(1+bits)`/`f(bits)` + Clip3），并算出 `SegIdPreSkip` 与
+`LastActiveSegId`。结果存在 `Av1FrameHeaderInfo.segmentation`。
+
+门现在的位置：`update_map` 或任一 feature 生效 ⇒ 整帧拒绝（因为每块的
+`seg_id` 符号与 feature 应用都没实现）。**没有 map 更新、没有 feature 的
+"声明式" segmentation 会被接受且逐样本不变**——但造不出这样的流：
+
+- libaom 的 aomenc 没有 `--enable-segmentation` 开关（`aomenc --help | grep -i seg`
+   只有 superres/palette）；
+- 直接把 `segmentation_enabled` 那一比特 0→1 是等宽补丁，但规范要求此后**每个
+  非 skip 块都要读一个 `segment_id` 符号**（read_segment_id，spec 2145 行），
+  于是瓦片熵全错位，dav1d 自己都拒绝该帧（只解出关键帧）。所以这个补丁造出的
+  不是合法流。
+
+要真正闭合 segmentation，需要一条能让 encoder 自己发分段状态的流；这条路的
+成本比它看起来高（要么找到别的 encoder 开关，要么做"重编码式"补丁：改完头部后
+重新用 dav1d 的熵状态把 tile 重新封送，工作量等于写一个微型编码器）。

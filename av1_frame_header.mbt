@@ -4,6 +4,43 @@
 /// the checked tile-group envelope needed by the intra reconstruction path.
 
 ///|
+///|
+/// `MAX_SEGMENTS`: how many segment ids a frame may assign.
+pub let av1_segments : Int = 8
+
+///|
+/// `SEG_LVL_MAX`: the eight per-segment features.
+pub let av1_segment_levels : Int = 8
+
+///|
+/// `SEG_LVL_REF_FRAME`: features at or above it set `SegIdPreSkip`.
+pub let av1_seg_level_ref_frame : Int = 4
+
+///|
+/// The parsed `segmentation_params` (AV1 §6.10.9). `enabled` without a map
+/// update or an active feature changes nothing about the decode.
+pub(all) struct Av1SegmentationParams {
+  enabled : Bool
+  update_map : Bool
+  temporal_update : Bool
+  update_data : Bool
+  feature_enabled : Array[Array[Bool]]
+  feature_data : Array[Array[Int]]
+  seg_id_pre_skip : Bool
+  last_active_seg_id : Int
+}
+
+///|
+/// `MAX_LOOP_FILTER` as the segment feature table needs it (AV1 §6.10.9).
+fn av1_segmentation_loop_filter_limit(sequence : Av1SequenceInfo) -> Int {
+  if sequence.bit_depth >= 12 {
+    255
+  } else {
+    63
+  }
+}
+
+///|
 pub(all) struct Av1FrameHeaderInfo {
   /// Visible entropy-coded width, before superres horizontal upscaling.
   frame_width : Int
@@ -42,6 +79,9 @@ pub(all) struct Av1FrameHeaderInfo {
   film_grain : Av1FilmGrainParams?
   /// Per-plane quantizer deltas from quantization_params.
   quant_deltas : Av1QuantDeltas
+  /// Parsed segmentation_params; None is impossible once parsed (an absent
+  /// segmentation is the empty struct).
+  segmentation : Av1SegmentationParams
   /// Frame classification (AV1 §6.8.2): 0 key, 1 inter, 2 intra-only, 3 switch.
   frame_type : Int
   frame_is_intra : Bool
@@ -1658,6 +1698,7 @@ pub fn av1_parse_stage1_frame(
   // quantization_params(): the deltas feed the per-plane quantizer index, so
   // they are kept instead of rejected. `separate_uv_delta_q` codes one
   // additional flag and, when set, an independent V delta pair (AV1 5.9.14).
+
   let mut delta_y = 0
   let mut delta_u = 0
   let mut delta_ua = 0
@@ -1734,6 +1775,8 @@ pub fn av1_parse_stage1_frame(
     Some(v) => v == 1
     None => return None
   }
+
+
   if using_qmatrix {
     // qm_y and qm_u are present even for monochrome; qm_v is conditional.
     if r.take(4) is None || r.take(4) is None {
@@ -1745,11 +1788,14 @@ pub fn av1_parse_stage1_frame(
     return None
   }
 
-  let segmentation_enabled = match r.take(1) {
-    Some(v) => v == 1
+  let segmentation = match av1_parse_segmentation_params(r, prefix.primary_ref_frame, av1_segmentation_loop_filter_limit(sequence)) {
+    Some(value) => value
     None => return None
   }
-  if segmentation_enabled {
+  // A frame that actually uses the segment map or any feature needs the
+  // per-block segment id and the feature application; both are still fenced,
+  // so such a frame is refused whole rather than decoded without its segments.
+  if segmentation.enabled && (segmentation.update_map || segmentation.seg_id_pre_skip) {
     return None
   }
   if base_q_idx > 0 {
@@ -1907,6 +1953,7 @@ pub fn av1_parse_stage1_frame(
     allow_screen_content_tools: allow_tools,
     film_grain,
     quant_deltas,
+    segmentation,
     frame_type: prefix.frame_type,
     frame_is_intra: prefix.frame_is_intra,
     show_frame: prefix.show_frame,
@@ -1940,6 +1987,126 @@ pub fn av1_parse_stage1_frame(
     render_width: prefix.render_width,
     render_height: prefix.render_height,
   })
+}
+///|
+/// `Segmentation_Feature_Bits`, `Segmentation_Feature_Signed` and
+/// `Segmentation_Feature_Max` (AV1 §6.10.9): the eight segment levels.
+let av1_segmentation_feature_bits : Array[Int] = [8, 6, 6, 6, 6, 3, 0, 0]
+
+///|
+let av1_segmentation_feature_signed : Array[Int] = [1, 1, 1, 1, 1, 0, 0, 0]
+
+///|
+/// `MAX_LOOP_FILTER` is 63 for eight-bit streams and 255 when the frame is
+/// high bit depth (AV1 §6.10.9 note); the caller passes its own limit.
+fn av1_parse_segmentation_params(
+  r : Av1FrameBits,
+  primary_ref_frame : Int,
+  max_loop_filter : Int,
+) -> Av1SegmentationParams? {
+  let enabled = match r.take(1) {
+    Some(v) => v == 1
+    None => return None
+  }
+  if !enabled {
+    return Some(av1_segmentation_empty())
+  }
+  let mut update_map = true
+  let mut temporal_update = false
+  let mut update_data = true
+  if primary_ref_frame != av1_primary_ref_none {
+    update_map = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+    if update_map {
+      temporal_update = match r.take(1) {
+        Some(v) => v == 1
+        None => return None
+      }
+    }
+    update_data = match r.take(1) {
+      Some(v) => v == 1
+      None => return None
+    }
+  }
+  let feature_enabled = Array::makei(av1_segments, _ => Array::make(av1_segment_levels, false))
+  let feature_data = Array::makei(av1_segments, _ => Array::make(av1_segment_levels, 0))
+  if update_data {
+    let limit = [255, max_loop_filter, max_loop_filter, max_loop_filter, max_loop_filter, 7, 0, 0]
+    for i in 0..<av1_segments {
+      for j in 0..<av1_segment_levels {
+        let on = match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }
+        feature_enabled[i][j] = on
+        if !on {
+          continue
+        }
+        let bits = av1_segmentation_feature_bits[j]
+        if bits == 0 {
+          return None
+        }
+        let signed = av1_segmentation_feature_signed[j] == 1
+        let value = if signed {
+          match Av1FrameBits::signed(r, bits + 1) {
+            Some(v) => v
+            None => return None
+          }
+        } else {
+          match r.take(bits) {
+            Some(v) => v
+            None => return None
+          }
+        }
+        let bottom = if signed { -limit[j] } else { 0 }
+        feature_data[i][j] = if value < bottom {
+          bottom
+        } else if value > limit[j] {
+          limit[j]
+        } else {
+          value
+        }
+      }
+    }
+  }
+  var seg_id_pre_skip = false
+  var last_active = 0
+  for i in 0..<av1_segments {
+    for j in 0..<av1_segment_levels {
+      if feature_enabled[i][j] {
+        last_active = i
+        if j >= av1_seg_level_ref_frame {
+          seg_id_pre_skip = true
+        }
+      }
+    }
+  }
+  Some({
+    enabled,
+    update_map,
+    temporal_update,
+    update_data,
+    feature_enabled,
+    feature_data,
+    seg_id_pre_skip,
+    last_active_seg_id: last_active,
+  })
+}
+
+///|
+fn av1_segmentation_empty() -> Av1SegmentationParams {
+  {
+    enabled: false,
+    update_map: false,
+    temporal_update: false,
+    update_data: false,
+    feature_enabled: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, false)),
+    feature_data: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, 0)),
+    seg_id_pre_skip: false,
+    last_active_seg_id: 0,
+  }
 }
 
 ///|
