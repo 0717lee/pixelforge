@@ -15968,6 +15968,73 @@ test "inter_skipmode_64x64: skip-mode frame headers parse and the key frame matc
     index = index + 1
   }
 }
+
+///|
+/// The same three temporal units walked through the animation entrypoint: one
+/// stateful decoder, three samples, and the third sample predicts from both
+/// earlier frames (skip mode names them). The public entrypoint hands back RGBA
+/// images, so each frame is compared against the RGBA conversion of that same
+/// frame's dav1d planes - the reference-slot state the third frame needs is
+/// only reachable through the sequence, so this pins the whole chain.
+test "inter_skipmode_64x64: the animation entrypoint walks three frames" {
+  let whole = inter_skipmode_64x64_obu
+  let key_unit = av1_inter_slice_bytes(whole, 0, 84)
+  let mid_unit = av1_inter_slice_bytes(whole, 84, 110)
+  let skip_unit = av1_inter_slice_bytes(whole, 110, whole.length())
+  let samples = avif_decode_animation_samples(
+    1000,
+    [0, 40, 80],
+    [40, 40, 40],
+    [key_unit, mid_unit, skip_unit],
+  )
+  let sequence = match samples {
+    Some(value) => value
+    None => fail("inter_skipmode_64x64: three-frame animation rejected")
+  }
+  assert_eq(sequence.timescale, 1000)
+  assert_eq(sequence.frames.length(), 3)
+  assert_eq(sequence.frames[0].timestamp, 0)
+  assert_eq(sequence.frames[1].timestamp, 40)
+  assert_eq(sequence.frames[2].timestamp, 80)
+  assert_eq(sequence.frames[2].duration, 40)
+  assert_eq(sequence.frames[2].timescale, 1000)
+  let references = [
+    inter_skipmode_64x64_frame0_reference,
+    inter_skipmode_64x64_frame1_reference,
+    inter_skipmode_64x64_frame2_reference,
+  ]
+  for index in 0..<3 {
+    let image = sequence.frames[index].image
+    assert_eq(image.width, 64)
+    assert_eq(image.height, 64)
+    // The animation entrypoint returns the same conversion the single-frame
+    // path returns, so the reference is converted with the same public helper
+    // from the dav1d planes rather than with a second implementation.
+    let reference = av1_inter_expand(references[index])
+    let chroma = 6144 / 6
+    let luma_size = 6144 - chroma * 2
+    let expected = match av1_yuv_highbd_to_rgba(
+      64,
+      64,
+      av1_inter_slice(reference, 0, luma_size),
+      av1_inter_slice(reference, luma_size, luma_size + chroma),
+      av1_inter_slice(reference, luma_size + chroma, 6144),
+      8,
+    ) {
+      Some(value) => value
+      None => fail("inter_skipmode_64x64: reference conversion failed")
+    }
+    let mut difference = 0
+    for y in 0..<64 {
+      for x in 0..<64 {
+        if image.get_pixel(x, y) != expected.get_pixel(x, y) {
+          difference = difference + 1
+        }
+      }
+    }
+    assert_eq(difference, 0)
+  }
+}
 let inter_distcomp_64x64_obu : Array[Byte] = [
   b'\x12', b'\x00', b'\x0A', b'\x0A', b'\x00', b'\x00', b'\x00', b'\x02', b'\xAF', b'\xFF', b'\xB8', b'\x6F', b'\x30', b'\x08', b'\x32', b'\x44',
   b'\x10', b'\x00', b'\x98', b'\x80', b'\x00', b'\x80', b'\x00', b'\x20', b'\x60', b'\x10', b'\x20', b'\x54', b'\xD0', b'\x4D', b'\xD2', b'\x15',

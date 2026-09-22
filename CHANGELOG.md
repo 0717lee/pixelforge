@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+- Closed the stage-D animation integration seam with two three-frame tests. The
+  animated-AVIF seam (`avif_decode_animation_samples`) is now driven over the
+  three temporal units of `inter_skipmode_64x64`, whose third sample names both
+  earlier frames as references through skip mode: one stateful decoder walks
+  `[0, 40, 80]` at a 1000 Hz timescale, and every returned RGBA frame is
+  compared sample for sample against `av1_yuv_highbd_to_rgba` of that same
+  frame's dav1d planes, so the reference-slot state the third frame needs is
+  pinned through the only sequence that can reach it. Alongside it, a container
+  test builds a real BMFF file around those units - `moov>trak>mdia` with
+  `mdhd`/`stts`/`stsz`/`stco` and an `mdat` holding one unit per sample, one
+  chunk per sample with per-sample sizes - and walks it through
+  `avif_animation_descriptor`, `avif_animation_sample_payloads`,
+  `avif_decode_animation` and `avif_decode_animation_frame`: three frames at
+  timestamps 0/40/80, the key frame matching an independent single-sample
+  `av1_decode` and all three matching the timing-table entrypoint fed the same
+  units. Two layout traps are worth recording: this package's `stsz` reader
+  treats the first four payload bytes as version/flags, so a per-sample size
+  table must start with a second zero word; and the stream's temporal units
+  split at 84/110/132, each inter unit carrying its own temporal delimiters.
 - `segmentation_params` is now parsed in full (AV1 §6.10.9): the enable bit,
   the update-map/temporal/data flags, and all eight segments' eight feature
   levels with the `su`/`f` value reads and the clip. The parsed result is kept

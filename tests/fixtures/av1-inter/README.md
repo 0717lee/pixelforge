@@ -452,3 +452,29 @@ libaom build in `D:\ProgramData\anaconda3\Library\bin` cannot produce the
 two-inter-frame sequence a live projection would need. `motion_field_estimation`
 and `av1_mv_projection` therefore rest on the normative text plus their own unit
 tests until an encoder build can emit that stream.
+
+## Three-frame animation coverage
+
+`inter_skipmode_64x64.obu` carries three temporal units (84/26/22 bytes), and
+they are the only stream in the repository whose third unit needs *two* earlier
+frames in the reference buffer: skip mode names both of them, so the units are
+worth walking as a sequence and not just one frame at a time. Two tests use them.
+
+`av1_inter_reference_wbtest.mbt` drives the animated-AVIF seam
+(`avif_decode_animation_samples`) with all three units at a 1000 Hz timescale and
+timestamps 0/40/80, and compares each returned RGBA frame against
+`av1_yuv_highbd_to_rgba` of that frame's dav1d planes. Frame 0 also decodes on
+its own, but frames 1 and 2 do not: without the reference buffer the earlier
+frames filled they cannot be reconstructed at all, which is why this fixture -
+not a still image twice - is what the container test needs.
+
+`avif_grid_animation_test.mbt` then puts the same units inside a real BMFF
+container and walks the whole seam: a `moov` whose single track's `stbl` holds a
+constant-duration `stts` (one entry, count 3, delta 40), an `stsz` with
+per-sample sizes, and an `stco` with one chunk per sample and absolute offsets
+into the `mdat` that follows it; the sample extents come back through
+`avif_animation_descriptor` and `avif_animation_sample_payloads`, the frames are
+decoded by `avif_decode_animation` and selected by timestamp through
+`avif_decode_animation_frame`. Frame 0 is pinned against a standalone
+`av1_decode` of the key unit - no container, no reference state - and all three
+against the timing-table entrypoint fed the same units.

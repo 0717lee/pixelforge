@@ -4056,3 +4056,59 @@ ref 帧为 PRIMARY_REF_NONE 时按规范取 1/0/1）、8 段 × 8 层的 feature
 要真正闭合 segmentation，需要一条能让 encoder 自己发分段状态的流；这条路的
 成本比它看起来高（要么找到别的 encoder 开关，要么做"重编码式"补丁：改完头部后
 重新用 dav1d 的熵状态把 tile 重新封送，工作量等于写一个微型编码器）。
+
+# 第六十次推进补充（2026-09-23，阶段 D 的三帧动画容器闭合）
+
+## 一、本轮做了什么
+
+1. `av1_inter_reference_wbtest.mbt` 新增
+   `inter_skipmode_64x64: the animation entrypoint walks three frames`：
+   `avif_decode_animation_samples(1000, [0,40,80], [40,40,40], [key,mid,skip])`
+   走三个时间单元，每帧 RGBA 与该帧 dav1d 平面经公开转换
+   `av1_yuv_highbd_to_rgba(64, 64, luma, u, v, 8)` 的结果逐像素相等。第三帧靠
+   skip mode 同时把前两帧当参考，参考槽状态只有按序列解才拿得到。
+2. `avif_grid_animation_test.mbt` 新增
+   `animation container walks three distinct frames`：手工搭一条真实 BMFF
+   （`moov>trak>mdia>{mdhd, minf>stbl>{stts,stsz,stco}}` + `mdat`），mdat 里
+   84/26/22 三个时间单元背靠背，每样本一个 chunk（`nc == count`，stco 三项绝对
+   偏移），stsz 走"常量样本大小=0 + 每样本大小表"路径，stts 单条目
+   `count=3 delta=40`，mdhd `timescale=1000 duration=120`。
+   `avif_animation_descriptor` 返回 3 帧（时间戳 0/40/80，duration 40），
+   `avif_animation_sample_payloads` 抽回 3 段，`avif_decode_animation` 出 3 帧，
+   `avif_decode_animation_frame(t)` 按时间戳选帧；第 0 帧与独立
+   `av1_decode(key_unit)` 逐像素相等，三帧都与同单元的
+   `avif_decode_animation_samples` 结果逐像素相等。
+
+## 二、两个坑（下一轮别再踩）
+
+- **stsz 的常量样本大小不占 version/flags 位**：本包的 stsz 解析按
+  `payload+4` 读 `sample_size`、`payload+8` 读 `count`（前 4 字节当
+  version/flags）。"每样本大小"表必须写成
+  `[0,0,0,0, 0,0,0,0, 0,0,0,N] + N×be32(size)`；写成
+  `[0,0,0,0, 0,0,0,N] + 大小` 会被读成 `sample_size=N`、`count=第一个大小`，
+  随后 `nc != count && nc != 1` ⇒ `Unsupported`，`avif_animation_descriptor`
+  直接返回 None。
+- **inter_skipmode_64x64 的三个时间单元切点是 84/110/132**（共 132 字节，
+  84/26/22）：每个 inter 单元是 `TD(12 00) + FRAME(32 14 … 20 字节载荷)`，结尾
+  各带一个 TD。按 84/26/22 切才与 `avif_decode_animation_samples` 已验证的
+  解码一致；按 84/20/20 切的副本是截断的（FRAME 头声明 20 字节载荷只剩 16），
+  容器测试会挂在 `avif_decode_animation` 上。
+
+## 三、验证状态
+
+- native / js / wasm-gc：**1253/1253 全绿**（本轮 +1 个测试）。
+- `python scripts/generate-av1-inter-reference.py --check`：13 样本 verified
+  （跑完记得 `git checkout` 掉被改写
+  的 `inter_cdf_inherit_64x64.trace.txt` / `inter_diffwtd_64x64.trace.txt`）。
+- `node scripts/build-web.mjs --check`：web.js / wasmcore.wasm OK；web 产物
+  无改动，所以本轮没有 build 提交。
+- `node verify-wasm.mjs`：PASS。CLI 冒烟：`info --input
+  tests/fixtures/av1/ac_y_cosine_q30.avif` → `format=avif 64×64×4`。
+- **不要跑 `moon fmt`**：当前 moon 版本会把全仓库 77 个文件的长数组重排（数千
+  行格式化噪声，与代码无关）。新增内容按文件既有风格手写即可。
+
+## 四、下一步
+
+阶段 D 的"三帧以上参考状态变化"由本轮两个测试覆盖。剩余门仍是
+`enable_segmentation` 与全局运动（都要 encoder 自己发这样的流），以及阶段 E 的
+README/CI 与证据收口。
