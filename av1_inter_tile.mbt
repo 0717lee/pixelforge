@@ -1285,6 +1285,8 @@ fn av1_inter_tile_block(
     [current.mv_col, current.mv_col1],
     skip=current.skip,
     skip_mode=if current.skip_mode { 1 } else { 0 },
+    compound_idx=current.compound_idx,
+    comp_group_idx=current.comp_group_idx,
     interp=[current.interp_vertical, current.interp_horizontal],
   )
   av1_intra_record_modes(

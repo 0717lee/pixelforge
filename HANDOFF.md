@@ -3533,3 +3533,60 @@ odd/even/vertical）、`Wedge_Codebook[3][16][3]={dir,xoff,yoff}`、母表生成
 有现成形状（母表数值已在本机 `_refs/go-av1/decode/wedge.go` 前 80 行）。
 样本同样用 patched_encode：base 加 `--enable-masked-comp=1`，再打
 `reference_select` 位。
+
+---
+
+# 第四十九次推进补充（2026-09-22，诚实修正：distcomp 样本没有覆盖距离加权混合；compound_idx 表修正）
+
+## 一、必须记录的两件事
+
+1. **发现并修正一个真实 bug**：`compound_idx` 与 `compound_type` 是**两个不同
+   符号、两张不同的表**（规范 §5.11.25 + §8.3）：
+   - DISTANCE vs AVERAGE 的选择读 `TileCompoundIdxCdf[ctx]`（ctx = 等距时 3，
+     再加左右邻居各自的 `compound_idx`；单参考邻居点名 ALTREF 时 +1）；
+   - WEDGE vs DIFFWTD 的选择才读 `TileCompoundTypeCdf[MiSize]`。
+   上一轮（第四十八次）把 `compound_idx` 读成了 `compound_type` 表——表值不同
+   （`{18244,12865,7053,13259,9334,4644}` vs 22 行的
+   `{16384,16384,16384,23431,...}`）。已修正：两张表都接进 `Av1InterCdfs`，
+   `compound_idxs` / `comp_group_idxs` 两个 MI 网格加进 `Av1MotionField`
+   （块读到的值写回，供邻居上下文累加），两个 ctx 函数按规范实现。
+   **表头的顺序事实**：`enable_jnt_comp` 只在 `enable_order_hint=1` 时读取；
+   `read_compound_type` 在 `enable_masked_compound=0` 时**不读**
+   `comp_group_idx`，于是有 jnt_comp 才读 `compound_idx`（0⇒DISTANCE，
+   1⇒AVERAGE）。
+2. **`inter_distcomp_64x64` 并不覆盖 DISTANCE 混合**：实测（临时打点统计）
+   该样本的块**没有一个选中 compound ⇒ `compound_idx` 从未被读**，距离加权
+   路径完全没进。它仍然精确 `[0,0,0]`（头部位 `reference_select` 读法 + jnt
+   序列头 + 单参考回退路径都过了），但**混合本身未经外部核验**。原因：两帧流
+   里 8 个槽位全指向同一幅关键帧，compound 预测等于"自己和自己的平均"，
+   libaom 永不选择；补丁位让 `comp_mode` 全部解出 0。
+   已尝试的搜索（全部落空）：(kind ∈ {ramp, shift, strip, still}) ×
+   (cq ∈ {20,32,48}) 共 13 个编码，只有 shift×{32,48} 解出来且都是 0 个
+   compound 块；ramp/strip 的解码直接失败（其他工具门，未深究）。
+
+## 二、为什么混合难以用两帧流触发
+
+`comp_mode` 的符号值由算术编码器状态决定（= 整条码流的函数），等宽补丁只能
+改值不能移位，能改对齐的只有序列头 `enable_order_hint`——而它又会把 inter 帧
+头撑宽（`order_hint` + `ref_order_hint`）并使 `skip_mode_params` 可读。
+⇒ 能让 DISTANCE 真正被选中的现实路径是**三帧拼接**（`build_patched_encode`）：
+第三条帧的两个参考是 K(hint 7) 与 I1(hint 1)，order hint 不等 ⇒ 距离权重
+不等（dist=1 两边，权重 7/9），此时若某块 `comp_mode=1` 且 `compound_idx=0`
+即进入 DISTANCE。下一轮配方：
+1. `encode_input("shift")` + `--enable-order-hint=1 --enable-diff-wtd-comp=1
+   --enable-dist-wtd-comp=1` 编码两帧 base；
+2. `build_patched_encode`（`append_frame_copy=True`）；
+3. 补丁（trace 位号对 frame 2 即副本）：K 帧 `order_hint` 0→7、
+   副本 `ref_frame_idx[1]` 0→1、副本 `order_hint` 1→2、副本
+   `reference_select` 0→1（distwtd 样本的 `reference_select` 位是 136，
+   三帧副本相同）；
+4. dav1d 解为 golden，逐样本比对——若某块走 DISTANCE 且 `[0,0,0]`，混合即核验。
+
+## 三、状态
+
+| 检查 | 结果 |
+| --- | --- |
+| native / js / wasm-gc | 各 1247/1247 |
+| `inter_distcomp_64x64` | `[0,0,0]`（只覆盖 comp_mode 读法与单参考回退） |
+| DISTANCE 混合 | 代码就位、**未核验** |
+| wedge / DIFFWTD | 仍未实现（`comp_group_idx=1` 时整帧拒绝） |

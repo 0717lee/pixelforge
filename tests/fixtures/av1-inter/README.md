@@ -167,14 +167,23 @@ their references and vectors from the SkipModeFrames pair. Its test compares
 them. libaom cannot produce this stream itself - it never emits skip mode on
 these tiny groups and this build crashes past two frames.
 
-`inter_distcomp_64x64` reaches the distance-weighted compound blend. Its base
-is encoded with order hints and both jnt-comp switches on - tools the group
-carries but never uses - and one header bit is rewritten, `reference_select` 0
-to 1, so the block layer reads `comp_mode` and the compound blocks read
-`compound_idx`. A zero there picks the distance weighting over the average, and
-the two references' order hints are what weigh the two interpolations. The
-sequence's `enable_masked_compound` stays off, so no wedge or difference-
-weighted block can be selected: those are the next slice.
+`inter_distcomp_64x64` reaches the `comp_mode` / `compound_idx` grammar on a
+sequence that carries the switches. Its base is encoded with order hints and
+both jnt-comp switches on - tools the group never uses - and one header bit is
+rewritten, `reference_select` 0 to 1, so the block layer reads `comp_mode`
+where the base read the single-reference tree. The sequence's
+`enable_masked_compound` stays off, which is what keeps `read_compound_type`
+from reading `comp_group_idx` and pointing at a wedge or a difference-weighted
+block: those need the mask generation and are refused.
+
+It is worth recording plainly what this fixture does **not** cover: no block in
+it selects compound, so `compound_idx` is never read and the distance-weighted
+blend is never entered. The encoder never picks compound on a two-frame group
+(both references alias the one key frame, so a compound prediction is an
+average of a picture with itself), and the patched bits happen to decode
+`comp_mode` as zero everywhere. The blend itself is a port of libdav1d's and
+remains unexercised; the HANDOFF records how to build the stream that would
+exercise it.
 
 ## What these fixtures do not cover
 

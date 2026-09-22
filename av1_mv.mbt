@@ -84,6 +84,10 @@ pub(all) struct Av1MotionField {
   refs : Array[Int]
   mv_rows : Array[Int]
   mv_cols : Array[Int]
+  /// The compound symbols each block read (`compound_idx` / `comp_group_idx`),
+  /// which the next compound block's contexts add up.
+  compound_idxs : Array[Int]
+  comp_group_idxs : Array[Int]
 }
 
 ///|
@@ -109,6 +113,8 @@ pub fn av1_motion_field(cols : Int, rows : Int) -> Av1MotionField {
     refs: Array::make(size * 2, av1_intra_frame),
     mv_rows: Array::make(size * 2, 0),
     mv_cols: Array::make(size * 2, 0),
+    compound_idxs: Array::make(size, 0),
+    comp_group_idxs: Array::make(size, 0),
   }
 }
 
@@ -134,6 +140,8 @@ pub fn av1_motion_field_store(
   skip? : Int = 0,
   skip_mode? : Int = 0,
   interp? : Array[Int] = [],
+  compound_idx? : Int = 0,
+  comp_group_idx? : Int = 0,
 ) -> Unit {
   for r = row; r < row + height4 && r < field.rows; r = r + 1 {
     for c = col; c < col + width4 && c < field.cols; c = c + 1 {
@@ -145,6 +153,8 @@ pub fn av1_motion_field_store(
       field.written[unit] = true
       field.skips[unit] = skip
       field.skip_modes[unit] = skip_mode
+      field.compound_idxs[unit] = compound_idx
+      field.comp_group_idxs[unit] = comp_group_idx
       if interp.length() >= 2 {
         field.interp_v[unit] = interp[0]
         field.interp_h[unit] = interp[1]

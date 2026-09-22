@@ -82,6 +82,8 @@ priv struct Av1InterCdfs {
   comp_mode : Array[Array[Int]]
   comp_ref_type : Array[Array[Int]]
   compound_mode : Array[Array[Int]]
+  compound_idx : Array[Array[Int]]
+  comp_group_idx : Array[Array[Int]]
   uni_comp_ref : Array[Array[Array[Int]]]
   comp_ref : Array[Array[Array[Int]]]
   comp_bwd_ref : Array[Array[Array[Int]]]
@@ -135,6 +137,8 @@ fn av1_inter_cdfs() -> Av1InterCdfs {
     comp_mode: av1_comp_mode_cdfs(),
     comp_ref_type: av1_comp_ref_type_cdfs(),
     compound_mode: av1_compound_mode_cdfs(),
+    compound_idx: av1_compound_idx_cdfs(),
+    comp_group_idx: av1_comp_group_idx_cdfs(),
     uni_comp_ref: av1_uni_comp_ref_cdfs(),
     comp_ref: av1_comp_ref_cdfs(),
     comp_bwd_ref: av1_comp_bwd_ref_cdfs(),
@@ -206,6 +210,14 @@ pub(all) struct Av1InterBlock {
   mut mv_col1 : Int
   /// `read_compound_type`: which blend a compound block uses.
   mut compound_type : Int
+  /// The masked-compound symbols the block read, for its neighbours' contexts.
+  mut compound_idx : Int
+  mut comp_group_idx : Int
+  /// `wedge_index` / `wedge_sign` for a wedge block, `mask_type` for a
+  /// difference-weighted one; zero for the blends that read neither.
+  mut wedge_index : Int
+  mut wedge_sign : Int
+  mut mask_type : Int
   /// Vertical and horizontal subpel filter, in the order the syntax codes them.
   mut interp_vertical : Int
   mut interp_horizontal : Int
@@ -250,6 +262,11 @@ fn av1_inter_block(
     mv_row1: 0,
     mv_col1: 0,
     compound_type: av1_compound_average,
+    compound_idx: 1,
+    comp_group_idx: 0,
+    wedge_index: 0,
+    wedge_sign: 0,
+    mask_type: 0,
     interp_vertical: av1_interp_eighttap,
     interp_horizontal: av1_interp_eighttap,
     ref_mv_idx: 0,
@@ -1354,22 +1371,119 @@ fn av1_read_compound_type(
     return true
   }
   block.compound_type = av1_compound_average
+  block.compound_idx = 1
+  block.comp_group_idx = 0
   if info.enable_masked_compound {
-    // `comp_group_idx` asks for a masked blend (wedge or difference weighted).
-    // Those need the mask generation, which is not implemented: refuse the
-    // frame rather than average a stream that asked for a mask.
-    return false
+    // `comp_group_idx` asks for a masked blend, so the next symbol is the
+    // wedge one and not the jnt-comp one. Those masks are not implemented:
+    // refuse the frame rather than average a stream that asked for a mask.
+    let ctx = av1_comp_group_idx_ctx(info, block)
+    if ctx < 0 || ctx >= info.cdfs.comp_group_idx.length() {
+      return false
+    }
+    let group = decoder.symbol(info.cdfs.comp_group_idx[ctx])
+    block.comp_group_idx = group
+    if group != 0 {
+      return false
+    }
   }
   if info.enable_jnt_comp {
     // `compound_idx` picks the distance weighting over the average.
-    if block.size_index >= info.cdfs.compound_type.length() {
+    let ctx = av1_compound_idx_ctx(info, block)
+    if ctx < 0 || ctx >= info.cdfs.compound_idx.length() {
       return false
     }
-    if decoder.symbol(info.cdfs.compound_type[block.size_index]) == 0 {
+    let idx = decoder.symbol(info.cdfs.compound_idx[ctx])
+    block.compound_idx = idx
+    if idx == 0 {
       block.compound_type = av1_compound_distance
     }
   }
   true
+}
+
+///|
+/// One per-MI grid's value at a position, zero outside the coded extent.
+fn av1_field_grid(grid : Array[Int], cols : Int, rows : Int, row : Int, col : Int) -> Int {
+  if row < 0 || col < 0 || row >= rows || col >= cols {
+    0
+  } else {
+    grid[row * cols + col]
+  }
+}
+
+///|
+/// `comp_group_idx` context (AV1 §8.3): each neighbour contributes its own
+/// group, or - for a single-reference neighbour naming ALTREF - three.
+fn av1_comp_group_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
+  let field = info.field
+  let mut ctx = 0
+  if block.avail_u {
+    let above = av1_neighbour_pair(field, block.mi_row - 1, block.mi_col)
+    if above[1] == av1_none_frame {
+      if above[0] == av1_alt_ref_frame {
+        ctx = ctx + 3
+      }
+    } else {
+      ctx = ctx + av1_field_grid(field.comp_group_idxs, field.cols, field.rows, block.mi_row - 1, block.mi_col)
+    }
+  }
+  if block.avail_l {
+    let left = av1_neighbour_pair(field, block.mi_row, block.mi_col - 1)
+    if left[1] == av1_none_frame {
+      if left[0] == av1_alt_ref_frame {
+        ctx = ctx + 3
+      }
+    } else {
+      ctx = ctx + av1_field_grid(field.comp_group_idxs, field.cols, field.rows, block.mi_row, block.mi_col - 1)
+    }
+  }
+  ctx
+}
+
+///|
+/// `compound_idx` context (AV1 §8.3): three base when the two references sit
+/// at equal distance, plus each neighbour's own compound_idx - or, for a
+/// single-reference neighbour naming ALTREF, one.
+fn av1_compound_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
+  let field = info.field
+  let mut ctx = if av1_clipped_distance(info, block.ref_frame) ==
+    av1_clipped_distance(info, block.ref_frame1) {
+    3
+  } else {
+    0
+  }
+  if block.avail_u {
+    let above = av1_neighbour_pair(field, block.mi_row - 1, block.mi_col)
+    if above[1] == av1_none_frame {
+      if above[0] == av1_alt_ref_frame {
+        ctx = ctx + 1
+      }
+    } else {
+      ctx = ctx + av1_field_grid(field.compound_idxs, field.cols, field.rows, block.mi_row - 1, block.mi_col)
+    }
+  }
+  if block.avail_l {
+    let left = av1_neighbour_pair(field, block.mi_row, block.mi_col - 1)
+    if left[1] == av1_none_frame {
+      if left[0] == av1_alt_ref_frame {
+        ctx = ctx + 1
+      }
+    } else {
+      ctx = ctx + av1_field_grid(field.compound_idxs, field.cols, field.rows, block.mi_row, block.mi_col - 1)
+    }
+  }
+  ctx
+}
+
+///|
+/// The clipped distance of one reference name, already computed per frame.
+fn av1_clipped_distance(info : Av1InterInfo, name : Int) -> Int {
+  if name < 0 || name >= info.ref_distances.length() {
+    0
+  } else {
+    info.ref_distances[name]
+  }
 }
 
 ///|

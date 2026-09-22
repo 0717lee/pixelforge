@@ -1,17 +1,29 @@
 # Changelog
 
 ## Unreleased
-- Implemented the distance-weighted compound blend and its syntax. A compound
-  block on a stream with `enable_jnt_comp` reads `compound_idx`
-  (`TileCompoundTypeCdf[MiSize]`) and takes the distance weighting when it is
-  zero; the weights come from the two references' order-hint distances through
-  the quantized tables of AV1 §7.11.3.15 (`quantDistWeight`/`quantDistLookup`),
-  and the blend scales each list's interpolation by its own weight one rounding
-  step later than the average does. A block that asks for a wedge or a
-  difference-weighted mask still refuses the frame, because the mask generation
-  is not implemented. `inter_distcomp_64x64` pins the path: an order-hint plus
+- Implemented the distance-weighted compound blend and its syntax, and fixed a
+  real bug found on the way: `compound_idx` and `compound_type` are different
+  symbols with different tables (AV1 §5.11.25 / §8.3). The distance-versus-
+  average choice reads `TileCompoundIdxCdf[ctx]` with the distance-balanced
+  context - three when the two references sit at equal distance, plus each
+  neighbour's own `compound_idx`, or one for a single-reference neighbour naming
+  ALTREF - and an earlier round mistakenly read that choice from
+  `TileCompoundTypeCdf[MiSize]` instead. The wedge-versus-difference choice is
+  the one that uses `compound_type`. `comp_group_idx` likewise has its own
+  table and context, and both compound-symbol grids are now stored in the
+  motion field so the next compound block's contexts can read its neighbours'.
+  The blend scales each list's interpolation by its distance weight through the
+  quantized tables of §7.11.3.15 (`quantDistWeight`, `quantDistLookup`), one
+  rounding step later than the average, matching libdav1d's blend.
+- `inter_distcomp_64x64` carries the grammar it moved: an order-hint plus
   jnt-comp encode with `reference_select` patched on, whose inter frame matches
-  dav1d at [0, 0, 0].
+  dav1d at [0, 0, 0]. It does not exercise the distance blend - no block in it
+  selects compound, so `compound_idx` is never read - because the encoder never
+  picks compound on a two-frame group, where both references alias the one key
+  frame. The blend itself therefore stays unexercised until a stream reaches
+  it; the handoff records the recipe (a three-frame splice, whose two
+  references carry different order hints) and the search already done.
+
 - Implemented skip mode and closed its gate. A skip-mode block now names both
   of its references from the frame's SkipModeFrames pair (AV1 §5.11.25), which
   the compound machinery then predicts from - NEAREST_NEARESTMV takes the
