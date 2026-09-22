@@ -250,3 +250,79 @@ fn av1_wedge_plane_mask(
   }
   Some(out)
 }
+
+///|
+/// The difference-weight mask of AV1 §7.11.3.12: one weight per luma sample
+/// derived from how far apart the two predictions are there, `38 + diff/16`
+/// clipped to 64, complemented when `mask_type` selects the mirrored variant.
+/// The chroma planes take the luma mask averaged down to their sample grid by
+/// §7.11.3.14, so this is always built at luma size and reduced here - the two
+/// predictions handed in are this plane's, but only luma's reach the weight.
+fn av1_diffwtd_mask(
+  first : Array[Int],
+  second : Array[Int],
+  width : Int,
+  height : Int,
+  sub_x : Int,
+  sub_y : Int,
+  mask_type : Int,
+  bit_depth : Int,
+) -> Array[Int] {
+  // The two predictions arrive as filter intermediates: for an 8-bit stream
+  // that is the sample scaled by 16 (`interPostRound` is 4), for a 12-bit one
+  // by 4. The mask's own rounding is the reference decoder's
+  // `38 + ((|diff| + rnd) >> sh)` over those intermediates, which on the
+  // sample scale is `38 + diff / 16` at 8 bits.
+  let shift = if bit_depth == 12 { 10 } else { 8 }
+  let rnd = if bit_depth == 12 { 32 } else { 8 }
+  let luma = Array::make(width * height, 0)
+  for k in 0..<luma.length() {
+    let diff = if first[k] > second[k] {
+      first[k] - second[k]
+    } else {
+      second[k] - first[k]
+    }
+    let m = 38 + ((diff + rnd) >> shift)
+    let clipped = if m > 64 { 64 } else { m }
+    luma[k] = if mask_type == 0 { clipped } else { 64 - clipped }
+  }
+  if sub_x != 1 {
+    return luma
+  }
+  av1_reduce_plane_mask(luma, width, height, sub_x, sub_y)
+}
+
+///|
+///|
+/// Average a luma-sized mask down to one plane's sample grid, the reduction
+/// §7.11.3.14 applies to every mask the luma plane built: two columns for 4:2:2,
+/// a 2x2 group for 4:2:0, each rounded the way the mask blend process rounds.
+fn av1_reduce_plane_mask(
+  luma : Array[Int],
+  width : Int,
+  height : Int,
+  sub_x : Int,
+  sub_y : Int,
+) -> Array[Int] {
+  if sub_x != 1 {
+    return luma
+  }
+  let out_w = width >> sub_x
+  let out_h = height >> sub_y
+  let out = Array::make(out_w * out_h, 0)
+  for i in 0..<out_h {
+    for j in 0..<out_w {
+      let base = (i * (1 + sub_y)) * width + 2 * j
+      let mut sum = luma[base] + luma[base + 1]
+      if sub_y == 1 {
+        sum = sum + luma[base + width] + luma[base + width + 1]
+      }
+      out[i * out_w + j] = if sub_y == 1 {
+        (sum + 2) >> 2
+      } else {
+        (sum + 1) >> 1
+      }
+    }
+  }
+  out
+}

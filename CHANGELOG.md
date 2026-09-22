@@ -1,6 +1,24 @@
 # Changelog
 
 ## Unreleased
+- Implemented the masked-compound grammar and blends, and closed the
+  `enable_masked_compound` frame gate. `read_compound_type` now reads
+  `comp_group_idx`, and when a block asks for a masked blend it reads
+  `compound_type` (unless the block size has no wedge bits, in which case only
+  the difference weighting exists) and then `wedge_index`/`wedge_sign` or
+  `mask_type`. `av1_wedge_mask.mbt` gained the difference-weight mask of
+  §7.11.3.12, whose chroma planes take the luma mask averaged down to their
+  sample grid exactly as the wedge variant does. `general_inter_64x64`, which
+  carries the switch, now reconstructs against dav1d instead of being refused.
+- Fixed four long-standing bugs on the compound path, none of which any earlier
+  fixture could reach because no stream carried a compound block:
+  `comp_ref_type` zero means the unidirectional pair, not one; the compound
+  mode numbering follows libdav1d's `CompInterPredMode`
+  (NEAREST_NEWMV is 2 and NEW_NEWMV is 7, so the depth-reference tree, the
+  per-list fresh vectors and the subpel-filter decision were all reading the
+  wrong mode); a compound block reads no subpel filter when both of its lists
+  are the frame's global motion; and the compound extended candidate set of
+  §7.10.2.12 is now built instead of refusing the frame.
 - Implemented the interintra blend and closed its gate. A block that selects
   `interintra` now rebuilds itself as an intra prediction of its reconstructed
   neighbourhood mixed into the motion-compensated one (AV1 §7.11.3.10,

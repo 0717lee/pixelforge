@@ -771,10 +771,252 @@ fn av1_extra_search(
     }
     return Some(true)
   }
-  // The compound fallback merges the reference-identical and
-  // reference-different candidate sets (§7.10.2.12). Until that lands, a
-  // compound block that needs it is refused rather than silently under-filled.
-  None
+  if stack.count >= 2 {
+    return Some(true)
+  }
+  // The compound extended search (§7.10.2.12). Four scratch slots per list:
+  // slots 0 and 1 take the candidates that share this block's references, the
+  // global motion fills whatever is left of them, and slots 2 and 3 take the
+  // candidates named by some other reference, sign-corrected for whichever
+  // list they are being pushed onto. The merge then folds slot 2 (and 3 when
+  // it exists) underneath a short same-reference list.
+  let ext_rows = Array::make(8, 0)
+  let ext_cols = Array::make(8, 0)
+  let counts = Array::make(4, 0)
+  let sz4 = if w4 < h4 { w4 } else { h4 }
+  let mut idx = 0
+  while idx < sz4 {
+    let mv_row = block.mi_row - 1
+    let mv_col = block.mi_col + idx
+    if !av1_mv_inside(block, mv_row, mv_col) {
+      break
+    }
+    let unit = av1_field_unit(field, mv_row, mv_col)
+    av1_add_compound_extended(ext_rows, ext_cols, counts, field, block, frame, unit)
+    idx = idx + field.width4[unit]
+  }
+  idx = 0
+  while idx < sz4 {
+    let mv_row = block.mi_row + idx
+    let mv_col = block.mi_col - 1
+    if !av1_mv_inside(block, mv_row, mv_col) {
+      break
+    }
+    let unit = av1_field_unit(field, mv_row, mv_col)
+    av1_add_compound_extended(ext_rows, ext_cols, counts, field, block, frame, unit)
+    idx = idx + field.height4[unit]
+  }
+  for list in 0..<2 {
+    let mut m = counts[list]
+    if m >= 2 {
+      continue
+    }
+    let diff = counts[list + 2]
+    if diff != 0 {
+      av1_ext_move(ext_rows, ext_cols, m + 0, list, m + 0, list, ext_rows, ext_cols)
+      // diff[0] is slot 2 when list is 0 and slot 2 when list is 1; the list
+      // picks the field, so a single move covers both.
+      m = m + 1
+      if m == 2 {
+        continue
+      }
+      if diff == 2 {
+        av1_ext_move(ext_rows, ext_cols, m + 0, list, 3, list, ext_rows, ext_cols)
+        continue
+      }
+    }
+    while m < 2 {
+      let global = if list == 0 {
+        (stack.global_rows[0], stack.global_cols[0])
+      } else {
+        (stack.global_rows[1], stack.global_cols[1])
+      }
+      ext_rows[(m) * 2 + list] = global.0
+      ext_cols[(m) * 2 + list] = global.1
+      m = m + 1
+    }
+  }
+  // The merged candidates land right after the entries already on the stack,
+  // so a one-entry stack is topped up and an empty one is filled from zero.
+  let base = stack.count
+  for slot in 0..<2 {
+    av1_stack_set_mv(
+      stack,
+      base + slot,
+      0,
+      ext_rows[slot * 2 + 0],
+      ext_cols[slot * 2 + 0],
+    )
+    av1_stack_set_mv(
+      stack,
+      base + slot,
+      1,
+      ext_rows[slot * 2 + 1],
+      ext_cols[slot * 2 + 1],
+    )
+    stack.weights[base + slot] = 2
+  }
+  if base == 1 &&
+    av1_stack_mv(stack, 0, 0) == av1_stack_mv(stack, 1, 0) &&
+    av1_stack_mv(stack, 0, 1) == av1_stack_mv(stack, 1, 1) {
+    av1_stack_set_mv(stack, 1, 0, ext_rows[1 * 2 + 0], ext_cols[1 * 2 + 0])
+    av1_stack_set_mv(stack, 1, 1, ext_rows[1 * 2 + 1], ext_cols[1 * 2 + 1])
+  }
+  stack.count = 2
+  Some(true)
+}
+
+///|
+/// One compound extended candidate: fold the neighbour's two lists into the
+/// same-reference and different-reference scratch slots (§7.10.2.12). The
+/// different-reference slot takes the vector sign-corrected for the list it is
+/// pushed onto, which is what makes a vector from a third reference usable by
+/// either side of this block's pair.
+fn av1_add_compound_extended(
+  ext_rows : Array[Int],
+  ext_cols : Array[Int],
+  counts : Array[Int],
+  field : Av1MotionField,
+  block : Av1MvBlock,
+  frame : Av1MvFrame,
+  unit : Int,
+) -> Unit {
+  // counts: 0 and 1 are the same-reference slots for each list, 2 and 3 the
+  // different-reference ones.
+  for n in 0..<2 {
+    let cand_ref = field.refs[unit * 2 + n]
+    if cand_ref <= av1_intra_frame {
+      break
+    }
+    let cand_row = field.mv_rows[unit * 2 + n]
+    let cand_col = field.mv_cols[unit * 2 + n]
+    if cand_ref == block.refs[0] {
+      if counts[0] < 2 {
+        av1_ext_slot(ext_rows, ext_cols, counts[0], 0, cand_row, cand_col)
+        counts[0] = counts[0] + 1
+      }
+      if counts[3] < 2 {
+        let bias = frame.ref_frame_sign_bias[block.refs[1]] !=
+          frame.ref_frame_sign_bias[cand_ref]
+        av1_ext_slot(
+          ext_rows,
+          ext_cols,
+          counts[3] + 2,
+          1,
+          if bias {
+            -cand_row
+          } else {
+            cand_row
+          },
+          if bias {
+            -cand_col
+          } else {
+            cand_col
+          },
+        )
+        counts[3] = counts[3] + 1
+      }
+    } else if cand_ref == block.refs[1] {
+      if counts[1] < 2 {
+        av1_ext_slot(ext_rows, ext_cols, counts[1], 1, cand_row, cand_col)
+        counts[1] = counts[1] + 1
+      }
+      if counts[2] < 2 {
+        let bias = frame.ref_frame_sign_bias[block.refs[0]] !=
+          frame.ref_frame_sign_bias[cand_ref]
+        av1_ext_slot(
+          ext_rows,
+          ext_cols,
+          counts[2] + 2,
+          0,
+          if bias {
+            -cand_row
+          } else {
+            cand_row
+          },
+          if bias {
+            -cand_col
+          } else {
+            cand_col
+          },
+        )
+        counts[2] = counts[2] + 1
+      }
+    } else {
+      let bias0 = frame.ref_frame_sign_bias[block.refs[0]] !=
+        frame.ref_frame_sign_bias[cand_ref]
+      if counts[2] < 2 {
+        av1_ext_slot(
+          ext_rows,
+          ext_cols,
+          counts[2] + 2,
+          0,
+          if bias0 {
+            -cand_row
+          } else {
+            cand_row
+          },
+          if bias0 {
+            -cand_col
+          } else {
+            cand_col
+          },
+        )
+        counts[2] = counts[2] + 1
+      }
+      let bias1 = frame.ref_frame_sign_bias[block.refs[1]] !=
+        frame.ref_frame_sign_bias[cand_ref]
+      if counts[3] < 2 {
+        av1_ext_slot(
+          ext_rows,
+          ext_cols,
+          counts[3] + 2,
+          1,
+          if bias1 {
+            -cand_row
+          } else {
+            cand_row
+          },
+          if bias1 {
+            -cand_col
+          } else {
+            cand_col
+          },
+        )
+        counts[3] = counts[3] + 1
+      }
+    }
+  }
+}
+
+///|
+/// Write one scratch slot's list field.
+fn av1_ext_slot(
+  ext_rows : Array[Int],
+  ext_cols : Array[Int],
+  slot : Int,
+  list : Int,
+  row : Int,
+  col : Int,
+) -> Unit {
+  ext_rows[slot * 2 + list] = row
+  ext_cols[slot * 2 + list] = col
+}
+
+///|
+/// Copy one scratch slot's list field over another's.
+fn av1_ext_move(
+  ext_rows : Array[Int],
+  ext_cols : Array[Int],
+  to_slot : Int,
+  to_list : Int,
+  from_slot : Int,
+  from_list : Int,
+  _rows : Array[Int],
+  _cols : Array[Int],
+) -> Unit {
+  ext_rows[to_slot * 2 + to_list] = ext_rows[from_slot * 2 + from_list]
+  ext_cols[to_slot * 2 + to_list] = ext_cols[from_slot * 2 + from_list]
 }
 
 ///|

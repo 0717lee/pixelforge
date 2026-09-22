@@ -644,7 +644,10 @@ fn av1_read_compound_refs(
       decoder.symbol(table[ctx][index])
     }
   }
-  if decoder.symbol(info.cdfs.comp_ref_type[av1_comp_ref_type_ctx(info, block)]) != 0 {
+  // `comp_ref_type` zero asks for the unidirectional pair, one for the
+  // bidirectional one (AV1 §5.11.23).
+  let dir = decoder.symbol(info.cdfs.comp_ref_type[av1_comp_ref_type_ctx(info, block)])
+  if dir == 0 {
     // Unidirectional: both names point the same way.
     let forward = counts(av1_last_frame) +
       counts(av1_last2_frame) +
@@ -861,6 +864,48 @@ fn av1_has_nearmv(mode : Int) -> Bool {
 }
 
 ///|
+/// The compound modes, as the `compound_mode` symbol indexes them (AV1 §5.11.24
+/// against libdav1d's `comp_inter_pred_modes`): 0 NEAREST_NEARESTMV,
+/// 1 NEAR_NEARMV, 2 NEW_NEWMV, 3 GLOBAL_GLOBALMV, 4 NEW_NEARESTMV,
+/// 5 NEW_NEARMV, 6 NEAREST_NEWMV, 7 NEAR_NEWMV. The mode constants themselves
+/// continue the single-reference numbering, so a compound mode is
+/// `NEAREST_NEARESTMV + symbol`.
+
+///|
+/// A compound mode whose two lists both code a fresh vector (NEW_NEWMV), the
+/// one whose depth reference index is read with the new-motion tree.
+fn av1_compound_both_new(mode : Int) -> Bool {
+  mode - av1_mode_nearest_nearest_mv == 7
+}
+
+///|
+/// Whether one list of a compound mode codes a fresh vector.
+fn av1_compound_list_new(mode : Int, list : Int) -> Bool {
+  let offset = mode - av1_mode_nearest_nearest_mv
+  if list == 0 {
+    offset == 3 || offset == 5 || offset == 7
+  } else {
+    offset == 2 || offset == 4 || offset == 7
+  }
+}
+
+///|
+/// A compound mode with a NEARMV constituent, which reads the depth reference
+/// index with the near-motion tree start (AV1 §5.11.24).
+fn av1_compound_has_nearmv(mode : Int) -> Bool {
+  let offset = mode - av1_mode_nearest_nearest_mv
+  offset == 1 || offset == 4 || offset == 5
+}
+
+///|
+/// A compound mode whose two lists both follow the frame's global motion, the
+/// one that codes no subpel filter at all (AV1 §5.11.27).
+fn av1_compound_both_global(mode : Int) -> Bool {
+  mode - av1_mode_nearest_nearest_mv == 6
+}
+
+///|
+///|
 /// The depth reference list index (AV1 §5.11.24): walk the stacked candidates
 /// and stop at the first one the bitstream selects. The two entry points differ
 /// on purpose, which is why a NEARMV block can never reach candidate zero: its
@@ -872,9 +917,20 @@ fn av1_read_drl_idx(
   block : Av1InterBlock,
   stack : Av1MvStack,
 ) -> Bool {
-  // A compound block's NEW_NEWMV is the new-MV tree applied to both lists.
-  let new_mv = block.y_mode == av1_mode_new_mv || block.y_mode == av1_mode_new_new_mv
-  let near_mv = av1_has_nearmv(block.y_mode)
+  // A compound block's NEW_NEWMV is the new-MV tree applied to both lists;
+  // a compound mode with a NEARMV constituent reads the same index tree a
+  // single NEARMV block does.
+  let compound = block.ref_frame1 > av1_intra_frame
+  let new_mv = if compound {
+    av1_compound_both_new(block.y_mode)
+  } else {
+    block.y_mode == av1_mode_new_mv
+  }
+  let near_mv = if compound {
+    av1_compound_has_nearmv(block.y_mode)
+  } else {
+    av1_has_nearmv(block.y_mode)
+  }
   if !new_mv && !near_mv {
     // Only those two trees exist; every other mode names its candidate already.
     block.ref_mv_idx = 0
@@ -914,23 +970,30 @@ fn av1_assign_mv(
     // Compound: both lists take the same mode, so NEW_NEWMV codes a fresh
     // vector per list against that list's candidate, and NEAREST_NEARESTMV
     // copies the nearest candidate of each list.
-    let fresh = block.y_mode == av1_mode_new_new_mv
+    // Which lists code a fresh vector depends on the mode: NEW_NEWMV codes
+    // both, NEW_NEARESTMV and NEW_NEARMV only the first, NEAREST_NEWMV and
+    // NEAR_NEWMV only the second (AV1 §7.10.2.6).
+    let fresh0 = av1_compound_list_new(block.y_mode, 0)
+    let fresh1 = av1_compound_list_new(block.y_mode, 1)
     if block.ref_mv_idx < 0 || block.ref_mv_idx >= av1_ref_mv_stack_size {
       return false
     }
-    let position = if !fresh || stack.count > 1 { block.ref_mv_idx } else { 0 }
+    let position = if stack.count > 1 { block.ref_mv_idx } else { 0 }
     let first = av1_stack_mv(stack, position, 0)
     let second = av1_stack_mv(stack, position, 1)
-    if fresh {
-      let diff0 = av1_read_mv(decoder, info)
-      let diff1 = av1_read_mv(decoder, info)
-      block.mv_row = first.0 + diff0.0
-      block.mv_col = first.1 + diff0.1
-      block.mv_row1 = second.0 + diff1.0
-      block.mv_col1 = second.1 + diff1.1
+    if fresh0 {
+      let diff = av1_read_mv(decoder, info)
+      block.mv_row = first.0 + diff.0
+      block.mv_col = first.1 + diff.1
     } else {
       block.mv_row = first.0
       block.mv_col = first.1
+    }
+    if fresh1 {
+      let diff = av1_read_mv(decoder, info)
+      block.mv_row1 = second.0 + diff.0
+      block.mv_col1 = second.1 + diff.1
+    } else {
       block.mv_row1 = second.0
       block.mv_col1 = second.1
     }
@@ -1228,6 +1291,16 @@ fn av1_needs_interp_filter(info : Av1InterInfo, block : Av1InterBlock) -> Bool {
   if smaller < 8 || block.skip_mode {
     return true
   }
+  if block.ref_frame1 > av1_intra_frame {
+    // A compound block reads the symbol unless both of its lists are the
+    // frame's global motion (AV1 §5.11.27), which is the one compound mode
+    // whose two vectors have no subpel phase of their own.
+    if av1_compound_both_global(block.y_mode) {
+      return av1_gm_type(info, block.ref_frame) == av1_gm_translation &&
+        av1_gm_type(info, block.ref_frame1) == av1_gm_translation
+    }
+    return true
+  }
   if block.y_mode != av1_mode_global_mv {
     return true
   }
@@ -1361,7 +1434,10 @@ fn av1_inter_block_motion(
       block.ref_frame1 > av1_intra_frame,
     ) {
     Some(value) => value
-    None => return false
+    None =>
+    {
+      return false
+    }
   }
   if !av1_read_inter_mode(decoder, info, block, stack) {
     return false
@@ -1499,10 +1575,11 @@ fn av1_ymode_size_context(width : Int, height : Int) -> Int {
 ///|
 ///|
 /// read_compound_type( isCompound ) (AV1 §5.11.25): which blend a compound
-/// block uses. With both masked-compound switches off - what the frame gate
-/// already insists on - the answer is COMPOUND_AVERAGE and no symbol is read.
-/// A stream that asks for a wedge or a distance weighting is refused rather
-/// than averaged, because those blends are not implemented.
+/// block uses. With `enable_masked_compound` off - what the frame gate used to
+/// insist on - the answer is COMPOUND_AVERAGE or COMPOUND_DISTANCE and no
+/// `comp_group_idx` is read at all. With it on, a group index of one asks for
+/// a masked blend, and `compound_type` then picks the wedge against the
+/// difference weighting, each of which reads its own parameter.
 fn av1_read_compound_type(
   decoder : Av1SymbolDecoder,
   info : Av1InterInfo,
@@ -1516,8 +1593,7 @@ fn av1_read_compound_type(
   block.comp_group_idx = 0
   if info.enable_masked_compound {
     // `comp_group_idx` asks for a masked blend, so the next symbol is the
-    // wedge one and not the jnt-comp one. Those masks are not implemented:
-    // refuse the frame rather than average a stream that asked for a mask.
+    // wedge/difference one and not the jnt-comp one.
     let ctx = av1_comp_group_idx_ctx(info, block)
     if ctx < 0 || ctx >= info.cdfs.comp_group_idx.length() {
       return false
@@ -1525,7 +1601,35 @@ fn av1_read_compound_type(
     let group = decoder.symbol(info.cdfs.comp_group_idx[ctx])
     block.comp_group_idx = group
     if group != 0 {
-      return false
+      let size = match av1_intra_block_index(block.width4 * 4, block.height4 * 4) {
+        Some(index) => index
+        None => return false
+      }
+      // A block size with no wedge bits can only ask for the difference
+      // weighting, so that symbol is not there at all (AV1 §5.11.25).
+      let masked = if !av1_wedge_shape_ok(block.width4 * 4, block.height4 * 4) {
+        av1_compound_diffwtd
+      } else {
+        if size < 0 || size >= info.cdfs.compound_type.length() {
+          return false
+        }
+        if decoder.symbol(info.cdfs.compound_type[size]) == 0 {
+          av1_compound_wedge
+        } else {
+          av1_compound_diffwtd
+        }
+      }
+      block.compound_type = masked
+      if masked == av1_compound_diffwtd {
+        block.mask_type = decoder.bool()
+      } else {
+        if size < 0 || size >= info.cdfs.wedge_index.length() {
+          return false
+        }
+        block.wedge_index = decoder.symbol(info.cdfs.wedge_index[size])
+        block.wedge_sign = decoder.bool()
+      }
+      return true
     }
   }
   if info.enable_jnt_comp {

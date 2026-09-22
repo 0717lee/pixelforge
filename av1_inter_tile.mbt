@@ -532,6 +532,7 @@ fn av1_inter_predict(
   // Only the block that owns the chroma samples of a merged group predicts
   // them; the other one has no chroma syntax at all (AV1 §5.11.17).
   let plane_count = if av1_intra_has_chroma(state, tile_block) { 3 } else { 1 }
+  let mut diffwtd_luma : Array[Int] = []
   for plane in 0..<plane_count {
     let sub_x = if plane == 0 { 0 } else { state.sub_x }
     let sub_y = if plane == 0 { 0 } else { state.sub_y }
@@ -669,11 +670,10 @@ fn av1_inter_predict(
           }
           blended
         } else if second_name > av1_intra_frame {
-          // COMPOUND_AVERAGE: both lists interpolate with the block's own
-          // filters, and the intermediate results are averaged one step later
+          // A compound block interpolates both lists with the block's own
+          // filters, and the intermediate results are combined one step later
           // than a single-reference decode rounds them (AV1 §7.11.3.10,
-          // `interPostRound`). The wedge and distance-weighted blends need the
-          // masked-compound machinery and are refused before prediction.
+          // `interPostRound`).
           let filter_vertical = field.interp_v[(cand_row + r) * field.cols +
             cand_col +
             c]
@@ -717,8 +717,54 @@ fn av1_inter_predict(
           let first = av1_motion_compensate(first_request)
           let second = av1_motion_compensate(second_request)
           let post = if state.bit_depth == 12 { 2 } else { 4 }
-          let blended = Array::make(first.length(), 0)
-          if block.compound_type == av1_compound_distance {
+                  let blended = Array::make(first.length(), 0)
+          if block.compound_type == av1_compound_diffwtd ||
+            block.compound_type == av1_compound_wedge {
+            // A masked blend: per-sample weights pick how much of each list the
+            // sample takes, and the weights come either from the difference
+            // between the two predictions (§7.11.3.12) or from the wedge table
+            // (§7.11.3.11). The two lists are then swapped when the mask's sign
+            // bit asks for the mirrored variant (§7.11.3.14).
+            let weights = if block.compound_type == av1_compound_diffwtd {
+              // The weights come from the luma plane: chroma takes the
+              // luma mask averaged down to its sample grid, the same way
+              // the wedge variant does (§7.11.3.14).
+              if plane == 0 {
+                let built = av1_diffwtd_mask(first, second, pred_w, pred_h, 0, 0, block.mask_type, state.bit_depth)
+                diffwtd_luma = built
+                built
+              } else {
+                av1_reduce_plane_mask(
+                  diffwtd_luma,
+                  block.block_width,
+                  block.block_height,
+                  sub_x,
+                  sub_y,
+                )
+              }
+            } else {
+              let mask = av1_wedge_plane_mask(
+                block.block_width,
+                block.block_height,
+                block.wedge_index,
+                block.wedge_sign,
+                sub_x,
+                sub_y,
+              )
+              match mask {
+                Some(value) => value
+                None => return false
+              }
+            }
+            let head = if block.mask_type == 0 { first } else { second }
+            let tail = if block.mask_type == 0 { second } else { first }
+            let shift = 6 + post
+            let bias = 32 << post
+            for k in 0..<blended.length() {
+              let m = weights[k]
+              blended[k] = (m * head[k] + (64 - m) * tail[k] + bias) >> shift
+            }
+          } else if block.compound_type == av1_compound_distance {
             // The distance weighting scales each list's interpolation by its
             // reference's order-hint distance (AV1 §7.11.3.15).
             let (forward, backward) = av1_distance_weights(info, name, second_name)
@@ -1378,7 +1424,10 @@ fn av1_inter_tile_block(
   )
   let sized = match av1_read_block_tx_size(decoder, state, info, current) {
     Some(value) => value
-    None => return false
+    None =>
+    {
+      return false
+    }
   }
   let (tx_width, tx_height, roots) = sized
   state.current = Some(current)
@@ -1423,9 +1472,14 @@ pub fn av1_inter_frame_supported(
   // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
   // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
   // same stream is refused rather than decoded.
-  if sequence.enable_masked_compound {
-    return false
-  }
+  //
+  // `enable_masked_compound` used to refuse the frame wholesale. It is gone
+  // now that `read_compound_type` reads `comp_group_idx`, `compound_type`,
+  // `wedge_index`/`wedge_sign` or `mask_type`, and the block stage can blend
+  // either a difference weighting (§7.11.3.12) or a wedge mask (§7.11.3.11).
+  // `inter_diffwtd_64x64` pins the difference weighting sample-exact against
+  // dav1d; the wedge variant's mask table is pinned against dav1d's generated
+  // `WedgeMasks` by `av1_wedge_mask_wbtest.mbt`.
   if !header.frame_is_intra && header.tile_payload.is_empty() {
     return false
   }

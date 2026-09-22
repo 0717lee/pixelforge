@@ -7614,11 +7614,15 @@ test "general_inter_64x64: inter frame reconstruction" {
   if av1_decode_frame_planes(key_unit, map~) is None {
     fail("general_inter_64x64: key frame decode rejected")
   }
-  // tools the block stage refuses: compound signalling, overlapped and warped motion, temporal motion vectors. A frame that needs a missing tool must be refused whole:
-  // a partial reconstruction would be worse than no picture at all.
+  // The encode carries `reference_select` plus both compound masks on, and
+  // the frame gate no longer refuses on the masked-compound switch alone:
+  // `read_compound_type` reads `comp_group_idx` and, when a block asks for
+  // a masked blend, either the wedge or the difference weighting, both of
+  // which the block stage now blends. A block that picks overlapped or
+  // warped motion is still refused by `av1_read_motion_mode`.
   let inter = av1_decode_frame_planes(inter_unit, map~, sequence~)
-  assert_eq(inter is Some(_), false)
-  if false {
+  assert_eq(inter is Some(_), true)
+  if true {
     let frame = match inter {
       Some(value) => value
       None => fail("general_inter_64x64: supported inter frame rejected")

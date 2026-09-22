@@ -3904,3 +3904,59 @@ bsize 索引**不同**，dump 时要把 W/H 一起打印出来。
 - DIFFWTD 掩码（§7.11.3.12：`m = Clip3(0,64, 38 + diff/16)`，
   `diff = Round2(|p0-p1|, (BitDepth-8)+InterPostRound)`，`mask_type` 决定
   是否取补）**尚未实现**，同样没有触发器。
+
+# 第五十七次推进补充（2026-09-23，找到 masked compound 触发器：一比特瓦片补丁 + 四个真 bug）
+
+## 一、触发器的正确配方
+
+第五十五/五十六次补充说错了：`enable_masked_compound` 补丁打上去**没有
+compound 块**可读 `comp_group_idx`。真正缺的一步是**让某个块读成
+compound**，而这是熵编码决定的。把 `inter_distcomp_64x64` 的第二帧瓦片载荷
+第 17 字节（绝对偏移 105，payload 起点 88）的 bit 5 翻转：
+
+- 序列头 bit 70（`enable_masked_compound`）0→1：让 compound 块读
+  `comp_group_idx`；
+- 瓦片那一比特改变后续符号的解码结果，`inter_distcomp` 里那个 16x16 块就读成
+  compound，且继续读成 **COMPOUND_DIFFWTD**（dav1d 的 `ZZTYPE
+  comp_type=3 bs=9 allowed=512`，bs=9 是 32x8）。
+
+生成器新增 `tile_patches`（`build_patched_encode` 里的等宽字节内位翻转，
+带 `expect` 断言），与 `seq_patch`/`patches` 正交。这三个补丁组合出来的流
+dav1d 能解，且是确定解——这就是「合法、可核验」的触发方式。
+
+## 二、顺着这条线挖出四个真 bug（都已修，全绿）
+
+1. **`comp_ref_type` 分支反了**：spec 是 `comp_ref_type == 0 → unidir`，
+   我们写成 `!= 0 → unidir`。原来 `read_compound_refs` 只在 compound 块上走，
+   而所有既有样本都没有 compound 块（skip mode 块绕过它），所以这条从来没被
+   执行过。
+2. **compound 模式编号错**：libdav1d 的 `CompInterPredMode` 顺序是
+   0 NEAREST_NEARESTMV、1 NEAR_NEARMV、2 NEAREST_NEWMV、3 NEW_NEARESTMV、
+   4 NEAR_NEWMV、5 NEW_NEARMV、6 GLOBAL_GLOBALMV、7 NEW_NEWMV
+   （`src/levels.h`）。我们仓库的常量名（17..24）恰好也是这个顺序，但我按
+   别处记忆的"NEW_NEWMV=2"去判，导致 drl 树、每列表的新矢量、`needs_interp_filter`
+   全错。现已改成按偏移量的谓词（both_new=7、list0 new={3,5,7}、
+   list1 new={2,4,7}、has_nearmv={1,4,5}、both_global=6）。
+3. **compound 块的 drl 读取**：NEW_NEWMV 走新树、含 NEARMV 的走近树，原来
+   两个都读不到。
+4. **compound 块的 subpel filter**：GLOBAL_GLOBALMV 不读 filter 符号
+   （`needs_interp_filter` 原来只看单参考的 `y_mode == GLOBALMV`）。
+
+另外实现了 §7.10.2.12 的 compound 扩展候选（`av1_add_compound_extended`：
+same/diff 四槽、global 兜底、合并规则照 dav1d），原来这里是直接拒绝。
+
+## 三、当前进度与下一步
+
+- `inter_diffwtd_64x64`（三个补丁的流）从"整帧拒绝"推进到逐样本差集
+  **2693/325/503 → 1221/117/216（luma/U/V）**，每次修一个 bug 就降一段；
+  还剩一处差异：最后一个 compound 块（32x16 @ r=12 c=0）的
+  `compintermode` 上下文算错，我们和 dav1d 读到不同符号。继续查的入口是
+  `av1_compound_mode_ctx` 的 row/column 映射（`refmv_context` /
+  `newmv_context`），用符号级 range 比对（`println` 每个符号后的
+  `symbol_range`，与 dav1d `DEBUG_BLOCK_INFO` 的 `r=` 逐点比对，方法可复制）。
+- **该流已从仓库撤下**（fixture、manifest 条目、FIXTURES 条目都删了），因为
+  尚未逐样本一致；`--check` 仍是 12 个。`tile_patches` 能力留在生成器里。
+- **`general_inter_64x64` 因此变为可解**：它带 masked-compound 开关，原来被
+  整帧拒绝；现在门拆掉后逐样本等于 dav1d（`av1_inter_reference_wbtest.mbt`
+  那条测试的断言已从"拒绝"改成"重建并比对"，[0,0,0]）。这是个新增的已验证
+  覆盖面。

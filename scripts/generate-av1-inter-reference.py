@@ -1067,6 +1067,29 @@ def build_patched_encode(spec: dict, base: bytes) -> bytes:
         for index, shift in enumerate(range(seq["width"] - 1, -1, -1)):
             bits[off + index] = (seq["value"] >> shift) & 1
         data = data[:payload_at] + _pack_bits(bits) + data[payload_at + obu_size :]
+    for tile in spec.get("tile_patches", []):
+        # A single bit inside one frame's tile entropy. Changing it changes how
+        # the symbols after it decode, which is how a tool the encoder never
+        # emits can be reached at all: the mask-compound branch, for instance,
+        # is only read for a compound block, and no two-frame group carries one.
+        # Everything downstream of the flipped bit is still a determined,
+        # legal decode - dav1d's output on the result is the evidence.
+        frames = frame_obus(data)
+        start, payload_at, size = frames[tile["frame"]]
+        index = payload_at + tile["offset"]
+        if index >= len(data):
+            raise SystemExit("%s: tile patch %d out of range" % (spec["name"], index))
+        current = data[index]
+        bit = (current >> tile["bit"]) & 1
+        assert bit == tile["expect"], (
+            "%s: tile byte %d bit %d is %d, expected %d"
+            % (spec["name"], tile["offset"], tile["bit"], bit, tile["expect"])
+        )
+        data = (
+            data[:index]
+            + bytes([current ^ (1 << tile["bit"])])
+            + data[index + 1 :]
+        )
     if spec.get("append_frame_copy", False):
         frames = frame_obus(data)
         last_start, _, _ = frames[-1]
