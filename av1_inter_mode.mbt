@@ -449,6 +449,10 @@ fn av1_read_ref_frames(
   block : Av1InterBlock,
 ) -> Bool {
   if block.skip_mode {
+    // A skip-mode block names both references from the frame's SkipModeFrames
+    // pair and codes no reference symbols at all (AV1 §5.11.25).
+    block.ref_frame = info.skip_mode_frame[0]
+    block.ref_frame1 = info.skip_mode_frame[1]
     return true
   }
   // A compound block codes two reference names; a single one keeps the second

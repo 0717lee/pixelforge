@@ -3375,3 +3375,60 @@ compound 与全局运动（warped、temporal MV 已在阶段 C 前几轮落地�
 3. **interintra compound**：intra/inter 混合（规范 `read_interintra_mode`）。
 4. **segmentation** 与 **全局运动**（`gm_type != IDENTITY`）：帧门的后两个拒绝
    条件仍在（av1_inter_tile.mbt 的 `av1_inter_frame_supported`）。
+
+---
+
+# 第四十六次推进补充（2026-09-22，skip_mode：块级接线完成，样本被编码器阻塞）
+
+## 一、已落地
+
+- `read_ref_frames` 的 `skip_mode` 首支现在写**两个**参考名
+  （`SkipModeFrames[0]/[1]`，之前只写 ref_frame）。
+- compound 侧的 `find_mv_stack(isCompound)` / `assign_mv` 两列表 /
+  `compound_mode` 已就位（第四十五次），skip-mode 块的
+  `YMode = NEAREST_NEARESTMV` → 两列表都取栈位置 0，正是它需要的形状。
+- 帧级 `skip_mode_params` 推导（`av1_frame_skip_mode`）**上一轮就已存在**
+  且与规范逐行一致（`_refs/av1spec06.md:1449`：
+  `SkipModeFrame[0] = LAST + Min(forwardIdx, backwardIdx)`、
+  `SkipModeFrame[1] = LAST + Max(...)`；我们的 `lo/hi` 写法等价）。
+- **帧门仍拒绝 `skip_mode_present`**：没有可外部核验的样本之前不解除
+  （验收口径 4：未核验的工具不得静默解出错误画面）。
+
+## 二、阻塞：样本必须三帧，而本机 aomenc 三帧必崩
+
+skip-mode 的推导要求两条参考的 order hint 一前一后（`d<0` 与 `d>0`）。
+两帧流里 8 个槽位全指向唯一的关键帧，order hint 全同 ⇒
+`skipModeAllowed=0`，`skip_mode_present` 根本不会被读
+（实测：补丁 `reference_select=1` 后 trace 里仍无该字段）。
+本机 libaom（`aomenc.EXE`）**编码第三帧直接崩**
+（rc 0xC0000005，与生成器注释 "libaom in this build crashes past two frames"
+一致），所以拿不到现成的三帧流。
+
+## 三、下一轮可直接照抄的样本配方（已探明位点）
+
+1. 以 `--enable-order-hint=1` 编码 shift 源（其余 MINIMAL_FLAGS），得到
+   `[TD, seq(enable_order_hint=1), K(order_hint=0), TD, I1(order_hint=1)]`。
+   （`reference_select` 在 I1 帧头的 trace 位 136。）
+2. **手工拼接第三帧**：追加 `[TD, I1 的字节副本]` 作为 I2
+   （生成器的 `splice_*` 机制就是干这个的形状，参考
+   `splice_loop_filter_deltas`）。
+3. 依序打 6 个补丁（都用 `_split_bits`/`_pack_bits` 的位级补丁，
+   trace 位号→payload 偏移按 `patch_header_fields` 的公式）：
+   - K 帧 `order_hint` 0 → **7**（让 slot 0 的 hint 跑到 I2 前面）；
+   - I2 帧 `ref_frame_idx[1]`（LAST2）0 → **1**（让 LAST2 指向 slot 1=I1）；
+   - I2 帧 `order_hint` 1 → **2**；
+   - I2 帧 `reference_select` 0 → **1**；
+   - 再 trace 一次拿到 `skip_mode_present` 的位号，0 → **1**。
+   推导核对：I2(hint=2) 看 K(hint=7)：`rel=+5>0`（backward），
+   看 I1(hint=1)：`rel=-1<0`（forward）⇒ `skipModeAllowed=1`。
+4. dav1d 解这条拼接流即为 golden（拼接/补丁流的验收口径与
+   `inter_cdf_inherit` / `inter_compound` 相同：逐样本复现 dav1d）。
+5. 然后把 `if header.skip_mode_present { return false }` 从帧门删掉，
+   用同一模板生成测试（header 全字段对 trace + inter 帧 `[0,0,0]`）。
+
+## 四、备选路径（可能更省事）
+
+仓库里的 AVIF 动画样本（`avif_grid_animation_test.mbt`）本身是多帧流，
+若其中某一帧的两条参考携带不同 order hint（libaom 的 animation 路径不开
+order hint 的话此路不通，先查它的 sequence header），则可以直接在其上打
+`reference_select` + `skip_mode_present` 两个位，省掉拼接与 hint 补丁。

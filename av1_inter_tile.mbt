@@ -1331,10 +1331,13 @@ pub fn av1_inter_frame_supported(
   // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
   // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
   // same stream is refused rather than decoded.
-  // `skip_mode` stays refused on its own: AV1 §6.8.14 only reads it when
-  // `skipModeAllowed`, which needs `reference_select` to be 1, but a skip-mode
-  // block copies both references and both vectors from the frame's
-  // SkipModeFrames pair, and that derivation is not implemented yet.
+  // `skip_mode` stays refused until its stream is pinned: skip-mode blocks copy
+  // both references and both motion vectors from the frame's SkipModeFrames
+  // pair, and the derivation is reachable only from a stream whose two
+  // references carry distinct order hints - a three-frame stream, which this
+  // aomenc build cannot produce (it crashes past two frames). The block-level
+  // wiring is in place (see `av1_read_ref_frames`); the gate goes when a
+  // fixture exercises it against dav1d.
   if header.skip_mode_present {
     return false
   }
