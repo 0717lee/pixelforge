@@ -3633,3 +3633,52 @@ comp_mode=1（compound 块）+ 该块 compound_idx=0"的流。用插桩 dav1d �
 | native / js / wasm-gc | 各 1247/1247 |
 | DISTANCE 混合 | 代码就位，**未核验**（搜索记录如上） |
 | wedge / DIFFWTD | 未实现 |
+
+---
+
+# 第五十一次推进补充（2026-09-22，interintra 触发器可用，但表格有分歧且语法面更大）
+
+## 一、好消息：interintra 的触发器是**等宽位补丁**，确定可用
+
+`enable_interintra_compound` 是序列头里的 1 位字段（`_refs/av1spec06.md:229`），
+等宽改写 ⇒ 头布局不变、tile 位不动，只是块层多读一个符号。实测：把
+`inter_minimal_64x64` 的序列头该位 0→1 后，dav1d 的符号流在第 1051 个读处
+与基线分岔（基线 `1 4524 2` vs 补丁 `1 2531 1`），且总数 1176→1128
+——证明 `interintra` 符号确实被读且改变了后续解码。用同样补丁搜索 60+ 个
+候选（4 源 × 8 cq、36 个自定义边缘源、4 个头部宽度变体）确认：等宽补丁本身
+总有效，只是多数源里没有 8x8..32x32 的 inter 块（`read_interintra_mode` 的
+`MiSize >= BLOCK_8X8 && <= BLOCK_32X32` 条件，spec av1spec06.md:2876）。
+
+## 二、阻塞点：默认表三方不一致，动手前必须解决
+
+同一个 `Default_Inter_Intra_Cdf`：
+
+| 来源 | 行 |
+| --- | --- |
+| 本仓库 `av1_inter_intra`（go-av1 生成） | `{26887} {27597} {30237}`（3 行） |
+| go-av1 `cdf/tables_interintra_gen.go` | 同上（3 行） |
+| dav1d 1.2.1 `src/cdf.c:237` | `{16384} {26887} {27597} {30237}`（**4 行**） |
+| libaom（记忆中的 `default_interintra_cdf`） | `{26887} {9872} {13615}`（3 行，第三家） |
+
+规范只给了 ctx（`Size_Group[MiSize] - 1`）没给默认值（默认表不在本机
+`_refs/av1spec06/09.md` 的常量节里）。⇒ 下一轮第一步应当是**用 dav1d 的
+插桩实测确定行号**：在补丁流的符号日志里，`interintra` 读取的 `cdf[0]` 与
+上面四组之一对齐即可定表与 ctx；观测到的分岔行 `2531` 与四组都不等，说明
+行号/索引还要再查（dav1d 的 `interintra` 是 4 行，`ctx` 可能不是
+`Size_Group-1` 而是别的东西，或 Size_Group 的取值域不同）。
+
+## 三、语法面（比想象大）
+
+`read_interintra_mode`（av1spec06.md:2875）在 `interintra=1` 时还读：
+`interintra_mode`（4 符号，选 II_DC/V/H/SMOOTH 预测）、`wedge_interintra`
+（1 符号）、`wedge_index`——再加上**块内 intra 预测**（要接现有 intra 预测核）
+与 §7.11.3.17 的**混合权重**。粗略估计还要 250+ 行加一个可触发样本，
+单独一格放不下，故本轮只记录不实现。
+
+## 四、状态
+
+| 检查 | 结果 |
+| --- | --- |
+| native / js / wasm-gc | 各 1247/1242（本轮无代码改动） |
+| interintra 触发器 | 等宽序列头补丁，**有效** |
+| interintra 默认表 | **三方不一致，未解决** |
