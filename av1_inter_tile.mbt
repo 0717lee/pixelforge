@@ -570,7 +570,105 @@ fn av1_inter_predict(
           None => return false
         }
         let second_name = field.refs[unit + 1]
-        let prediction = if second_name > av1_intra_frame {
+        // Every branch below interpolates the block's own vector with its own
+        // filters; only the compound one needs a second request.
+        let single_request : Av1MotionRequest = {
+          reference,
+          frame_width: info.mi_cols * 4,
+          frame_height: info.mi_rows * 4,
+          plane,
+          x: base_x + x,
+          y: base_y + y,
+          width: pred_w,
+          height: pred_h,
+          mv_row: field.mv_rows[unit],
+          mv_col: field.mv_cols[unit],
+          filter_vertical: field.interp_v[(cand_row + r) * field.cols + cand_col + c],
+          filter_horizontal: field.interp_h[(cand_row + r) * field.cols + cand_col + c],
+          compound: false,
+        }
+        let prediction = if block.interintra != 0 {
+          // An interintra block mixes the motion-compensated prediction with an
+          // intra one of this block's neighbourhood (AV1 §7.11.3.10). The intra
+          // edges come from the reconstructed neighbourhood, and the weight is
+          // either the mode-variant ramp or a wedge mask.
+          let inter = av1_motion_compensate(single_request)
+          let px = base_x + x
+          let py = base_y + y
+          let above : Array[Int] = []
+          let left : Array[Int] = []
+          if py > 0 {
+            for i in 0..<pred_w {
+              let col = if px + i < target.width { px + i } else { target.width - 1 }
+              above.push(target.pixels[(py - 1) * target.width + col])
+            }
+          }
+          if px > 0 {
+            for i in 0..<pred_h {
+              let row = if py + i < target.height { py + i } else { target.height - 1 }
+              left.push(target.pixels[row * target.width + px - 1])
+            }
+          }
+          let corner = if px > 0 && py > 0 {
+            target.pixels[(py - 1) * target.width + px - 1]
+          } else {
+            1 << (state.bit_depth - 1)
+          }
+          let intra = match
+            av1_intra_predict(
+              av1_interintra_mode(block.interintra_mode),
+              pred_w,
+              pred_h,
+              above,
+              left,
+              corner,
+              state.bit_depth,
+              have_above=py > 0,
+              have_left=px > 0,
+            ) {
+            Some(value) => value
+            None => return false
+          }
+          let weights = if block.wedge_interintra == 0 {
+            // The intra-variant ramp: the intra share along one axis, scaled by
+            // the block's larger dimension (AV1 §7.11.3.17).
+            let big = if pred_w < pred_h { pred_h } else { pred_w }
+            let scale = 128 / big
+            let built = Array::make(pred_w * pred_h, 0)
+            for i in 0..<pred_h {
+              for j in 0..<pred_w {
+                built[i * pred_w + j] = av1_ii_weight(block.interintra_mode, i, j, scale)
+              }
+            }
+            built
+          } else {
+            // The wedge mask on this plane's grid (AV1 §7.11.3.11, §7.11.3.14).
+            // An interintra wedge always codes a zero sign.
+            let mask = av1_wedge_plane_mask(
+              block.block_width,
+              block.block_height,
+              block.wedge_index_ii,
+              0,
+              sub_x,
+              sub_y,
+            )
+            match mask {
+              Some(value) => value
+              None => return false
+            }
+          }
+          let hi = (1 << state.bit_depth) - 1
+          let blended = Array::make(inter.length(), 0)
+          for k in 0..<blended.length() {
+            let m = weights[k]
+            // `interPostRound` is zero for a single-reference block, so the
+            // motion-compensated prediction blends unrounded (AV1 §7.11.3.14).
+            let p0 = if inter[k] < 0 { 0 } else if inter[k] > hi { hi } else { inter[k] }
+            let v = (m * intra[k] + (64 - m) * p0 + 32) >> 6
+            blended[k] = if v < 0 { 0 } else if v > hi { hi } else { v }
+          }
+          blended
+        } else if second_name > av1_intra_frame {
           // COMPOUND_AVERAGE: both lists interpolate with the block's own
           // filters, and the intermediate results are averaged one step later
           // than a single-reference decode rounds them (AV1 §7.11.3.10,
@@ -638,26 +736,7 @@ fn av1_inter_predict(
           }
           blended
         } else {
-          let request : Av1MotionRequest = {
-            reference,
-            frame_width: info.mi_cols * 4,
-            frame_height: info.mi_rows * 4,
-            plane,
-            x: base_x + x,
-            y: base_y + y,
-            width: pred_w,
-            height: pred_h,
-            mv_row: field.mv_rows[unit],
-            mv_col: field.mv_cols[unit],
-            filter_vertical: field.interp_v[(cand_row + r) * field.cols +
-            cand_col +
-            c],
-            filter_horizontal: field.interp_h[(cand_row + r) * field.cols +
-            cand_col +
-            c],
-            compound: false,
-          }
-          av1_motion_compensate(request)
+          av1_motion_compensate(single_request)
         }
         av1_motion_store(
           target.pixels,

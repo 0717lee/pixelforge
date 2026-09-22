@@ -188,10 +188,17 @@ exercise it.
 `inter_interintra_64x64` reaches the interintra grammar: one equal-width bit in
 the sequence header (`enable_interintra_compound`, bit 69 of that OBU) is
 rewritten on the `ramp` group, so the block layer reads the `interintra`
-symbol where libaom would not. Its inter frame is refused whole - a block
-selects the mode, and the blend needs the intra predictor wired into the
-inter path - so this fixture is the fence for that work, like the other
-tool gates. dav1d's planes for the same stream are committed as its truth.
+symbol where libaom would not. One 32x32 block of the inter frame selects the
+mode, and it selects the **wedge** variant, so both halves of the blend are
+pinned: the intra predictor runs on the block's reconstructed neighbourhood,
+the intra-variant ramp and the wedge mask are built per the spec, and chroma
+takes the luma wedge mask averaged down to its own sample grid. The test
+reconstructs the inter frame and counts every sample of every plane against
+dav1d's output for the same OBU, so the blend is verified rather than assumed.
+What remains outside this fixture's reach: the non-wedge blend is only
+reachable on the 8x8..32x32 sizes (and is implemented on the same code path),
+and `interintra` itself never appears on a size above 32x32 or a compound
+block, which the spec's `BLOCK_8X8..BLOCK_32X32` window excludes anyway.
 
 ## What these fixtures do not cover
 

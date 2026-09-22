@@ -92,7 +92,7 @@ pub fn av1_motion_field(Int, Int) -> Av1MotionField
 
 pub fn av1_motion_field_estimation(Av1SequenceInfo, Int, Array[Int], Array[Av1RefFrame?], Int, Int) -> Av1MotionFieldGrid
 
-pub fn av1_motion_field_store(Av1MotionField, Int, Int, Int, Int, Int, Array[Int], Array[Int], Array[Int], skip? : Int, skip_mode? : Int, interp? : Array[Int]) -> Unit
+pub fn av1_motion_field_store(Av1MotionField, Int, Int, Int, Int, Int, Array[Int], Array[Int], Array[Int], skip? : Int, skip_mode? : Int, interp? : Array[Int], compound_idx? : Int, comp_group_idx? : Int) -> Unit
 
 pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
@@ -179,6 +179,10 @@ pub fn av1_video_decode_frame(Av1VideoDecoder, Array[Byte], allow_monochrome? : 
 pub fn av1_video_decoder() -> Av1VideoDecoder
 
 pub let av1_warp_samples_scan_limit : Int
+
+pub fn av1_wedge_mask(Int, Int, Int, Int) -> Array[Int]?
+
+pub fn av1_wedge_shape_ok(Int, Int) -> Bool
 
 pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
@@ -451,7 +455,16 @@ pub(all) struct Av1InterBlock {
   mut mv_col : Int
   mut mv_row1 : Int
   mut mv_col1 : Int
+  mut interintra : Int
+  mut interintra_mode : Int
+  mut wedge_interintra : Int
+  mut wedge_index_ii : Int
   mut compound_type : Int
+  mut compound_idx : Int
+  mut comp_group_idx : Int
+  mut wedge_index : Int
+  mut wedge_sign : Int
+  mut mask_type : Int
   mut interp_vertical : Int
   mut interp_horizontal : Int
   mut ref_mv_idx : Int
@@ -467,6 +480,7 @@ pub(all) struct Av1InterFrame {
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
   reference_select : Bool
+  enable_interintra_compound : Bool
   ref_distances : Array[Int]
   enable_masked_compound : Bool
   enable_jnt_comp : Bool
@@ -500,6 +514,8 @@ pub(all) struct Av1MotionField {
   refs : Array[Int]
   mv_rows : Array[Int]
   mv_cols : Array[Int]
+  compound_idxs : Array[Int]
+  comp_group_idxs : Array[Int]
 }
 
 pub(all) struct Av1MotionFieldGrid {

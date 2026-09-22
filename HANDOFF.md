@@ -3760,3 +3760,61 @@ dav1d 用 `dav1d_ymode_size_context[bs]`（`src/tables.c:250`）作行号：
    `Wedge_Codebook`，只是 `wedge_sign=0`）；
 3. 随后把 `read_interintra_mode` 末尾的 `false` 改成正常返回，围栏测试改成
    `[0,0,0]`。
+
+# 第五十四次推进补充（2026-09-22，interintra 混合本体闭合：样本 [0,0,0]）
+
+## 一、已落地
+
+- **`av1_wedge_mask.mbt`（新文件）**：按 AV1 §7.11.3.11 的
+  `initialise_wedge_mask_table` 生成楔形掩码表。三张一维母列
+  （`Wedge_Master_Oblique_Odd/Even/Vertical`，go-av1 `decode/wedge.go` 逐字）、
+  六张 64x64 主表（OBLIQUE63 的主列按 `shift=MASK_MASTER_SIZE/4` 起逐行
+  减 1 采样，OBLIQUE27/HORIZONTAL 是转置，OBLIQUE117/153 是翻转取补），
+  `Wedge_Codebook[3][16][3]` 与 `Wedge_Bits`。每块掩码的符号约定是：
+  边框行+列的平均值 < 32 时，`wedge_sign=0` 取**掩码本身**，否则取补
+  （spec 的 `flipSign` 语义）。`av1_wedge_plane_mask` 再把 luma 掩码按
+  平面下采样：4:2:2 是两列取整平均、4:2:0 是 2x2 取整平均，即 §7.11.3.14
+  掩码混合里的 `Round2(...,1)` / `Round2(...,2)`。
+- **`av1_inter_predict` 的 interintra 分支**：先用 `single_request` 做运动
+  补偿，再按平面用 `av1_intra_predict` 做 intra 预测（边沿取自**已重建**
+  的邻域，与 dav1d 的 `mc`+`prepare_intra_edges`+`blend` 顺序一致），最后
+  统一混合 `(m*intra + (64-m)*inter + 32) >> 6`。非 wedge 变体的权重是
+  `av1_ii_weight`（`Ii_Weights_1d[i*sizeScale]`，`sizeScale=128/max(w,h)`）；
+  wedge 变体走 `av1_wedge_plane_mask`。单参考块的 `interPostRound` 是 0，
+  所以 inter 预测不额外取整（这一点对着 dav1d 的 `blend_px` 宏核对过）。
+- **顺手修掉两个真 bug**：
+  1. `wedge_interintra` / `wedge_index` 的 CDF 索引原本按"高/宽/方"取 0/1/2，
+     **错**：它们按**块尺寸**索引（AV1 §9.3.8-9，dav1d 的
+     `dav1d_wedge_ctx_lut[bs]` 即 8x8→0、8x16→1、16x8→2、16x16→3、
+     16x32→4、32x16→5、32x32→6、8x32→7、32x8→8；我们仓库的 22 行表
+     `av1_wedge_inter_intra`/`av1_wedge_index` 本身就是按 bsize 排的，
+     只是索引用错了）。这是会让熵解码器**失步**的错误。
+  2. interintra 块**根本不读** `motion_mode` 符号（AV1 §5.11.26：条件里有
+     `b->interintra_type == INTER_INTRA_NONE`），原来会多读一个符号。
+- `av1_read_interintra_mode` 末尾的 `false` 改回 `true`；wedge 变体还要求
+  `av1_wedge_shape_ok(w,h)`（该尺寸不支持 wedge 时拒绝整帧）。
+- `Wedge_Bits` 的 22 行索引此前有一处偏差（go-av1 表在 16X4 位置记了 4、
+  32X8 位置记 0）；以 dav1d 的 `wedge_allowed_mask` 为准改成
+  8x8..32x32 + 8X32 + 32X8 九个尺寸为 4，其余 0。
+
+## 二、样本
+
+`inter_interintra_64x64`（`ramp` 组 + 序列头 bit 69 等宽补丁）：inter 帧
+从"整帧拒绝"变成**逐样本等于 dav1d**，[0, 0, 0]，三个平面全测。该样本
+8x8..32x32 里有一个块选中 interintra，且选的是 **wedge 变体**（插桩 dav1d
+与我们的符号读取一致），所以楔形掩码与非楔形权重两条路都被真实像素钉住了。
+参考真值由 `dav1d -i inter_interintra_64x64.obu` 现生成、与 manifest 的
+sha256 一致。`--check` 仍是 18 个样本。
+
+另：旧的拒绝式测试把 fixture 切分写成了 84（正确是 71，`frame_obus` 返回
+`[(13,15,54),(71,73,25)]`）。用 84 切会让 inter 单元残缺、解码必然失败，
+所以那条断言是**空转**的；新测试按两个时间单元的边界切分。
+
+## 三、欠账与下一轮
+
+- `av1_wedge_mask` 每次调用重建六张 64x64 主表（约两万五千次写）。wedge 块
+  一帧只有个位数，实测可接受；若日后出现密集 wedge 的流再考虑缓存。
+- compound 的 wedge/DIFFWTD 掩码可以复用 `av1_wedge_mask`（compound 要读
+  `wedge_sign`，interintra 恒为 0），但 `enable_masked_compound` 的帧级门
+  仍拒绝，且触发器无解（第五十次补充记录了 50 个候选的搜索结论）。
+- segmentation、全局运动仍拒绝。

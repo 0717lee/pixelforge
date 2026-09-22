@@ -1,6 +1,32 @@
 # Changelog
 
 ## Unreleased
+- Implemented the interintra blend and closed its gate. A block that selects
+  `interintra` now rebuilds itself as an intra prediction of its reconstructed
+  neighbourhood mixed into the motion-compensated one (AV1 §7.11.3.10,
+  §7.11.3.14): the intra predictor runs on the plane's own grid, the weight is
+  the `Ii_Weights_1d` ramp for the non-wedge variant or the `WedgeMasks`
+  table for the wedge one, chroma takes the luma wedge mask averaged down to
+  its sample grid with the spec's rounding, and `interPostRound` is zero for a
+  single-reference block so the inter prediction blends unrounded.
+  `av1_wedge_mask.mbt` builds the wedge tables: the three 1-D master columns,
+  the six 64x64 directions, the `Wedge_Codebook` rows, and the per-block
+  sign convention of §7.11.3.11 - a mask whose border row and column average
+  below 32 is stored complemented.
+- Found and fixed two bugs while wiring it. `wedge_interintra` and `wedge_index`
+  are indexed by the **block size** (AV1 §9.3.8-9), not by a shape row; an
+  earlier round read them through a tall/wide/square helper, which would have
+  desynchronised the entropy decoder on any interintra block. And an
+  interintra block reads **no** `motion_mode` symbol at all (AV1 §5.11.26) -
+  its second list is the intra prediction, so the overlapped/warped choices do
+  not apply to it.
+- `inter_interintra_64x64` now reconstructs instead of refusing: its inter
+  frame compares sample-exact against dav1d at [0, 0, 0] on all three planes.
+  One 32x32 block selects the mode and selects the wedge variant, so both the
+  ramp and the mask are pinned by real pixels. Its earlier refusal test was
+  also wrong about the fixture split (byte 84 instead of byte 71), which made
+  it vacuous; the new test walks the two temporal units as the reference
+  decoder does.
 - Implemented the interintra grammar and opened its gate. A frame whose
   sequence header carries `enable_interintra_compound` now reads
   `interintra` for every inter block from 8x8 to 32x32, with
@@ -9,10 +35,11 @@
   not the spec's `Size_Group - 1` for every block size (the handoff records
   the mapping, and the earlier note that the three references disagreed on
   the default table was wrong - dav1d's `CDF1(x)` is `32768 - x`, so the
-  tables agree). A block that actually selects the mode refuses the frame
-  whole, because the blend needs the intra predictor in the inter path.
+  tables agree). When this landed, a block that actually selected the mode
+  refused the frame whole, because the blend needs the intra predictor in the
+  inter path; that fence is replaced by the blend itself further down.
   `inter_interintra_64x64` pins it: one equal-width bit in the sequence
-  header, the grammar read, the frame refused, dav1d's planes committed.
+  header, the grammar read, dav1d's planes committed.
 - Implemented the distance-weighted compound blend and its syntax, and fixed a
   real bug found on the way: `compound_idx` and `compound_type` are different
   symbols with different tables (AV1 §5.11.25 / §8.3). The distance-versus-

@@ -1097,6 +1097,11 @@ fn av1_read_motion_mode(
   if block.skip_mode || !info.frame.is_motion_mode_switchable {
     return true
   }
+  // An interintra block keeps one vector, so the motion-mode symbol is gone
+  // from its syntax (AV1 §5.11.26).
+  if block.interintra != 0 {
+    return true
+  }
   let smaller = if block.block_width < block.block_height {
     block.block_width
   } else {
@@ -1383,10 +1388,10 @@ fn av1_inter_block_motion(
 ///|
 /// read_interintra_mode( isCompound ) (AV1 §5.11.25): an inter block between
 /// 8x8 and 32x32 codes one symbol saying whether it also mixes in an intra
-/// prediction. The row is dav1d's `ymode_size_context` minus one (the mapping
-/// table is in the handoff); a block that picks the mode needs the intra
-/// predictor and the blend, so the frame is refused rather than averaged from
-/// a prediction this decoder does not have.
+/// prediction, then the intra mode and - for the wedge variant - the wedge
+/// index. The `interintra` and `interintra_mode` rows are dav1d's
+/// `ymode_size_context` minus one; the two wedge tables are indexed by the
+/// block size itself (AV1 §9.3.8-9).
 fn av1_read_interintra_mode(
   decoder : Av1SymbolDecoder,
   info : Av1InterInfo,
@@ -1396,7 +1401,8 @@ fn av1_read_interintra_mode(
   if !info.enable_interintra_compound || block.ref_frame1 > av1_intra_frame {
     return true
   }
-  if !(block.width4 >= 2 && block.height4 >= 2 &&
+  if !(block.width4 >= 2 &&
+    block.height4 >= 2 &&
     block.width4 <= 8 &&
     block.height4 <= 8) {
     return true
@@ -1417,18 +1423,59 @@ fn av1_read_interintra_mode(
     return false
   }
   block.interintra_mode = decoder.symbol(info.cdfs.inter_intra_mode[ctx])
-  let wedge_ctx = av1_wedge_shape(block.width4 * 4, block.height4 * 4)
+  let wedge_ctx = match
+    av1_intra_block_index(block.width4 * 4, block.height4 * 4) {
+    Some(index) => index
+    None => return false
+  }
   if wedge_ctx < 0 || wedge_ctx >= info.cdfs.wedge_inter_intra.length() {
     return false
   }
   block.wedge_interintra = decoder.symbol(info.cdfs.wedge_inter_intra[wedge_ctx])
   if block.wedge_interintra != 0 {
+    if !av1_wedge_shape_ok(block.width4 * 4, block.height4 * 4) {
+      return false
+    }
     if wedge_ctx >= info.cdfs.wedge_index.length() {
       return false
     }
     block.wedge_index_ii = decoder.symbol(info.cdfs.wedge_index[wedge_ctx])
   }
-  false
+  true
+}
+
+/// The intra-variant blend weights (AV1 §7.11.3.17 `ii_weights_1d`,
+/// go-av1 `decode/interintra_tables.go`): the intra share along one axis,
+/// scaled by the block's larger dimension.
+let av1_ii_weights : Array[Int] = [
+  60, 58, 56, 54, 52, 50, 48, 47, 45, 44, 42, 41, 39, 38, 37, 35, 34, 33, 32, 31,
+  30, 29, 28, 27, 26, 25, 24, 23, 22, 22, 21, 20, 19, 19, 18, 18, 17, 16, 16, 15,
+  15, 14, 14, 13, 13, 12, 12, 12, 11, 11, 10, 10, 10, 9, 9, 9, 8, 8, 8, 8, 7, 7,
+  7, 7, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3,
+  3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+]
+
+///|
+/// The intra mode an `interintra_mode` symbol selects (AV1 §5.11.25).
+fn av1_interintra_mode(mode : Int) -> Int {
+  match mode {
+    1 => AV1_INTRA_V
+    2 => AV1_INTRA_H
+    3 => AV1_INTRA_SMOOTH
+    _ => AV1_INTRA_DC
+  }
+}
+
+///|
+/// The intra-variant blend weight at one sample (AV1 §7.11.3.17).
+fn av1_ii_weight(mode : Int, i : Int, j : Int, scale : Int) -> Int {
+  match mode {
+    1 => av1_ii_weights[i * scale]
+    2 => av1_ii_weights[j * scale]
+    3 => av1_ii_weights[(if i < j { i } else { j }) * scale]
+    _ => 32
+  }
 }
 
 ///|
@@ -1450,17 +1497,6 @@ fn av1_ymode_size_context(width : Int, height : Int) -> Int {
 }
 
 ///|
-/// dav1d's wedge-codebook shape row: 0 tall, 1 wide, 2 square.
-fn av1_wedge_shape(width : Int, height : Int) -> Int {
-  if height > width {
-    0
-  } else if height < width {
-    1
-  } else {
-    2
-  }
-}
-
 ///|
 /// read_compound_type( isCompound ) (AV1 §5.11.25): which blend a compound
 /// block uses. With both masked-compound switches off - what the frame gate
