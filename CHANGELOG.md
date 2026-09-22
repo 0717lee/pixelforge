@@ -1,6 +1,27 @@
 # Changelog
 
 ## Unreleased
+- `inter_diffwtd_64x64` pins the difference-weighted blend end to end against
+  dav1d at [0, 0, 0]. It needs three bit rewrites, the third of which is a new
+  capability in the generator: `tile_patches` flips one bit inside a frame's
+  tile entropy, which changes how the symbols after it decode. That is the only
+  way to reach a masked blend at all, because libaom never emits a compound
+  block for a two-frame group - with the tile bit unchanged, `comp_mode` decodes
+  zero everywhere and `comp_group_idx` is never read.
+- Found and fixed five more long-standing bugs along the way, again all on a
+  path only a compound block reaches: a compound block in GLOBAL_GLOBALMV takes
+  each list's frame-level global motion rather than a stack candidate; the
+  NEAREST_NEWMV and NEAR_NEWMV modes mark a neighbour as new-motion for the
+  depth-reference index and the context, matching libdav1d's `0xbc` mode mask;
+  the compound `comp_inter_mode` row is the reference-motion context halved, so
+  2 and 3 share a row; the near-motion reference context scales the match count
+  by three before saturating at four; and the compound extended candidate merge
+  read its different-reference scratch slots from the wrong offset.
+- `_refs/mvstack_sim.py` had the same two gaps (its `NEWMV_MODES` set and the
+  reference-motion scaling). Both are corrected against libdav1d, and the six
+  affected oracle vectors in `av1_mv_oracle_wbtest.mbt` are regenerated - five of
+  them only in the raw new-motion count, which the entropy context itself does
+  not consult beyond whether it is zero.
 - Implemented the masked-compound grammar and blends, and closed the
   `enable_masked_compound` frame gate. `read_compound_type` now reads
   `comp_group_idx`, and when a block asks for a masked blend it reads

@@ -3960,3 +3960,58 @@ same/diff 四槽、global 兜底、合并规则照 dav1d），原来这里是直
   整帧拒绝；现在门拆掉后逐样本等于 dav1d（`av1_inter_reference_wbtest.mbt`
   那条测试的断言已从"拒绝"改成"重建并比对"，[0,0,0]）。这是个新增的已验证
   覆盖面。
+
+# 第五十八次推进补充（2026-09-23，DIFFWTD 逐样本闭合：tile_patches + 五个新 bug）
+
+## 一、触发器的完整配方（三处补丁）
+
+1. 序列头 bit 70（`enable_masked_compound`）0→1；
+2. 帧头 bit 136（`reference_select`）0→1，让块读 `comp_mode`；
+3. **瓦片载荷一比特**：帧 1 payload 第 17 字节（绝对偏移 105）bit 5 0→1。
+
+前两处是等宽头部改写；第三处改变后续所有符号的解码结果，是**让 compound 块
+存在**的唯一手段——libaom 在两帧组里永远不选 compound（两个参考都指向同一
+关键帧）。翻转后 dav1d 的插桩显示一个 32x8 块读成
+`comp_group_idx=1 → compound_type=DIFFWTD`。
+
+生成器新增 `tile_patches`（与 `seq_patch`/`patches` 正交，带 `expect` 断言）。
+
+## 二、逐样本定位问题的办法（可复用）
+
+在 `av1_msac.mbt` 的 `Av1SymbolDecoder::symbol` 里打印每个符号解码后的
+`symbol_range`，与 dav1d 开启 `DEBUG_BLOCK_INFO`（`src/recon.h` 里改成
+`#define DEBUG_BLOCK_INFO 1`）后 `r=` 的值做子序列比对：dav1d 每个
+`Post-xxx` 打印一个点，我们的流水账更细，跳过 dav1d 不打印的那些即可比对。用
+这个办法本轮定位了 5 个 bug（每个都让差集降一截）。
+
+## 三、本轮的五个新 bug（全部只在 compound 路径上）
+
+1. **GLOBAL_GLOBALMV 的 compound 赋值**：两表都该取帧级全局运动，我们却从候选
+   栈复制。
+2. **NEARST_NEWMV / NEAR_NEWMV 没算 newmv**：`av1_mode_has_newmv` 只认 4 个模式，
+   少 2 个；dav1d 是 `(1 << mode) & 0xbc` = {2,3,4,5,7} 五个 compound 模式加
+   单参考 NEWMV。
+3. **compound `comp_inter_mode` 的行号**：行 = `refmv_context >> 1`（2 和 3 共
+   行），我原来是 clamp 到 0..2 再索引。
+4. **refmv_context 的缩放**：near 行是 `min(3*matches, 4)`，不是 `2+matches`；
+   close=0 行是 `min(matches, 2)`。
+5. **compound 扩展候选的合并**：从 diff 槽（槽 2/3）复制时写错了源槽。
+
+## 四、oracle 的修订（两处同源更正）
+
+`_refs/mvstack_sim.py` 的 `NEWMV_MODES` 少了 NEARST_NEW/NEAR_NEW，refmv 缩放
+也用了 `2+matches`；两处都按 dav1d 更正，`av1_mv_oracle_wbtest.mbt` 里 6 个向量
+的上下文元组随之更新（5 个只差 newmv 原始计数——熵上下文只关心是否为 0）。
+sim 的 frame helper 模板同时也落后于 `Av1MvFrame` 的字段，已同步（否则重新
+生成会编译不过）。
+
+## 五、当前状态
+
+- `inter_diffwtd_64x64`：inter 帧三平面对 dav1d **[0,0,0]**，`--check` 13 个
+  样本（原来 12）。
+- `general_inter_64x64` 上一轮已转为可解且逐样本一致。
+- **阶段 C 的 compound 相关门（`reference_select`、`enable_jnt_comp`、
+  `enable_masked_compound`）全部闭合**；剩下的是 `enable_segmentation`、
+  全局运动（`gm_type != IDENTITY`），以及 wedge 变体的像素级验证（掩码表已
+  144/144 钉住，但还没有触发 wedge 的流——DIFFWTD 的流里那个块读的是
+  `compound_type=1`；再找一个 bit 翻转让 `wedge_comp` 解出 0 即可）。

@@ -26,6 +26,12 @@
       "reference_sha256": "0ad74d68b8604589ed3958ef5fadb2793337271c542a2d01a4c4bed3f7098351"
     },
     {
+      "command": "aomenc encode of the `shift` source with the inter_distcomp_64x64 flags, then three bits rewritten: `reference_select` (frame header, see patch_header_fields), the sequence header's `enable_masked_compound` 0->1 (see seq_patch), and one bit of frame 1's tile payload (byte 17, bit 5, see tile_patches). The last one is what makes a 32x8 block decode COMPOUND_DIFFWTD.",
+      "name": "inter_diffwtd_64x64",
+      "obu_sha256": "8855f585b5b6d740b9d4f639c63ebbd5e407b1701ea504158c5db0c5c68597d5",
+      "reference_sha256": "cc5252a61d9ed986ac7d6f0cd0a26d81b46ece6e03bfd6614b50b78941899c57"
+    },
+    {
       "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=16 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_edge_64x16.check.obu C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_edge_64x16.input.y4m",
       "name": "inter_edge_64x16",
       "obu_sha256": "c9adbfc4c69e841eefe72a29147fc9414fcd920a29e2046ab21040655a067ba5",

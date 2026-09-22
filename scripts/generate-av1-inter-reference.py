@@ -651,6 +651,63 @@ FIXTURES = [
         "decode_frames": 1,
     },
     {
+        # The difference-weighted compound blend. Two header edits plus one bit
+        # of the inter frame's tile entropy: the same `reference_select` bit
+        # that opens the compound grammar, `enable_masked_compound` in the
+        # sequence header, and one flipped bit of the tile payload (byte 17 of
+        # frame 1's payload). The first two are equal-width header rewrites;
+        # the third changes how the symbols after it decode, which is what makes
+        # a compound block exist at all - libaom never emits one for a
+        # two-frame group. A 32x8 block then reads `comp_group_idx` 1 and
+        # `compound_type` as COMPOUND_DIFFWTD.
+        "name": "inter_diffwtd_64x64",
+        "patched_encode": {
+            "append_frame_copy": False,
+            "input": "shift",
+            "flags": [
+                "--error-resilient=0",
+                "--enable-dual-filter=0",
+                "--enable-order-hint=1",
+                "--enable-diff-wtd-comp=1",
+                "--enable-dist-wtd-comp=1",
+                "--enable-masked-comp=0",
+                "--enable-ref-frame-mvs=0",
+                "--enable-warped-motion=0",
+                "--enable-obmc=0",
+                "--enable-global-motion=0",
+                "--enable-interintra-comp=0",
+                "--enable-interinter-wedge=0",
+                "--enable-interintra-wedge=0",
+                "--enable-onesided-comp=0",
+                "--enable-tx64=0",
+                "--enable-intrabc=0",
+                "--enable-palette=0",
+            ],
+            "patches": [
+                {"frame": 1, "bit": 136, "width": 1, "expect": 0, "value": 1},
+            ],
+            "seq_patch": {"bit": 70, "width": 1, "expect": 0, "value": 1},
+            "tile_patches": [
+                {"frame": 1, "offset": 17, "bit": 5, "expect": 0},
+            ],
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 1,
+            },
+        ],
+        "sequence_expectations": {
+            "enable_masked_compound": 1,
+        },
+        "decode_frames": 1,
+    },
+    {
         "name": "inter_interintra_64x64",
         "patched_encode": {
             "append_frame_copy": False,

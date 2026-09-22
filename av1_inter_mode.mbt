@@ -808,12 +808,14 @@ fn av1_read_inter_mode(
   }
   if block.ref_frame1 > av1_intra_frame {
     // A compound block reads one symbol: NEAREST_NEARESTMV or NEW_NEWMV.
+    // The compound row is the reference-motion context halved, so 2 and 3 share
+    // a row while 4, 5 and anything larger saturate at row two (AV1 §8.3).
     let row = if stack.refmv_context < 0 {
       0
-    } else if stack.refmv_context > 2 {
+    } else if stack.refmv_context > 5 {
       2
     } else {
-      stack.refmv_context
+      stack.refmv_context >> 1
     }
     let column = if stack.newmv_context < 0 {
       0
@@ -967,6 +969,15 @@ fn av1_assign_mv(
   stack : Av1MvStack,
 ) -> Bool {
   if block.ref_frame1 > av1_intra_frame {
+    // GLOBAL_GLOBALMV takes each list's frame-level global motion, which is
+    // not on the candidate stack at all (AV1 §7.10.2.4).
+    if av1_compound_both_global(block.y_mode) {
+      block.mv_row = stack.global_rows[0]
+      block.mv_col = stack.global_cols[0]
+      block.mv_row1 = stack.global_rows[1]
+      block.mv_col1 = stack.global_cols[1]
+      return true
+    }
     // Compound: both lists take the same mode, so NEW_NEWMV codes a fresh
     // vector per list against that list's candidate, and NEAREST_NEARESTMV
     // copies the nearest candidate of each list.

@@ -382,8 +382,13 @@ fn av1_mv_inside(block : Av1MvBlock, row : Int, col : Int) -> Bool {
 /// Does this mode carry a freshly coded motion vector? How often the answer is
 /// yes feeds the new-mv context.
 fn av1_mode_has_newmv(mode : Int) -> Bool {
+  // The single-reference NEWMV and the five compound modes with a NEWMV
+  // constituent in either list: NEARST_NEWMV, NEW_NEARSTMV, NEAR_NEWMV,
+  // NEW_NEARMV and NEW_NEWMV.
   mode == av1_mode_new_mv ||
+  mode == av1_mode_nearest_new_mv ||
   mode == av1_mode_new_nearest_mv ||
+  mode == av1_mode_near_new_mv ||
   mode == av1_mode_new_near_mv ||
   mode == av1_mode_new_new_mv
 }
@@ -813,15 +818,15 @@ fn av1_extra_search(
     }
     let diff = counts[list + 2]
     if diff != 0 {
-      av1_ext_move(ext_rows, ext_cols, m + 0, list, m + 0, list, ext_rows, ext_cols)
-      // diff[0] is slot 2 when list is 0 and slot 2 when list is 1; the list
-      // picks the field, so a single move covers both.
+      // The different-reference candidates live in scratch slots 2 and 3; the
+      // list picks which field of them is read, so one slot covers both lists.
+      av1_ext_move(ext_rows, ext_cols, m, list, 2, list, ext_rows, ext_cols)
       m = m + 1
       if m == 2 {
         continue
       }
       if diff == 2 {
-        av1_ext_move(ext_rows, ext_cols, m + 0, list, 3, list, ext_rows, ext_cols)
+        av1_ext_move(ext_rows, ext_cols, m, list, 3, list, ext_rows, ext_cols)
         continue
       }
     }
@@ -1148,10 +1153,15 @@ fn av1_stack_contexts(
     } else {
       1
     }
-    stack.refmv_context = stack.total_matches
+    let near = if stack.total_matches > 2 { 2 } else { stack.total_matches }
+    stack.refmv_context = near
   } else if stack.close_matches == 1 {
     stack.newmv_context = 3 - (if new_count < 1 { new_count } else { 1 })
-    stack.refmv_context = 2 + stack.total_matches
+    // The near-motion row scales the match count by three before saturating,
+    // so a block with one near match but no further match starts the context
+    // at zero rather than two (AV1 §8.3).
+    let scaled = stack.total_matches * 3
+    stack.refmv_context = if scaled > 4 { 4 } else { scaled }
   } else {
     stack.newmv_context = 5 - (if new_count < 1 { new_count } else { 1 })
     stack.refmv_context = 5

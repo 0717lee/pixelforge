@@ -157,6 +157,19 @@ masked-compound switches off, so `read_compound_type` resolves to
 COMPOUND_AVERAGE without a symbol; a stream that asks for a wedge or a
 distance weighting is still refused whole.
 
+`inter_diffwtd_64x64` pins the difference-weighted compound blend. Its base is
+the same `shift` encode as `inter_distcomp_64x64`, and it takes **three** bit
+rewrites: the `reference_select` bit that opens the compound grammar, the
+sequence header's `enable_masked_compound` (bit 70), and **one bit of the inter
+frame's tile entropy** (byte 17 of frame 1's payload, bit 5). The first two are
+equal-width header rewrites. The third is what makes the blend reachable at all:
+it changes how the symbols after it decode, and with it a 32x8 block reads
+`comp_group_idx` 1 and `compound_type` as COMPOUND_DIFFWTD. libaom itself never
+emits a compound block for a two-frame group - both references alias the one key
+frame - so without a tile rewrite no stream can ask for a masked blend. The test
+reconstructs the inter frame and compares all three planes against dav1d's
+output on the same OBU.
+
 `inter_skipmode_64x64` is the only three-frame fixture here, and it has to be:
 skip mode's derivation needs two references with order hints on either side of
 the frame's own hint, which a two-frame encode cannot express. The generator

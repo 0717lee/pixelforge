@@ -778,7 +778,7 @@ test "mv stack geom4x1_at4_4_n15" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (1, 1, 0, 0, 1, 1),
+    (1, 1, 0, 0, 1, 2),
   )
 }
 
@@ -823,7 +823,7 @@ test "mv stack geom4x1_at1_4_n16" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (1, 1, 0, 0, 1, 0),
+    (1, 1, 0, 0, 1, 1),
   )
 }
 
@@ -1043,7 +1043,7 @@ test "mv stack geom8x2_at1_6_n20" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (3, 4, 0, 1, 2, 0),
+    (3, 4, 0, 1, 2, 1),
   )
 }
 
@@ -1405,7 +1405,7 @@ test "mv stack geom16x4_at4_4_n27" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (1, 2, 0, 0, 2, 1),
+    (1, 2, 0, 0, 2, 2),
   )
 }
 
@@ -1548,7 +1548,7 @@ test "mv stack geom4x16_at2_2_n29" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (4, 5, 0, 2, 2, 5),
+    (4, 5, 0, 2, 2, 7),
   )
 }
 
@@ -1675,7 +1675,7 @@ test "mv stack geom4x16_at4_4_n31" {
       stack.total_matches,
       stack.newmv_count,
     ),
-    (5, 5, 0, 2, 2, 0),
+    (4, 5, 0, 2, 2, 2),
   )
 }
 
