@@ -569,26 +569,85 @@ fn av1_inter_predict(
           Some(value) => value
           None => return false
         }
-        let request : Av1MotionRequest = {
-          reference,
-          frame_width: info.mi_cols * 4,
-          frame_height: info.mi_rows * 4,
-          plane,
-          x: base_x + x,
-          y: base_y + y,
-          width: pred_w,
-          height: pred_h,
-          mv_row: field.mv_rows[unit],
-          mv_col: field.mv_cols[unit],
-          filter_vertical: field.interp_v[(cand_row + r) * field.cols +
-          cand_col +
-          c],
-          filter_horizontal: field.interp_h[(cand_row + r) * field.cols +
-          cand_col +
-          c],
-          compound: false,
+        let second_name = field.refs[unit + 1]
+        let prediction = if second_name > av1_intra_frame {
+          // COMPOUND_AVERAGE: both lists interpolate with the block's own
+          // filters, and the intermediate results are averaged one step later
+          // than a single-reference decode rounds them (AV1 §7.11.3.10,
+          // `interPostRound`). The wedge and distance-weighted blends need the
+          // masked-compound machinery and are refused before prediction.
+          let filter_vertical = field.interp_v[(cand_row + r) * field.cols +
+            cand_col +
+            c]
+          let filter_horizontal = field.interp_h[(cand_row + r) * field.cols +
+            cand_col +
+            c]
+          let first_request : Av1MotionRequest = {
+            reference,
+            frame_width: info.mi_cols * 4,
+            frame_height: info.mi_rows * 4,
+            plane,
+            x: base_x + x,
+            y: base_y + y,
+            width: pred_w,
+            height: pred_h,
+            mv_row: field.mv_rows[unit],
+            mv_col: field.mv_cols[unit],
+            filter_vertical,
+            filter_horizontal,
+            compound: true,
+          }
+          let second_reference = match av1_inter_reference(info, second_name) {
+            Some(value) => value
+            None => return false
+          }
+          let second_request : Av1MotionRequest = {
+            reference: second_reference,
+            frame_width: info.mi_cols * 4,
+            frame_height: info.mi_rows * 4,
+            plane,
+            x: base_x + x,
+            y: base_y + y,
+            width: pred_w,
+            height: pred_h,
+            mv_row: field.mv_rows[unit + 1],
+            mv_col: field.mv_cols[unit + 1],
+            filter_vertical,
+            filter_horizontal,
+            compound: true,
+          }
+          let first = av1_motion_compensate(first_request)
+          let second = av1_motion_compensate(second_request)
+          let post = if state.bit_depth == 12 { 2 } else { 4 }
+          let shift = 1 + post
+          let bias = 1 << (shift - 1)
+          let blended = Array::make(first.length(), 0)
+          for k in 0..<blended.length() {
+            blended[k] = (first[k] + second[k] + bias) >> shift
+          }
+          blended
+        } else {
+          let request : Av1MotionRequest = {
+            reference,
+            frame_width: info.mi_cols * 4,
+            frame_height: info.mi_rows * 4,
+            plane,
+            x: base_x + x,
+            y: base_y + y,
+            width: pred_w,
+            height: pred_h,
+            mv_row: field.mv_rows[unit],
+            mv_col: field.mv_cols[unit],
+            filter_vertical: field.interp_v[(cand_row + r) * field.cols +
+            cand_col +
+            c],
+            filter_horizontal: field.interp_h[(cand_row + r) * field.cols +
+            cand_col +
+            c],
+            compound: false,
+          }
+          av1_motion_compensate(request)
         }
-        let prediction = av1_motion_compensate(request)
         av1_motion_store(
           target.pixels,
           target.width,
@@ -1210,9 +1269,9 @@ fn av1_inter_tile_block(
     current.width4,
     current.height4,
     current.y_mode,
-    [current.ref_frame, av1_none_frame],
-    [current.mv_row, 0],
-    [current.mv_col, 0],
+    [current.ref_frame, current.ref_frame1],
+    [current.mv_row, current.mv_row1],
+    [current.mv_col, current.mv_col1],
     skip=current.skip,
     skip_mode=if current.skip_mode { 1 } else { 0 },
     interp=[current.interp_vertical, current.interp_horizontal],
@@ -1272,16 +1331,13 @@ pub fn av1_inter_frame_supported(
   // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
   // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
   // same stream is refused rather than decoded.
-  if header.reference_select || header.skip_mode_present {
+  // `skip_mode` stays refused on its own: AV1 §6.8.14 only reads it when
+  // `skipModeAllowed`, which needs `reference_select` to be 1, but a skip-mode
+  // block copies both references and both vectors from the frame's
+  // SkipModeFrames pair, and that derivation is not implemented yet.
+  if header.skip_mode_present {
     return false
   }
-  // Ordering note: `skip_mode_present` is listed after `reference_select` on
-  // purpose. AV1 §6.8.14 only reads it when `skipModeAllowed`, which requires
-  // `reference_select` to be 1, so a frame that reaches this line with
-  // `skip_mode_present` set has already been refused by `reference_select`.
-  // Removing either entry alone would unblock the other; the pair has to go
-  // together, and `skip_mode` itself (a compound block whose motion is copied
-  // from two reference frames) is not implemented either.
   if sequence.enable_interintra_compound || sequence.enable_masked_compound {
     return false
   }

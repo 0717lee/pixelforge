@@ -3311,3 +3311,67 @@ compound 与全局运动（warped、temporal MV 已在阶段 C 前几轮落地�
 | native / js / wasm-gc | 各 1242/1242 |
 | `inter_cdf_inherit_64x64` | `[0,0,0]`（已提交，0f058a1） |
 | 下一刀 | 本补充第三节 |
+
+---
+
+# 第四十五次推进补充（2026-09-22，阶段 C 第二刀：compound 预测落地，`reference_select` 门解除）
+
+## 一、结果
+
+- **compound 预测实现完成**：`comp_mode`/`comp_ref_type` 读路径、双参考双运动
+  向量、`compound_mode` 符号、compound 插值滤波上下文组、COMPOUND_AVERAGE
+  混合（含 compound 中间取整 round1=7 与 `interPostRound` 混合）。
+- **`reference_select` 门已移除**；`skip_mode` 仍整帧拒绝（它的两条参考与两个
+  向量来自 `SkipModeFrames` 推导，是下一刀）。masked compound / interintra
+  仍在帧门拒绝。
+- **新样本 `inter_compound_64x64`**：`inter_shift_64x64` 的 `reference_select`
+  由 0 补丁成 1（同样只动一个头部位），块层改读 `comp_mode`，原本按单参考编码
+  的 tile 位被按 compound 解释。对 dav1d **`[0,0,0]`**。
+- native / js / wasm-gc 各 **1244/1244**（新增 2 个测试）；
+  `generate-av1-inter-reference.py --check`：**verified 9 fixtures**。
+
+## 二、样本来源的关键事实
+
+现有全部样本的 `reference_select` 本来就是 0，且**规范上它只依赖
+`!FrameIsIntra`**（`_refs/av1spec06.md:1491` `frame_reference_mode`），与
+`enable_order_hint` 无关——因此补丁这个位是合法且语义确定的（dav1d 对同一条
+补丁流的解码即真值，实测三次运行 md5 一致）。这与第四十四次补充里
+"aomenc 不为该内容选 compound" 的结论合起来解释了为什么必须用补丁法。
+
+## 三、实现要点（代码入口）
+
+- `av1_inter_mode.mbt`：
+  - `Av1InterCdfs` 新增 `comp_mode` / `comp_ref_type` / `compound_mode` /
+    `uni_comp_ref` / `comp_ref` / `comp_bwd_ref` / `compound_type`（表原本就在
+    `av1_inter_tables.mbt`，只是没接进 cdfs 结构体）。
+  - `Av1InterBlock` 新增 `ref_frame1` / `mv_row1` / `mv_col1`；
+    `Av1InterInfo`/`Av1InterFrame` 新增 `reference_select` /
+    `enable_masked_compound` / `enable_jnt_comp`。
+  - 新函数：`av1_comp_mode_ctx`、`av1_comp_ref_type_ctx`（规范 §8.3 上下文）、
+    `av1_read_compound_refs`（comp_ref_type 的 uni/bidir 两棵树）、
+    `av1_read_compound_type`（两个 masked 开关关闭时直接 AVERAGE、不读符号）、
+    `av1_compound_mode_ctx_map`（规范 `Compound_Mode_Ctx_Map`）。
+  - 修改：`av1_read_ref_frames`（comp_mode 分支）、`av1_read_inter_mode`
+    （compound 分支）、`av1_read_drl_idx`（NEW_NEWMV 走 new_mv 树）、
+    `av1_assign_mv`（compound 两列表）、`av1_interp_filter_ctx`
+    （compound 行组 `((dir&1)*2+compound)*4`）、`av1_inter_block_motion`
+    （`find_mv_stack` 传入 compound 与 [ref0, ref1]）。
+- `av1_inter_tile.mbt`：`av1_inter_predict` 里 compound 块做两次
+  `av1_motion_compensate`（`compound: true`）后按
+  `(p0+p1+16)>>5`（8 位）/`(p0+p1+4)>>3`（12 位）混合；
+  `av1_motion_field_store` 写入 [ref0, ref1] 与两个 MV；
+  帧门移除 `reference_select`、保留 `skip_mode_present`。
+
+## 四、下一步入口
+
+1. **skip_mode**：需要实现 `SkipModeFrames` 的推导
+   （规范 6.8.14 `skip_mode_params`：由 `forwardIdx`/`backwardIdx` 与
+   `skip_mode_frame` 选出两条参考），块级 `read_ref_frames` 的首支
+   （`if (skip_mode)`）直接用其结果并跳过参考符号。
+2. **masked compound**（wedge / DISTWTD）：需要 mask 生成
+   （规范 7.11.3.14 + `Wedge_Bits`/`Wedge_Master`/`Diffwtd_Master` 表）与
+   `compound_type` 符号读取；`build_wedge_mask`/`build_diffwtd_mask`
+   在 go-av1 的 `decode/compound.go` 有现成形状。
+3. **interintra compound**：intra/inter 混合（规范 `read_interintra_mode`）。
+4. **segmentation** 与 **全局运动**（`gm_type != IDENTITY`）：帧门的后两个拒绝
+   条件仍在（av1_inter_tile.mbt 的 `av1_inter_frame_supported`）。

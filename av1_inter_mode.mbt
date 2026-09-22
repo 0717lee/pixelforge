@@ -79,6 +79,13 @@ priv struct Av1InterCdfs {
   mv_bit : Array[Array[Array[Array[Int]]]]
   mv_fr : Array[Array[Array[Int]]]
   mv_hp : Array[Array[Array[Int]]]
+  comp_mode : Array[Array[Int]]
+  comp_ref_type : Array[Array[Int]]
+  compound_mode : Array[Array[Int]]
+  uni_comp_ref : Array[Array[Array[Int]]]
+  comp_ref : Array[Array[Array[Int]]]
+  comp_bwd_ref : Array[Array[Array[Int]]]
+  compound_type : Array[Array[Int]]
 }
 
 ///|
@@ -125,6 +132,13 @@ fn av1_inter_cdfs() -> Av1InterCdfs {
     }),
     mv_fr: av1_mv_ctx_rows(av1_mv_fr_cdfs()),
     mv_hp: av1_mv_ctx_comp_rows(av1_mv_hp_cdfs()),
+    comp_mode: av1_comp_mode_cdfs(),
+    comp_ref_type: av1_comp_ref_type_cdfs(),
+    compound_mode: av1_compound_mode_cdfs(),
+    uni_comp_ref: av1_uni_comp_ref_cdfs(),
+    comp_ref: av1_comp_ref_cdfs(),
+    comp_bwd_ref: av1_comp_bwd_ref_cdfs(),
+    compound_type: av1_compound_type_cdfs(),
   }
 }
 
@@ -143,6 +157,13 @@ priv struct Av1InterInfo {
   enable_dual_filter : Bool
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
+  /// `reference_select`: whether `read_ref_frames` may read `comp_mode` at all.
+  reference_select : Bool
+  /// Sequence-level masked-compound switches. `read_compound_type` reads its
+  /// symbols only when one of them is set; the frame gate refuses such frames,
+  /// so the decoder here rejects the stream instead of guessing a blend.
+  enable_masked_compound : Bool
+  enable_jnt_comp : Bool
   /// Frame dimensions in MI units; the motion field spans the whole frame.
   mi_cols : Int
   mi_rows : Int
@@ -171,8 +192,14 @@ pub(all) struct Av1InterBlock {
   mut is_inter : Bool
   mut y_mode : Int
   mut ref_frame : Int
+  /// The second reference name of a compound block (`av1_none_frame` for a
+  /// single-reference block). AV1 5.11.25 `read_ref_frames` fills both names.
+  mut ref_frame1 : Int
   mut mv_row : Int
   mut mv_col : Int
+  /// The second motion vector of a compound block, in its reference's units.
+  mut mv_row1 : Int
+  mut mv_col1 : Int
   /// Vertical and horizontal subpel filter, in the order the syntax codes them.
   mut interp_vertical : Int
   mut interp_horizontal : Int
@@ -211,8 +238,11 @@ fn av1_inter_block(
     is_inter: false,
     y_mode: 0,
     ref_frame: av1_intra_frame,
+    ref_frame1: av1_none_frame,
     mv_row: 0,
     mv_col: 0,
+    mv_row1: 0,
+    mv_col1: 0,
     interp_vertical: av1_interp_eighttap,
     interp_horizontal: av1_interp_eighttap,
     ref_mv_idx: 0,
@@ -309,6 +339,107 @@ fn av1_field_skip_mode(field : Av1MotionField, row : Int, col : Int) -> Int {
 }
 
 ///|
+/// AV1's `checkBackward`: whether a reference name sits in the backward half of
+/// the reference list. The comp_mode and comp_ref_type contexts use it.
+fn av1_ref_is_backward(name : Int) -> Bool {
+  name >= av1_bwd_ref_frame && name <= av1_alt_ref_frame
+}
+
+///|
+/// AV1's `isSamedirRefPair`: whether two names point the same way.
+fn av1_samedir_ref_pair(ref0 : Int, ref1 : Int) -> Bool {
+  (ref0 >= av1_bwd_ref_frame) == (ref1 >= av1_bwd_ref_frame)
+}
+
+///|
+/// comp_mode context (AV1 §8.3). Reads the two neighbours' reference pairs: a
+/// single-reference or intra neighbour collapses to one name, a compound one
+/// keeps both, and the context counts how far each sits into the backward half.
+fn av1_comp_mode_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
+  let above = av1_neighbour_pair(info.field, block.mi_row - 1, block.mi_col)
+  let left = av1_neighbour_pair(info.field, block.mi_row, block.mi_col - 1)
+  let above_intra = above[0] == av1_intra_frame
+  let left_intra = left[0] == av1_intra_frame
+  let above_single = above[1] == av1_none_frame
+  let left_single = left[1] == av1_none_frame
+  if block.avail_u && block.avail_l {
+    if above_single && left_single {
+      (if av1_ref_is_backward(above[0]) { 1 } else { 0 }) ^
+      (if av1_ref_is_backward(left[0]) { 1 } else { 0 })
+    } else if above_single {
+      2 + (if av1_ref_is_backward(above[0]) || above_intra { 1 } else { 0 })
+    } else if left_single {
+      2 + (if av1_ref_is_backward(left[0]) || left_intra { 1 } else { 0 })
+    } else {
+      4
+    }
+  } else if block.avail_u {
+    if above_single {
+      if av1_ref_is_backward(above[0]) { 1 } else { 0 }
+    } else {
+      3
+    }
+  } else if block.avail_l {
+    if left_single {
+      if av1_ref_is_backward(left[0]) { 1 } else { 0 }
+    } else {
+      3
+    }
+  } else {
+    1
+  }
+}
+
+///|
+/// comp_ref_type context (AV1 §8.3): whether each neighbour is single- or
+/// compound-reference, and for compound ones whether the pair points one way.
+fn av1_comp_ref_type_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
+  let above = av1_neighbour_pair(info.field, block.mi_row - 1, block.mi_col)
+  let left = av1_neighbour_pair(info.field, block.mi_row, block.mi_col - 1)
+  let a0 = above[0]
+  let a1 = above[1]
+  let l0 = left[0]
+  let l1 = left[1]
+  let above_intra = a0 == av1_intra_frame
+  let left_intra = l0 == av1_intra_frame
+  let above_comp = block.avail_u && !above_intra && a1 != av1_none_frame
+  let left_comp = block.avail_l && !left_intra && l1 != av1_none_frame
+  let above_uni = above_comp && av1_samedir_ref_pair(a0, a1)
+  let left_uni = left_comp && av1_samedir_ref_pair(l0, l1)
+  let samedir = if av1_samedir_ref_pair(a0, l0) { 1 } else { 0 }
+  if block.avail_u && !above_intra && block.avail_l && !left_intra {
+    if !above_comp && !left_comp {
+      1 + 2 * samedir
+    } else if !above_comp {
+      if !left_uni { 1 } else { 3 + samedir }
+    } else if !left_comp {
+      if !above_uni { 1 } else { 3 + samedir }
+    } else if !above_uni && !left_uni {
+      0
+    } else if !above_uni || !left_uni {
+      2
+    } else {
+      3 +
+      (if (a0 == av1_bwd_ref_frame) == (l0 == av1_bwd_ref_frame) { 1 } else { 0 })
+    }
+  } else if block.avail_u && block.avail_l {
+    if above_comp {
+      1 + 2 * (if above_uni { 1 } else { 0 })
+    } else if left_comp {
+      1 + 2 * (if left_uni { 1 } else { 0 })
+    } else {
+      2
+    }
+  } else if above_comp {
+    4 * (if above_uni { 1 } else { 0 })
+  } else if left_comp {
+    4 * (if left_uni { 1 } else { 0 })
+  } else {
+    2
+  }
+}
+
+///|
 /// read_ref_frames( ) (AV1 §5.11.24): the binary tree over the seven named
 /// reference frames. The tree context counts how often each name appears in the
 /// two neighbours, forward against backward.
@@ -319,6 +450,14 @@ fn av1_read_ref_frames(
 ) -> Bool {
   if block.skip_mode {
     return true
+  }
+  // A compound block codes two reference names; a single one keeps the second
+  // at NONE, which is what its neighbours and the predictor read.
+  block.ref_frame1 = av1_none_frame
+  if info.reference_select && block.width4 >= 2 && block.height4 >= 2 {
+    if decoder.symbol(info.cdfs.comp_mode[av1_comp_mode_ctx(info, block)]) != 0 {
+      return av1_read_compound_refs(decoder, info, block)
+    }
   }
   let left = av1_neighbour_pair(info.field, block.mi_row, block.mi_col - 1)
   let above = av1_neighbour_pair(info.field, block.mi_row - 1, block.mi_col)
@@ -411,6 +550,157 @@ fn av1_read_ref_frames(
 }
 
 ///|
+/// The compound half of `read_ref_frames` (AV1 §5.11.25): `comp_ref_type`
+/// selects the unidirectional or the bidirectional pair, and each shape then
+/// names its two references from the same neighbour-count contexts the single
+/// tree uses. `read` mirrors the single tree's `symbol` helper but borrows the
+/// table, so each pair keeps its own defaults.
+fn av1_read_compound_refs(
+  decoder : Av1SymbolDecoder,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+) -> Bool {
+  let left = av1_neighbour_pair(info.field, block.mi_row, block.mi_col - 1)
+  let above = av1_neighbour_pair(info.field, block.mi_row - 1, block.mi_col)
+  let counts = fn(name) {
+    let mut count = 0
+    if block.avail_u {
+      if above[0] == name {
+        count = count + 1
+      }
+      if above[1] == name {
+        count = count + 1
+      }
+    }
+    if block.avail_l {
+      if left[0] == name {
+        count = count + 1
+      }
+      if left[1] == name {
+        count = count + 1
+      }
+    }
+    count
+  }
+  let read = fn(
+    table : Array[Array[Array[Int]]],
+    index : Int,
+    counts0 : Int,
+    counts1 : Int,
+  ) -> Int {
+    let ctx = av1_ref_count_ctx(counts0, counts1)
+    if ctx >= table.length() || index >= table[ctx].length() {
+      -1
+    } else {
+      decoder.symbol(table[ctx][index])
+    }
+  }
+  if decoder.symbol(info.cdfs.comp_ref_type[av1_comp_ref_type_ctx(info, block)]) != 0 {
+    // Unidirectional: both names point the same way.
+    let forward = counts(av1_last_frame) +
+      counts(av1_last2_frame) +
+      counts(av1_last3_frame) +
+      counts(av1_golden_frame)
+    let backward = counts(av1_bwd_ref_frame) +
+      counts(av1_alt_ref2_frame) +
+      counts(av1_alt_ref_frame)
+    if read(info.cdfs.uni_comp_ref, 0, forward, backward) == 1 {
+      block.ref_frame = av1_bwd_ref_frame
+      block.ref_frame1 = av1_alt_ref_frame
+      return true
+    }
+    let p1 = read(
+      info.cdfs.uni_comp_ref,
+      1,
+      counts(av1_last2_frame),
+      counts(av1_last3_frame) + counts(av1_golden_frame),
+    )
+    if p1 < 0 {
+      return false
+    }
+    if p1 == 0 {
+      block.ref_frame = av1_last_frame
+      block.ref_frame1 = av1_last2_frame
+      return true
+    }
+    let p2 = read(
+      info.cdfs.uni_comp_ref,
+      2,
+      counts(av1_last3_frame),
+      counts(av1_golden_frame),
+    )
+    if p2 < 0 {
+      return false
+    }
+    if p2 == 1 {
+      block.ref_frame = av1_last_frame
+      block.ref_frame1 = av1_golden_frame
+    } else {
+      block.ref_frame = av1_last_frame
+      block.ref_frame1 = av1_last3_frame
+    }
+    return true
+  }
+  // Bidirectional: a forward name, then a backward one.
+  let ctx_ref = read(
+    info.cdfs.comp_ref,
+    0,
+    counts(av1_last_frame) + counts(av1_last2_frame),
+    counts(av1_last3_frame) + counts(av1_golden_frame),
+  )
+  if ctx_ref < 0 {
+    return false
+  }
+  if ctx_ref == 0 {
+    let p1 = read(
+      info.cdfs.comp_ref,
+      1,
+      counts(av1_last_frame),
+      counts(av1_last2_frame),
+    )
+    if p1 < 0 {
+      return false
+    }
+    block.ref_frame = if p1 == 1 { av1_last2_frame } else { av1_last_frame }
+  } else {
+    let p2 = read(
+      info.cdfs.comp_ref,
+      2,
+      counts(av1_last3_frame),
+      counts(av1_golden_frame),
+    )
+    if p2 < 0 {
+      return false
+    }
+    block.ref_frame = if p2 == 1 { av1_golden_frame } else { av1_last3_frame }
+  }
+  let ctx_bwd = read(
+    info.cdfs.comp_bwd_ref,
+    0,
+    counts(av1_bwd_ref_frame) + counts(av1_alt_ref2_frame),
+    counts(av1_alt_ref_frame),
+  )
+  if ctx_bwd < 0 {
+    return false
+  }
+  if ctx_bwd == 0 {
+    let p1 = read(
+      info.cdfs.comp_bwd_ref,
+      1,
+      counts(av1_bwd_ref_frame),
+      counts(av1_alt_ref2_frame),
+    )
+    if p1 < 0 {
+      return false
+    }
+    block.ref_frame1 = if p1 == 1 { av1_alt_ref2_frame } else { av1_bwd_ref_frame }
+  } else {
+    block.ref_frame1 = av1_alt_ref_frame
+  }
+  true
+}
+
+///|
 /// The two reference names stored at one MI unit, for the reference-count
 /// contexts. An unwritten or intra neighbour reports INTRA_FRAME and NONE.
 fn av1_neighbour_pair(
@@ -429,6 +719,15 @@ fn av1_neighbour_pair(
 }
 
 ///|
+/// `Compound_Mode_Ctx_Map` (AV1 §8.3): the compound_mode context from the
+/// reference-count and new-MV stack contexts.
+let av1_compound_mode_ctx_map : Array[Array[Int]] = [
+  [0, 1, 1, 1, 1],
+  [1, 2, 3, 4, 4],
+  [4, 4, 5, 6, 7],
+]
+
+///|
 /// The mode tree of §5.11.24: whether the block codes a fresh vector, falls back
 /// to the frame's global motion, or reuses one of the stacked candidates.
 fn av1_read_inter_mode(
@@ -439,6 +738,30 @@ fn av1_read_inter_mode(
 ) -> Bool {
   if block.skip_mode {
     block.y_mode = av1_mode_nearest_mv
+    return true
+  }
+  if block.ref_frame1 > av1_intra_frame {
+    // A compound block reads one symbol: NEAREST_NEARESTMV or NEW_NEWMV.
+    let row = if stack.refmv_context < 0 {
+      0
+    } else if stack.refmv_context > 2 {
+      2
+    } else {
+      stack.refmv_context
+    }
+    let column = if stack.newmv_context < 0 {
+      0
+    } else if stack.newmv_context > 4 {
+      4
+    } else {
+      stack.newmv_context
+    }
+    let ctx = av1_compound_mode_ctx_map[row][column]
+    if ctx >= info.cdfs.compound_mode.length() {
+      return false
+    }
+    block.y_mode = av1_mode_nearest_nearest_mv +
+      decoder.symbol(info.cdfs.compound_mode[ctx])
     return true
   }
   if stack.newmv_context < 0 || stack.newmv_context >= info.cdfs.new_mv.length() {
@@ -486,7 +809,8 @@ fn av1_read_drl_idx(
   block : Av1InterBlock,
   stack : Av1MvStack,
 ) -> Bool {
-  let new_mv = block.y_mode == av1_mode_new_mv
+  // A compound block's NEW_NEWMV is the new-MV tree applied to both lists.
+  let new_mv = block.y_mode == av1_mode_new_mv || block.y_mode == av1_mode_new_new_mv
   let near_mv = av1_has_nearmv(block.y_mode)
   if !new_mv && !near_mv {
     // Only those two trees exist; every other mode names its candidate already.
@@ -523,6 +847,32 @@ fn av1_assign_mv(
   block : Av1InterBlock,
   stack : Av1MvStack,
 ) -> Bool {
+  if block.ref_frame1 > av1_intra_frame {
+    // Compound: both lists take the same mode, so NEW_NEWMV codes a fresh
+    // vector per list against that list's candidate, and NEAREST_NEARESTMV
+    // copies the nearest candidate of each list.
+    let fresh = block.y_mode == av1_mode_new_new_mv
+    if block.ref_mv_idx < 0 || block.ref_mv_idx >= av1_ref_mv_stack_size {
+      return false
+    }
+    let position = if !fresh || stack.count > 1 { block.ref_mv_idx } else { 0 }
+    let first = av1_stack_mv(stack, position, 0)
+    let second = av1_stack_mv(stack, position, 1)
+    if fresh {
+      let diff0 = av1_read_mv(decoder, info)
+      let diff1 = av1_read_mv(decoder, info)
+      block.mv_row = first.0 + diff0.0
+      block.mv_col = first.1 + diff0.1
+      block.mv_row1 = second.0 + diff1.0
+      block.mv_col1 = second.1 + diff1.1
+    } else {
+      block.mv_row = first.0
+      block.mv_col = first.1
+      block.mv_row1 = second.0
+      block.mv_col1 = second.1
+    }
+    return true
+  }
   if block.y_mode == av1_mode_global_mv {
     block.mv_row = stack.global_rows[0]
     block.mv_col = stack.global_cols[0]
@@ -833,7 +1183,10 @@ fn av1_interp_filter_ctx(
   block : Av1InterBlock,
   direction : Int,
 ) -> Int {
-  let ctx = (direction & 1) * 8
+  // AV1 §8.3: the direction and the compound flag select the row group, the
+  // neighbours' filters the offset inside it.
+  let compound = if block.ref_frame1 > av1_intra_frame { 1 } else { 0 }
+  let ctx = ((direction & 1) * 2 + compound) * 4
   let mut left = 3
   let mut above = 3
   if block.avail_l &&
@@ -930,14 +1283,14 @@ fn av1_inter_block_motion(
         height4: block.height4,
         block_width: block.block_width,
         block_height: block.block_height,
-        refs: [block.ref_frame, av1_none_frame],
+        refs: [block.ref_frame, block.ref_frame1],
         tile_row_start: info.tile_row_start,
         tile_row_end: info.tile_row_end,
         tile_col_start: info.tile_col_start,
         tile_col_end: info.tile_col_end,
       },
       info.frame,
-      false,
+      block.ref_frame1 > av1_intra_frame,
     ) {
     Some(value) => value
     None => return false
@@ -954,7 +1307,30 @@ fn av1_inter_block_motion(
   if !av1_read_motion_mode(decoder, info, block) {
     return false
   }
+  if !av1_read_compound_type(decoder, info, block) {
+    return false
+  }
   av1_read_interp_filter(decoder, info, block)
+  true
+}
+
+///|
+/// read_compound_type( isCompound ) (AV1 §5.11.25): which blend a compound
+/// block uses. With both masked-compound switches off - what the frame gate
+/// already insists on - the answer is COMPOUND_AVERAGE and no symbol is read.
+/// A stream that asks for a wedge or a distance weighting is refused rather
+/// than averaged, because those blends are not implemented.
+fn av1_read_compound_type(
+  decoder : Av1SymbolDecoder,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+) -> Bool {
+  if block.ref_frame1 <= av1_intra_frame {
+    return true
+  }
+  if info.enable_masked_compound || info.enable_jnt_comp {
+    return false
+  }
   true
 }
 
@@ -972,6 +1348,9 @@ pub(all) struct Av1InterFrame {
   enable_dual_filter : Bool
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
+  reference_select : Bool
+  enable_masked_compound : Bool
+  enable_jnt_comp : Bool
   mi_cols : Int
   mi_rows : Int
 }
@@ -1028,6 +1407,9 @@ pub fn av1_inter_frame_of(
     enable_dual_filter: sequence.enable_dual_filter,
     skip_mode_present: header.skip_mode_present,
     skip_mode_frame: header.skip_mode_frame,
+    reference_select: header.reference_select,
+    enable_masked_compound: sequence.enable_masked_compound,
+    enable_jnt_comp: sequence.enable_jnt_comp,
     mi_cols,
     mi_rows,
   })
@@ -1055,6 +1437,9 @@ fn av1_inter_info(
     enable_dual_filter: config.enable_dual_filter,
     skip_mode_present: config.skip_mode_present,
     skip_mode_frame: config.skip_mode_frame,
+    reference_select: config.reference_select,
+    enable_masked_compound: config.enable_masked_compound,
+    enable_jnt_comp: config.enable_jnt_comp,
     mi_cols: config.mi_cols,
     mi_rows: config.mi_rows,
     tile_row_start,

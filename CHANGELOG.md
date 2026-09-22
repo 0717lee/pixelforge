@@ -1,6 +1,32 @@
 # Changelog
 
 ## Unreleased
+- Implemented compound inter prediction and closed the `reference_select` gate.
+  A block with `reference_select` set now reads `comp_mode` (AV1 §5.11.24,
+  `TileCompModeCdf` with the §8.3 context), and a compound block then reads its
+  two reference names through `comp_ref_type`'s unidirectional or bidirectional
+  tree (`uni_comp_ref`, `comp_ref`, `comp_bwd_ref`), both against the
+  neighbour-count contexts the single-reference tree already used. The motion
+  side follows: `find_mv_stack` is called with the compound flag (its machinery
+  was already built), `inter_block_mode_info` reads the `compound_mode` symbol
+  (`NEAREST_NEARESTMV` or `NEW_NEWMV`, with `RefMvContext`/`NewMvContext`
+  mapped through `Compound_Mode_Ctx_Map`), `assign_mv` reads one `read_mv` per
+  reference list against that list's candidate, and the interpolation-filter
+  context gains the compound row group. The prediction averages both lists'
+  interpolations with the compound intermediate rounding (`round1 = 7`) and the
+  spec's `interPostRound` blend - 16ths of a sample on 8-bit, quarters on
+  12-bit - exactly as libdav1d blends them.
+- `inter_compound_64x64` pins the path: `inter_shift_64x64` with one header
+  byte rewritten, `reference_select` 0 to 1, so a tile coded for a
+  single-reference frame decodes as compound blocks. The generated test asserts
+  every frame-header field against the FFmpeg transcript and compares
+  reconstruction against dav1d sample for sample at `[0, 0, 0]`; the fixture
+  joins the generator's `patch_header_fields` family, so
+  `generate-av1-inter-reference.py --check` re-derives and re-verifies it.
+- `skip_mode` stays refused: it is a compound block whose references and both
+  motion vectors are copied from the frame's `SkipModeFrames` pair, and that
+  derivation is the next slice. Masked compound (wedge and distance weighted)
+  and inter-intra compound stay refused at the frame gate as before.
 - Closed the stage-B inter fixture: `inter_cdf_inherit_64x64`'s inter frame now
   matches dav1d sample for sample (`[0, 0, 0]`, was `[3992, 842, 928]`), the
   production loader (`av1_cdf_load_enabled`) is on, and the OBU and its dav1d

@@ -446,8 +446,11 @@ pub(all) struct Av1InterBlock {
   mut is_inter : Bool
   mut y_mode : Int
   mut ref_frame : Int
+  mut ref_frame1 : Int
   mut mv_row : Int
   mut mv_col : Int
+  mut mv_row1 : Int
+  mut mv_col1 : Int
   mut interp_vertical : Int
   mut interp_horizontal : Int
   mut ref_mv_idx : Int
@@ -462,6 +465,9 @@ pub(all) struct Av1InterFrame {
   enable_dual_filter : Bool
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
+  reference_select : Bool
+  enable_masked_compound : Bool
+  enable_jnt_comp : Bool
   mi_cols : Int
   mi_rows : Int
 }

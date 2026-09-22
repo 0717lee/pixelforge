@@ -487,6 +487,62 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    {
+        "name": "inter_compound_64x64",
+        "patch": {
+            "base": "inter_shift_64x64",
+            "patches": [
+                {
+                    "frame": 1,
+                    "bit": 128,
+                    "width": 1,
+                    "expect": 0,
+                    "value": 1,
+                },
+            ],
+        },
+        "flags": MINIMAL_FLAGS,
+        "frames": [
+            {
+                "show_existing_frame": 0,
+                "frame_type": 0,
+                "show_frame": 1,
+                "disable_frame_end_update_cdf": 0,
+            },
+            {
+                "show_existing_frame": 0,
+                "frame_type": 1,
+                "show_frame": 1,
+                "error_resilient_mode": 0,
+                "disable_cdf_update": 0,
+                "allow_screen_content_tools": 0,
+                "primary_ref_frame": 7,
+                "refresh_frame_flags": 2,
+                "ref_frame_idx[0]": 0,
+                "ref_frame_idx[6]": 0,
+                "allow_high_precision_mv": 0,
+                "is_filter_switchable": 1,
+                "is_motion_mode_switchable": 0,
+                # The one patched bit: the block layer now reads comp_mode, and
+                # libaom never emits it for this two-frame group.
+                "reference_select": 1,
+                "delta_q_present": 0,
+                "loop_filter_level[0]": 0,
+                "loop_filter_level[1]": 4,
+                "loop_filter_level[2]": 0,
+                "loop_filter_level[3]": 0,
+                "loop_filter_delta_enabled": 1,
+                "loop_filter_delta_update": 0,
+                "cdef_bits": 0,
+                "lr_type[0]": 0,
+                "lr_type[1]": 0,
+                "lr_type[2]": 0,
+                "reduced_tx_set": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
 ]
 
 
