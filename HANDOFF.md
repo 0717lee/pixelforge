@@ -3869,3 +3869,38 @@ sha256 一致。`--check` 仍是 18 个样本。
 按"未核验"处理，或者退而做 Dav1d 掩码表级单元测试（把
 `dav1d_wedge_masks[...]` 全表 dump 出来对拍），这把位运算钉住但不能替代
 像素核验。
+
+# 第五十六次推进补充（2026-09-22，楔形掩码表对 dav1d 逐样本钉住）
+
+## 一、做法
+
+给 dav1d 的 `dav1d_init_wedge_masks`（`src/wedge.c`）加了一段 dump：把
+`dav1d_wedge_masks[bs][0][0][n]` 全部 144 张（9 个尺寸 x 16 个 index）按真实
+尺寸（`dav1d_block_dimensions`）写成文件，再与我们的 `av1_wedge_mask` 逐值
+比对。注意 dav1d 的 `bs` 是它自己的枚举（0=BS_128x128 …），与我们仓库的
+bsize 索引**不同**，dump 时要把 W/H 一起打印出来。
+
+## 二、结果
+
+144 张掩码**全部逐样本一致**，包括：
+
+- 三张一维母列 + 六张 64x64 主表的构造（OBLIQUE63 的 `shift` 逐行减 1）；
+- OBLIQUEUE27/HORIZONTAL 的转置、117/153 的翻转取补；
+- `Wedge_Codebook` 的 xoff/yoff 与 `flipSign` 约定（边框行列平均 < 32 时
+  `wedge_sign=0` 取掩码本身）；
+- chroma 下采样：4:2:2 两列取整平均、4:2:0 的 2x2 四项取整平均
+  （`av1_wedge_plane_mask`，同样在测试里对 luma 掩码现场重算核对）。
+
+新增 `av1_wedge_mask_wbtest.mbt`（goldens + 上面两项 chroma 核对），
+`moon test` 三目标 1250/1250。
+
+## 三、还欠什么
+
+- `compound_type == COMPOUND_DEDGE / COMPOUND_DIFFWTD` 的**掩码选择**没有
+  触发器（见第五十五次补充）：`read_compound_type` 的 `compound_type` 符号
+  只在 compound 块上读，而两个候选样本都没有 compound 块。已实现的部分：
+  `av1_wedge_mask`/`av1_wedge_plane_mask` 本身（compound wedge 的掩码与
+  interintra 共用表，只是 `wedge_sign` 要真的读 1 位）。
+- DIFFWTD 掩码（§7.11.3.12：`m = Clip3(0,64, 38 + diff/16)`，
+  `diff = Round2(|p0-p1|, (BitDepth-8)+InterPostRound)`，`mask_type` 决定
+  是否取补）**尚未实现**，同样没有触发器。
