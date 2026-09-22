@@ -546,7 +546,8 @@ FIXTURES = [
     {
         "name": "inter_skipmode_64x64",
         "frame_count": 3,
-        "skipmode": {
+        "patched_encode": {
+            "append_frame_copy": True,
             "input": "shift",
             "flags": [
                 "--error-resilient=0",
@@ -602,6 +603,52 @@ FIXTURES = [
         ],
         "sequence_expectations": None,
         "decode_frames": 2,
+    },
+    {
+        "name": "inter_distcomp_64x64",
+        "patched_encode": {
+            "append_frame_copy": False,
+            "input": "shift",
+            "flags": [
+                "--error-resilient=0",
+                "--enable-dual-filter=0",
+                # Order hints are what the distance weighting reads its
+                # distances from, and the jnt-comp switches are what make the
+                # compound blocks code `compound_idx` instead of always
+                # averaging.
+                "--enable-order-hint=1",
+                "--enable-diff-wtd-comp=1",
+                "--enable-dist-wtd-comp=1",
+                "--enable-masked-comp=0",
+                "--enable-ref-frame-mvs=0",
+                "--enable-warped-motion=0",
+                "--enable-obmc=0",
+                "--enable-global-motion=0",
+                "--enable-interintra-comp=0",
+                "--enable-interinter-wedge=0",
+                "--enable-interintra-wedge=0",
+                "--enable-onesided-comp=0",
+                "--enable-tx64=0",
+                "--enable-intrabc=0",
+                "--enable-palette=0",
+            ],
+            "patches": [
+                {"frame": 1, "bit": 136, "width": 1, "expect": 0, "value": 1},
+            ],
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 1,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
     },
 ]
 
@@ -936,28 +983,29 @@ def patch_header_fields(spec: dict) -> bytes:
     return data
 
 
-def build_skipmode_stream(spec: dict, base: bytes) -> bytes:
-    """Append a copy of the base's last frame and rewrite header bits in it.
+def build_patched_encode(spec: dict, base: bytes) -> bytes:
+    """Encode-derived patched streams: rewrite header bits, optionally appending
+    a copy of the base's last frame first.
 
-    libaom cannot produce a skip-mode stream for these fixtures: skip mode needs
+    libaom cannot produce some of the streams this suite needs. Skip mode wants
     two references whose order hints sit on either side of the frame's own hint,
-    which a two-frame encode cannot express, and this libaom build crashes past
-    two frames. The appended frame is a byte-for-byte copy of the base's last
-    frame, so every bit position quoted in the spec is the one the trace reports
-    for that frame, and the tile entropy of all three frames is untouched.
-
-    The patches make the derivation succeed and then turn the mode on: the key
-    frame's order hint is moved ahead of the copy's, the copy's LAST2 name is
-    repointed at the slot holding the middle frame, the copy's own hint is set
-    between them, and `reference_select` plus `skip_mode_present` are set. The
-    result is a legal, semantically determined stream whose dav1d decoding is
-    the truth, exactly like the other patched fixtures.
+    which a two-frame encode cannot express and this libaom build crashes past;
+    distance-weighted compound wants `reference_select` on a group where libaom
+    never chooses compound at all. Both are reached the same way: encode a base
+    with encoder flags the stream will carry but not use, optionally append a
+    byte-for-byte copy of the last inter frame behind a fresh temporal
+    delimiter, then rewrite fixed-width header bits in place. Nothing moves, so
+    every bit position quoted in the spec is the one the trace reports, and the
+    tile entropy of every frame is untouched. The result is a legal,
+    semantically determined stream whose dav1d decoding is the truth, exactly
+    like the other patched fixtures.
     """
     data = base
-    frames = frame_obus(data)
-    last_start, _, _ = frames[-1]
-    # A temporal delimiter in front of every frame OBU, as the base has.
-    data = data + bytes([0x12, 0x00]) + data[last_start:]
+    if spec.get("append_frame_copy", False):
+        frames = frame_obus(data)
+        last_start, _, _ = frames[-1]
+        # A temporal delimiter in front of every frame OBU, as the base has.
+        data = data + bytes([0x12, 0x00]) + data[last_start:]
     frames = frame_obus(data)
     payloads: dict[int, tuple[list[int], int, int]] = {}
     for patch in spec["patches"]:
@@ -1013,10 +1061,13 @@ def run(fixture: dict, check: bool) -> dict:
         command = "header field patch of %s (see patch_header_fields)" % fixture["patch"]["base"]
         with open(scratch, "wb") as fh:
             fh.write(patch_header_fields(fixture["patch"]))
-    elif "skipmode" in fixture:
-        spec = fixture["skipmode"]
+    elif "patched_encode" in fixture:
+        spec = fixture["patched_encode"]
         spec["name"] = name
         encode_input(y4m, spec.get("input", "shift"), width, height)
+        # The appended copy of the last frame accounts for one frame of the
+        # spec's total; without it the base encode carries them all.
+        limit = nframes - (1 if spec.get("append_frame_copy", False) else 0)
         cmd = [
             AOMENC,
             "--codec=av1",
@@ -1026,7 +1077,7 @@ def run(fixture: dict, check: bool) -> dict:
             "--height=%d" % height,
             "--bit-depth=8",
             "--fps=1/1",
-            "--limit=%d" % (nframes - 1),
+            "--limit=%d" % limit,
             "--lag-in-frames=0",
             "--threads=1",
             "--cpu-used=0",
@@ -1043,7 +1094,7 @@ def run(fixture: dict, check: bool) -> dict:
             raise SystemExit("aomenc failed for %s:\n%s" % (name, proc.stdout[-2000:]))
         base = open(scratch, "rb").read()
         with open(scratch, "wb") as fh:
-            fh.write(build_skipmode_stream(spec, base))
+            fh.write(build_patched_encode(spec, base))
     else:
         encode_input(y4m, fixture.get("input", "ramp"), width, height)
         cmd = [

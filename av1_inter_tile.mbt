@@ -619,11 +619,22 @@ fn av1_inter_predict(
           let first = av1_motion_compensate(first_request)
           let second = av1_motion_compensate(second_request)
           let post = if state.bit_depth == 12 { 2 } else { 4 }
-          let shift = 1 + post
-          let bias = 1 << (shift - 1)
           let blended = Array::make(first.length(), 0)
-          for k in 0..<blended.length() {
-            blended[k] = (first[k] + second[k] + bias) >> shift
+          if block.compound_type == av1_compound_distance {
+            // The distance weighting scales each list's interpolation by its
+            // reference's order-hint distance (AV1 §7.11.3.15).
+            let (forward, backward) = av1_distance_weights(info, name, second_name)
+            let shift = 4 + post
+            let bias = 1 << (shift - 1)
+            for k in 0..<blended.length() {
+              blended[k] = (forward * first[k] + backward * second[k] + bias) >> shift
+            }
+          } else {
+            let shift = 1 + post
+            let bias = 1 << (shift - 1)
+            for k in 0..<blended.length() {
+              blended[k] = (first[k] + second[k] + bias) >> shift
+            }
           }
           blended
         } else {

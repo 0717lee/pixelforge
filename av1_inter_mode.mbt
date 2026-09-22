@@ -159,6 +159,10 @@ priv struct Av1InterInfo {
   skip_mode_frame : Array[Int]
   /// `reference_select`: whether `read_ref_frames` may read `comp_mode` at all.
   reference_select : Bool
+  /// Each reference name's distance from this frame's order hint, clipped to
+  /// `[0, MAX_FRAME_DISTANCE]`. The distance-weighted compound blend weighs the
+  /// two predictions with these (AV1 §7.11.3.15).
+  ref_distances : Array[Int]
   /// Sequence-level masked-compound switches. `read_compound_type` reads its
   /// symbols only when one of them is set; the frame gate refuses such frames,
   /// so the decoder here rejects the stream instead of guessing a blend.
@@ -200,6 +204,8 @@ pub(all) struct Av1InterBlock {
   /// The second motion vector of a compound block, in its reference's units.
   mut mv_row1 : Int
   mut mv_col1 : Int
+  /// `read_compound_type`: which blend a compound block uses.
+  mut compound_type : Int
   /// Vertical and horizontal subpel filter, in the order the syntax codes them.
   mut interp_vertical : Int
   mut interp_horizontal : Int
@@ -243,6 +249,7 @@ fn av1_inter_block(
     mv_col: 0,
     mv_row1: 0,
     mv_col1: 0,
+    compound_type: av1_compound_average,
     interp_vertical: av1_interp_eighttap,
     interp_horizontal: av1_interp_eighttap,
     ref_mv_idx: 0,
@@ -721,6 +728,20 @@ fn av1_neighbour_pair(
   pair[1] = field.refs[unit + 1]
   pair
 }
+
+///|
+/// `CompoundType` values (AV1 §5.11.25 `read_compound_type`). AVERAGE and
+/// DISTANCE are the two a stream can reach without masked compound.
+let av1_compound_average : Int = 0
+
+///|
+let av1_compound_distance : Int = 1
+
+///|
+let av1_compound_wedge : Int = 2
+
+///|
+let av1_compound_diffwtd : Int = 3
 
 ///|
 /// `Compound_Mode_Ctx_Map` (AV1 §8.3): the compound_mode context from the
@@ -1332,10 +1353,75 @@ fn av1_read_compound_type(
   if block.ref_frame1 <= av1_intra_frame {
     return true
   }
-  if info.enable_masked_compound || info.enable_jnt_comp {
+  block.compound_type = av1_compound_average
+  if info.enable_masked_compound {
+    // `comp_group_idx` asks for a masked blend (wedge or difference weighted).
+    // Those need the mask generation, which is not implemented: refuse the
+    // frame rather than average a stream that asked for a mask.
     return false
   }
+  if info.enable_jnt_comp {
+    // `compound_idx` picks the distance weighting over the average.
+    if block.size_index >= info.cdfs.compound_type.length() {
+      return false
+    }
+    if decoder.symbol(info.cdfs.compound_type[block.size_index]) == 0 {
+      block.compound_type = av1_compound_distance
+    }
+  }
   true
+}
+
+///|
+/// The distance-weighted blend weights (AV1 §7.11.3.15), from the two reference
+/// names' clipped distances and the quantized weight tables.
+fn av1_distance_weights(info : Av1InterInfo, ref0 : Int, ref1 : Int) -> (Int, Int) {
+  let av1_quant_dist_weight : Array[Array[Int]] = [
+    [2, 3], [2, 5], [2, 7], [1, 31],
+  ]
+  let av1_quant_dist_lookup : Array[Array[Int]] = [
+    [9, 7], [11, 5], [12, 4], [13, 3],
+  ]
+  if ref0 < 0 || ref0 >= info.ref_distances.length() {
+    return (av1_quant_dist_lookup[3][0], av1_quant_dist_lookup[3][1])
+  }
+  if ref1 < 0 || ref1 >= info.ref_distances.length() {
+    return (av1_quant_dist_lookup[3][0], av1_quant_dist_lookup[3][1])
+  }
+  let d0 = info.ref_distances[ref1]
+  let d1 = info.ref_distances[ref0]
+  let order = if d0 <= d1 { 1 } else { 0 }
+  if d0 == 0 || d1 == 0 {
+    return (av1_quant_dist_lookup[3][order], av1_quant_dist_lookup[3][1 - order])
+  }
+  let mut i = 0
+  while i < 3 {
+    let c0 = av1_quant_dist_weight[i][order]
+    let c1 = av1_quant_dist_weight[i][1 - order]
+    if order != 0 {
+      if d0 * c0 > d1 * c1 {
+        break
+      }
+    } else if d0 * c0 < d1 * c1 {
+      break
+    }
+    i = i + 1
+  }
+  (av1_quant_dist_lookup[i][order], av1_quant_dist_lookup[i][1 - order])
+}
+
+///|
+/// Each reference name's clipped distance from this frame's order hint
+/// (AV1 §7.11.3.15's `dist[ref]`), computed once per frame.
+fn av1_ref_distances(sequence : Av1SequenceInfo, header : Av1FrameHeaderInfo) -> Array[Int] {
+  let distances = Array::make(av1_num_ref_frames, 0)
+  for name in av1_last_frame..=av1_alt_ref_frame {
+    let hint = header.order_hints[name]
+    let raw = av1_relative_dist(sequence, hint, header.order_hint)
+    let clipped = if raw < 0 { -raw } else { raw }
+    distances[name] = if clipped > 31 { 31 } else { clipped }
+  }
+  distances
 }
 
 ///|
@@ -1353,6 +1439,7 @@ pub(all) struct Av1InterFrame {
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
   reference_select : Bool
+  ref_distances : Array[Int]
   enable_masked_compound : Bool
   enable_jnt_comp : Bool
   mi_cols : Int
@@ -1412,6 +1499,7 @@ pub fn av1_inter_frame_of(
     skip_mode_present: header.skip_mode_present,
     skip_mode_frame: header.skip_mode_frame,
     reference_select: header.reference_select,
+    ref_distances: av1_ref_distances(sequence, header),
     enable_masked_compound: sequence.enable_masked_compound,
     enable_jnt_comp: sequence.enable_jnt_comp,
     mi_cols,
@@ -1442,6 +1530,7 @@ fn av1_inter_info(
     skip_mode_present: config.skip_mode_present,
     skip_mode_frame: config.skip_mode_frame,
     reference_select: config.reference_select,
+    ref_distances: config.ref_distances,
     enable_masked_compound: config.enable_masked_compound,
     enable_jnt_comp: config.enable_jnt_comp,
     mi_cols: config.mi_cols,

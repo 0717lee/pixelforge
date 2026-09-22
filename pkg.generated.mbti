@@ -451,6 +451,7 @@ pub(all) struct Av1InterBlock {
   mut mv_col : Int
   mut mv_row1 : Int
   mut mv_col1 : Int
+  mut compound_type : Int
   mut interp_vertical : Int
   mut interp_horizontal : Int
   mut ref_mv_idx : Int
@@ -466,6 +467,7 @@ pub(all) struct Av1InterFrame {
   skip_mode_present : Bool
   skip_mode_frame : Array[Int]
   reference_select : Bool
+  ref_distances : Array[Int]
   enable_masked_compound : Bool
   enable_jnt_comp : Bool
   mi_cols : Int

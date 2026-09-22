@@ -167,6 +167,15 @@ their references and vectors from the SkipModeFrames pair. Its test compares
 them. libaom cannot produce this stream itself - it never emits skip mode on
 these tiny groups and this build crashes past two frames.
 
+`inter_distcomp_64x64` reaches the distance-weighted compound blend. Its base
+is encoded with order hints and both jnt-comp switches on - tools the group
+carries but never uses - and one header bit is rewritten, `reference_select` 0
+to 1, so the block layer reads `comp_mode` and the compound blocks read
+`compound_idx`. A zero there picks the distance weighting over the average, and
+the two references' order hints are what weigh the two interpolations. The
+sequence's `enable_masked_compound` stays off, so no wedge or difference-
+weighted block can be selected: those are the next slice.
+
 ## What these fixtures do not cover
 
 `read_mv_component` is only exercised at magnitude **class 1 and class 4** (the

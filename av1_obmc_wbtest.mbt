@@ -119,6 +119,7 @@ fn av1_obmc_test_state() -> (Av1IntraState, Av1InterInfo) {
       skip_mode_present: false,
       skip_mode_frame: [],
       reference_select: false,
+      ref_distances: Array::make(8, 0),
       enable_masked_compound: false,
       enable_jnt_comp: false,
       mi_cols: 8,

@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+- Implemented the distance-weighted compound blend and its syntax. A compound
+  block on a stream with `enable_jnt_comp` reads `compound_idx`
+  (`TileCompoundTypeCdf[MiSize]`) and takes the distance weighting when it is
+  zero; the weights come from the two references' order-hint distances through
+  the quantized tables of AV1 §7.11.3.15 (`quantDistWeight`/`quantDistLookup`),
+  and the blend scales each list's interpolation by its own weight one rounding
+  step later than the average does. A block that asks for a wedge or a
+  difference-weighted mask still refuses the frame, because the mask generation
+  is not implemented. `inter_distcomp_64x64` pins the path: an order-hint plus
+  jnt-comp encode with `reference_select` patched on, whose inter frame matches
+  dav1d at [0, 0, 0].
 - Implemented skip mode and closed its gate. A skip-mode block now names both
   of its references from the frame's SkipModeFrames pair (AV1 §5.11.25), which
   the compound machinery then predicts from - NEAREST_NEARESTMV takes the

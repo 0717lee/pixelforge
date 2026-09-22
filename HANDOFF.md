@@ -3480,3 +3480,56 @@ dav1d` 一个测试顺序解码三帧并逐帧比 `[0,0,0]`——第三帧是 sk
 （wedge / distance-weighted）：需要 mask 生成（规范 7.11.3.14 +
 `Wedge_Bits`/`Wedge_Master`/`Diffwtd_Master` 表）与 `compound_type` 符号读取，
 go-av1 的 `decode/compound.go` 的 `buildWedgeMask`/`buildDiffwtdMask` 有现成形状。
+
+---
+
+# 第四十八次推进补充（2026-09-22，阶段 C 第三刀：distance-weighted compound 闭合）
+
+## 一、结果
+
+- **COMPOUND_DISTANCE（jnt-comp 的距离加权混合）闭合**：
+  `inter_distcomp_64x64` inter 帧对 dav1d **`[0,0,0]`**。
+- native / js / wasm-gc 各 **1247/1247**；`--check` 验证 11 个样本。
+
+## 二、关键规范事实（下一轮别重查）
+
+- **`enable_jnt_comp` 的读取条件是 `enable_order_hint`，不是
+  `enable_masked_compound`**（`_refs/av1spec06.md:234`：
+  `if ( enable_order_hint ) { enable_jnt_comp; enable_ref_frame_mvs }`）。
+  所以距离加权只需要 order hint + jnt 开关，**不需要** masked compound。
+- `read_compound_type`（av1spec06.md:2901）在 `enable_masked_compound=0` 时
+  **不读** `comp_group_idx`（保持 0），于是有 jnt_comp 才读 `compound_idx`：
+  0 ⇒ COMPOUND_DISTANCE，1 ⇒ COMPOUND_AVERAGE；没有 jnt_comp 就直接 AVERAGE。
+- DISTANCE 的权重（§7.11.3.15）：`dist[ref] = clip(0,31,|rel_dist(orderHint[ref],
+  orderHint)|)`，`quantDistWeight={{2,3},{2,5},{2,7},{1,31}}`，
+  `quantDistLookup={{9,7},{11,5},{12,4},{13,3}}`（go-av1 decode/compound.go:248）。
+  混合：`round2(fwd*p0 + bck*p1, 4 + interPostRound)`，即 8 位
+  `(fwd*p0 + bck*p1 + 8) >> 8`。
+
+## 三、实现要点
+
+- `av1_inter_mode.mbt`：`block.compound_type` 字段；
+  `av1_read_compound_type` 真正按规范读 `compound_idx`（wedge/diffwtd 仍拒绝）；
+  新 `av1_distance_weights` / `av1_ref_distances`（每个参考名的裁剪距离，
+  存在 `Av1InterInfo.ref_distances`，帧构造时算一次）。
+- `av1_inter_tile.mbt`：compound 预测按 `compound_type` 分流——
+  DISTANCE 用 `(fwd*p0 + bck*p1 + bias) >> (4+post)`，AVERAGE 维持
+  `(p0+p1+bias) >> (1+post)`。
+- 生成器：`build_skipmode_stream` 泛化为 **`build_patched_encode`**
+  （`append_frame_copy` 可选 + `patches`），同时支撑 skipmode 的三帧拼接与
+  distcomp 的“编码+打一个位”；`run()` 的 `--limit` 改为
+  `nframes - (append_frame_copy ? 1 : 0)`（此前对所有 patched_encode 都 -1，
+  对不追加帧的样本是 bug）。
+
+## 四、下一刀
+
+**masked compound 的 wedge / DIFFWTD**：需要
+`Wedge_Bits[BLOCK_SIZES]`、`Wedge_Master`（三张 64 长的一维母表 oblique
+odd/even/vertical）、`Wedge_Codebook[3][16][3]={dir,xoff,yoff}`、母表生成
+（oblique63 的错位采样 +  transpose/补码得到 oblique27/117/153/horizontal）、
+按块尺寸的掩码提取与 flip 判定（`avg < 32`），以及 DIFFWTD 的
+`m = clip(38 + |p0-p1| >> k, 0, 64)` 与 `mask_type` 符号。go-av1
+`decode/wedge.go` 的 `initWedgeMasks` / `buildWedgeMask` / `buildDiffwtdMask`
+有现成形状（母表数值已在本机 `_refs/go-av1/decode/wedge.go` 前 80 行）。
+样本同样用 patched_encode：base 加 `--enable-masked-comp=1`，再打
+`reference_select` 位。
