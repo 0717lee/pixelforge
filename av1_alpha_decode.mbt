@@ -42,7 +42,7 @@ pub fn av1_decode_alpha_tile(
     v_ac: 0,
   },
 ) -> Array[Byte]? {
-  let (frame, _stripe_store) = match
+  let (frame, _stripe_store, _cdfs) = match
     av1_decode_tile_planes(
       width,
       height,

@@ -64,6 +64,8 @@ priv struct Av1InterCdfs {
   is_inter : Array[Array[Int]]
   skip_mode : Array[Array[Int]]
   interp_filter : Array[Array[Int]]
+  use_obmc : Array[Array[Int]]
+  motion_mode : Array[Array[Int]]
   y_mode : Array[Array[Int]]
   inter_tx_type_set1 : Array[Array[Int]]
   inter_tx_type_set2 : Array[Int]
@@ -104,6 +106,8 @@ fn av1_inter_cdfs() -> Av1InterCdfs {
     is_inter: av1_is_inter_cdfs(),
     skip_mode: av1_skip_mode_cdfs(),
     interp_filter: av1_interp_filter_cdfs(),
+    use_obmc: av1_use_obmc_cdfs(),
+    motion_mode: av1_motion_mode_cdfs(),
     y_mode: av1_y_mode_cdfs(),
     inter_tx_type_set1: av1_inter_tx_type_set1_cdfs(),
     inter_tx_type_set2: av1_inter_tx_type_set2_cdfs(),
@@ -174,6 +178,10 @@ pub(all) struct Av1InterBlock {
   mut interp_horizontal : Int
   /// The reference-list index into the candidate stack, from `drl_mode`.
   mut ref_mv_idx : Int
+  /// `read_motion_mode`: 0 = SIMPLE, 1 = OBMC, 2 = local warp. Only the symbol
+  /// is decoded here; a block that selects a mode the predictor cannot act on
+  /// makes the frame be refused rather than mis-reconstructed.
+  mut motion_mode : Int
 }
 
 ///|
@@ -208,6 +216,7 @@ fn av1_inter_block(
     interp_vertical: av1_interp_eighttap,
     interp_horizontal: av1_interp_eighttap,
     ref_mv_idx: 0,
+    motion_mode: 0,
   }
 }
 
@@ -240,14 +249,13 @@ fn av1_read_is_inter(
   let above_intra = above <= av1_intra_frame
   let mut ctx = 0
   if block.avail_u && block.avail_l {
-    ctx =
-      if left_intra && above_intra {
-        3
-      } else if left_intra || above_intra {
-        1
-      } else {
-        0
-      }
+    ctx = if left_intra && above_intra {
+      3
+    } else if left_intra || above_intra {
+      1
+    } else {
+      0
+    }
   } else if block.avail_u {
     ctx = if above_intra { 2 } else { 0 }
   } else if block.avail_l {
@@ -343,13 +351,11 @@ fn av1_read_ref_frames(
       decoder.symbol(info.cdfs.single_ref[ctx][index])
     }
   }
-  let forward =
-    counts(av1_last_frame) +
+  let forward = counts(av1_last_frame) +
     counts(av1_last2_frame) +
     counts(av1_last3_frame) +
     counts(av1_golden_frame)
-  let backward =
-    counts(av1_bwd_ref_frame) +
+  let backward = counts(av1_bwd_ref_frame) +
     counts(av1_alt_ref2_frame) +
     counts(av1_alt_ref_frame)
   let first = symbol(0, forward, backward)
@@ -362,7 +368,11 @@ fn av1_read_ref_frames(
       counts(av1_alt_ref_frame),
     )
     if second == 0 {
-      let third = symbol(5, counts(av1_bwd_ref_frame), counts(av1_alt_ref2_frame))
+      let third = symbol(
+        5,
+        counts(av1_bwd_ref_frame),
+        counts(av1_alt_ref2_frame),
+      )
       if third < 0 {
         return false
       }
@@ -403,8 +413,12 @@ fn av1_read_ref_frames(
 ///|
 /// The two reference names stored at one MI unit, for the reference-count
 /// contexts. An unwritten or intra neighbour reports INTRA_FRAME and NONE.
-fn av1_neighbour_pair(field : Av1MotionField, row : Int, col : Int) -> Array[Int] {
-  let pair = [ av1_intra_frame, av1_none_frame ]
+fn av1_neighbour_pair(
+  field : Av1MotionField,
+  row : Int,
+  col : Int,
+) -> Array[Int] {
+  let pair = [av1_intra_frame, av1_none_frame]
   if row < 0 || col < 0 || row >= field.rows || col >= field.cols {
     return pair
   }
@@ -434,7 +448,8 @@ fn av1_read_inter_mode(
     block.y_mode = av1_mode_new_mv
     return true
   }
-  if stack.zero_mv_context < 0 || stack.zero_mv_context > 1 ||
+  if stack.zero_mv_context < 0 ||
+    stack.zero_mv_context > 1 ||
     stack.zero_mv_context >= info.cdfs.zero_mv.length() {
     return false
   }
@@ -445,12 +460,11 @@ fn av1_read_inter_mode(
   if stack.refmv_context < 0 || stack.refmv_context >= info.cdfs.ref_mv.length() {
     return false
   }
-  block.y_mode =
-    if decoder.symbol(info.cdfs.ref_mv[stack.refmv_context]) == 0 {
-      av1_mode_nearest_mv
-    } else {
-      av1_mode_near_mv
-    }
+  block.y_mode = if decoder.symbol(info.cdfs.ref_mv[stack.refmv_context]) == 0 {
+    av1_mode_nearest_mv
+  } else {
+    av1_mode_near_mv
+  }
   true
 }
 
@@ -541,10 +555,7 @@ fn av1_assign_mv(
 /// read_mv( ) (AV1 §5.11.25): the joint names which components follow. Only the
 /// intra block copy path uses the second motion vector context, and the frame
 /// gate refuses it.
-fn av1_read_mv(
-  decoder : Av1SymbolDecoder,
-  info : Av1InterInfo,
-) -> (Int, Int) {
+fn av1_read_mv(decoder : Av1SymbolDecoder, info : Av1InterInfo) -> (Int, Int) {
   let context = 0
   let joint = decoder.symbol(info.cdfs.mv_joint[context])
   let mut diff_row = 0
@@ -614,10 +625,143 @@ fn av1_read_mv_component(
     } else {
       1
     }
-    magnitude =
-      (av1_class0_size << (class + 2)) + ((bits << 3) | (fraction << 1) | high) + 1
+    magnitude = (av1_class0_size << (class + 2)) +
+      ((bits << 3) | (fraction << 1) | high) +
+      1
   }
-  if sign == 1 { -magnitude } else { magnitude }
+  if sign == 1 {
+    -magnitude
+  } else {
+    magnitude
+  }
+}
+
+///|
+/// has_overlappable_candidates( ) (AV1 §7.10.3, `av1spec08.md:1819`): an inter
+/// neighbour above or to the left at an even MI position inside this block's
+/// extent. Only inter neighbours count, so the very first block of a frame has
+/// none and keeps the simple prediction path.
+fn av1_has_overlappable_candidates(
+  field : Av1MotionField,
+  block : Av1InterBlock,
+) -> Bool {
+  if block.avail_u {
+    let w4 = block.width4
+    let mut x4 = block.mi_col
+    while x4 < block.mi_col + w4 && x4 < field.cols {
+      let pair = av1_neighbour_pair(field, block.mi_row - 1, x4)
+      if pair[0] > av1_intra_frame {
+        return true
+      }
+      x4 = x4 + 2
+    }
+  }
+  if block.avail_l {
+    let h4 = block.height4
+    let mut y4 = block.mi_row
+    while y4 < block.mi_row + h4 && y4 < field.rows {
+      let pair = av1_neighbour_pair(field, y4, block.mi_col - 1)
+      if pair[0] > av1_intra_frame {
+        return true
+      }
+      y4 = y4 + 2
+    }
+  }
+  false
+}
+
+///|
+/// read_motion_mode( isCompound ) (AV1 §5.11.27). Returns false when the block
+/// selects a mode this decoder cannot reconstruct, so the frame is refused whole
+/// instead of being decoded as a prefix of itself. LOCALWARP needs a warp model
+/// this configuration never reaches, so only the OBMC branch matters here.
+fn av1_read_motion_mode(
+  decoder : Av1SymbolDecoder,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+) -> Bool {
+  block.motion_mode = 0
+  if block.skip_mode || !info.frame.is_motion_mode_switchable {
+    return true
+  }
+  let smaller = if block.block_width < block.block_height {
+    block.block_width
+  } else {
+    block.block_height
+  }
+  if smaller < 8 {
+    return true
+  }
+  if info.frame.force_integer_mv == 0 &&
+    (
+      block.y_mode == av1_mode_global_mv ||
+      block.y_mode == av1_mode_global_global_mv
+    ) {
+    if av1_gm_type(info, block.ref_frame) > av1_gm_translation {
+      return true
+    }
+  }
+  // A single-reference block names NONE as its second reference, so the
+  // compound and intra-second-reference early exits do not apply to it.
+  if !av1_has_overlappable_candidates(info.field, block) {
+    return true
+  }
+  let size_index = block.size_index
+  if size_index < 0 || size_index >= info.cdfs.use_obmc.length() {
+    return false
+  }
+  // `find_warp_samples` reads no symbols; its count decides which of the two
+  // symbol shapes this block codes (AV1 §5.11.27).
+  let num_samples = av1_warp_samples(
+    info.field,
+    block.mi_row,
+    block.mi_col,
+    block.width4,
+    block.height4,
+    block.avail_u,
+    block.avail_l,
+    block.mv_row,
+    block.mv_col,
+    block.ref_frame,
+  )
+  if info.frame.force_integer_mv == 0 &&
+    num_samples != 0 &&
+    info.frame.allow_warped_motion &&
+    !av1_mv_is_scaled(info, block.ref_frame) {
+    // The three-symbol `motion_mode`: 0 = SIMPLE, 1 = OBMC, 2 = LOCALWARP.
+    if size_index >= info.cdfs.motion_mode.length() {
+      return false
+    }
+    let mode = decoder.symbol(info.cdfs.motion_mode[size_index])
+    if mode < 0 || mode > 2 {
+      return false
+    }
+    if mode == 2 {
+      // LOCALWARP needs the warp estimation and the warped prediction grid of
+      // §7.11.3.5/§7.11.3.8, neither of which is implemented, so the frame is
+      // refused rather than decoded as a prefix of itself.
+      return false
+    }
+    block.motion_mode = mode
+    return true
+  }
+  if decoder.symbol(info.cdfs.use_obmc[size_index]) == 1 {
+    block.motion_mode = 1
+  }
+  true
+}
+
+///|
+/// `is_scaled( refFrame )` (AV1 §5.11.26): true when a stored reference's
+/// visible extent differs from the current frame's. Reference scaling itself is
+/// outside this decoder's scope, so this is the only per-frame test needed.
+fn av1_mv_is_scaled(info : Av1InterInfo, name : Int) -> Bool {
+  match av1_inter_reference(info, name) {
+    Some(frame) =>
+      frame.width != info.frame.frame_width ||
+      frame.height != info.frame.frame_height
+    None => false
+  }
 }
 
 ///|
@@ -641,26 +785,23 @@ fn av1_read_interp_filter(
     }
   }
   block.interp_vertical = vertical
-  block.interp_horizontal =
-    if info.enable_dual_filter && av1_needs_interp_filter(info, block) {
-      let ctx = av1_interp_filter_ctx(info, block, 1)
-      if ctx < info.cdfs.interp_filter.length() {
-        decoder.symbol(info.cdfs.interp_filter[ctx])
-      } else {
-        vertical
-      }
+  block.interp_horizontal = if info.enable_dual_filter &&
+    av1_needs_interp_filter(info, block) {
+    let ctx = av1_interp_filter_ctx(info, block, 1)
+    if ctx < info.cdfs.interp_filter.length() {
+      decoder.symbol(info.cdfs.interp_filter[ctx])
     } else {
       vertical
     }
+  } else {
+    vertical
+  }
 }
 
 ///|
 /// needs_interp_filter( ) (AV1 §5.11.27): a large block driven by a non-identity
 /// warp model has no subpel phase of its own to filter at.
-fn av1_needs_interp_filter(
-  info : Av1InterInfo,
-  block : Av1InterBlock,
-) -> Bool {
+fn av1_needs_interp_filter(info : Av1InterInfo, block : Av1InterBlock) -> Bool {
   let smaller = if block.block_width < block.block_height {
     block.block_width
   } else {
@@ -696,23 +837,42 @@ fn av1_interp_filter_ctx(
   let mut left = 3
   let mut above = 3
   if block.avail_l &&
-    av1_unit_uses_reference(info.field, block.mi_row, block.mi_col - 1, block.ref_frame) {
-    left = av1_field_interp(info.field, block.mi_row, block.mi_col - 1, direction)
+    av1_unit_uses_reference(
+      info.field,
+      block.mi_row,
+      block.mi_col - 1,
+      block.ref_frame,
+    ) {
+    left = av1_field_interp(
+      info.field,
+      block.mi_row,
+      block.mi_col - 1,
+      direction,
+    )
   }
   if block.avail_u &&
-    av1_unit_uses_reference(info.field, block.mi_row - 1, block.mi_col, block.ref_frame) {
-    above = av1_field_interp(info.field, block.mi_row - 1, block.mi_col, direction)
+    av1_unit_uses_reference(
+      info.field,
+      block.mi_row - 1,
+      block.mi_col,
+      block.ref_frame,
+    ) {
+    above = av1_field_interp(
+      info.field,
+      block.mi_row - 1,
+      block.mi_col,
+      direction,
+    )
   }
-  let shared =
-    if left == above {
-      left
-    } else if left == 3 {
-      above
-    } else if above == 3 {
-      left
-    } else {
-      3
-    }
+  let shared = if left == above {
+    left
+  } else if left == 3 {
+    above
+  } else if above == 3 {
+    left
+  } else {
+    3
+  }
   ctx + shared
 }
 
@@ -741,7 +901,11 @@ fn av1_field_interp(
     return 3
   }
   let unit = row * field.cols + col
-  if direction == 0 { field.interp_v[unit] } else { field.interp_h[unit] }
+  if direction == 0 {
+    field.interp_v[unit]
+  } else {
+    field.interp_h[unit]
+  }
 }
 
 ///|
@@ -756,24 +920,25 @@ fn av1_inter_block_motion(
   if !av1_read_ref_frames(decoder, info, block) {
     return false
   }
-  let stack = match av1_find_mv_stack(
-    info.field,
-    {
-      mi_row: block.mi_row,
-      mi_col: block.mi_col,
-      width4: block.width4,
-      height4: block.height4,
-      block_width: block.block_width,
-      block_height: block.block_height,
-      refs: [ block.ref_frame, av1_none_frame ],
-      tile_row_start: info.tile_row_start,
-      tile_row_end: info.tile_row_end,
-      tile_col_start: info.tile_col_start,
-      tile_col_end: info.tile_col_end,
-    },
-    info.frame,
-    false,
-  ) {
+  let stack = match
+    av1_find_mv_stack(
+      info.field,
+      {
+        mi_row: block.mi_row,
+        mi_col: block.mi_col,
+        width4: block.width4,
+        height4: block.height4,
+        block_width: block.block_width,
+        block_height: block.block_height,
+        refs: [block.ref_frame, av1_none_frame],
+        tile_row_start: info.tile_row_start,
+        tile_row_end: info.tile_row_end,
+        tile_col_start: info.tile_col_start,
+        tile_col_end: info.tile_col_end,
+      },
+      info.frame,
+      false,
+    ) {
     Some(value) => value
     None => return false
   }
@@ -784,6 +949,9 @@ fn av1_inter_block_motion(
     return false
   }
   if !av1_assign_mv(decoder, info, block, stack) {
+    return false
+  }
+  if !av1_read_motion_mode(decoder, info, block) {
     return false
   }
   av1_read_interp_filter(decoder, info, block)
@@ -828,16 +996,33 @@ pub fn av1_inter_frame_of(
     return None
   }
   let refs : Array[Av1RefFrame?] = Array::make(av1_num_ref_frames, None)
-  for name in av1_last_frame..=av1_alt_ref_frame {
+  for name in av1_last_frame..<=av1_alt_ref_frame {
     let slot = header.ref_frame_idx[name - av1_last_frame]
     if slot < 0 || slot >= av1_num_ref_frames {
       return None
     }
     refs[name] = map.slots[slot]
   }
+  // `motion_field_estimation` runs while reading the uncompressed header, before
+  // any tile is decoded, so the grid is built from the reference buffers as they
+  // stand before this frame is stored.
+  let temporal = if header.use_ref_frame_mvs {
+    Some(
+      av1_motion_field_estimation(
+        sequence,
+        header.order_hint,
+        header.order_hints,
+        refs,
+        mi_cols,
+        mi_rows,
+      ),
+    )
+  } else {
+    None
+  }
   Some({
     field: av1_motion_field(mi_cols, mi_rows),
-    frame: av1_mv_frame_of(header),
+    frame: av1_mv_frame_of(header, temporal~),
     refs,
     interpolation_filter: header.interpolation_filter,
     enable_dual_filter: sequence.enable_dual_filter,
@@ -850,16 +1035,19 @@ pub fn av1_inter_frame_of(
 
 ///|
 /// The per-tile view of a frame's inter state. Each tile restarts probability
-/// adaptation from the frame context, so it gets its own rows.
+/// adaptation from the frame context, so it gets its own rows: the inherited
+/// snapshot when the frame names a primary reference, the normative defaults
+/// otherwise.
 fn av1_inter_info(
   config : Av1InterFrame,
   tile_row_start : Int,
   tile_col_start : Int,
   tile_row_end : Int,
   tile_col_end : Int,
+  cdfs? : Av1FrameCdfs? = None,
 ) -> Av1InterInfo {
   {
-    cdfs: av1_inter_cdfs(),
+    cdfs: av1_inter_cdfs_of(cdfs),
     field: config.field,
     frame: config.frame,
     refs: config.refs,

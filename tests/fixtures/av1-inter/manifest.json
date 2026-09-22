@@ -48,6 +48,54 @@
       "name": "inter_cdf_inherit_64x64",
       "obu_sha256": "427a6ccde7d821896efeefdec3d431fbc07ee446e4d19876562d949e8244285e",
       "reference_sha256": "47a875e3451a8e0671db7aa00c1d17aef62ea155fae06bccf1062003762313aa"
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=0 --end-usage=q --cq-level=32 --kf-max-dist=1000 --lossless=1 --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_lossless_64x64.obu C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_lossless_64x64.input.yuv",
+      "name": "inter_lossless_64x64",
+      "obu_sha256": "8f2c72ad311bc84a50a5f1c7e00e171fac7ab1e8422b3db37e3735cee3200b44",
+      "reference_sha256": "2bedab6e2fa08ae92e3c32ea597a5b1f70fa86eebd6cf5eb44f082399b1f4b00",
+      "reference_command": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE -i C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_lossless_64x64.obu -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_lossless_64x64.reference.yuv --muxer yuv",
+      "notes": "A coded-lossless pair from the same minimal tool set: both frames set coded_lossless, so the inter frame is a whole-frame skip with no quantisation and no filtering. It pins the coded_lossless branch of av1_inter_frame_supported."
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=0 --end-usage=q --cq-level=32 --kf-max-dist=1000 --enable-obmc=1 --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_obmc_64x64.obu C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_obmc_64x64.input.yuv",
+      "name": "inter_obmc_64x64",
+      "obu_sha256": "38273743192a68f5ac65871b483c4f2dc2130f130895c8677f4246f173982474",
+      "reference_sha256": "a9febf5875696dff8e110c323ac175a4886ca6919ef38631c6206068dd4c80fb",
+      "reference_command": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE -i C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_obmc_64x64.obu -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_obmc_64x64.reference.yuv --muxer yuv",
+      "notes": "Isolated overlapped block motion compensation: the same minimal tool set with only --enable-obmc=1 added. The inter frame signals is_motion_mode_switchable and one 32x32 block (MI row 0, column 8) codes use_obmc=1, so both the above and the left overlap blends run on luma and chroma."
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=0 --end-usage=q --cq-level=32 --kf-max-dist=1000 --tune-content=screen --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_screen_content_64x64.obu C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_screen_content_64x64.input.yuv",
+      "name": "inter_screen_content_64x64",
+      "obu_sha256": "68a5baffbb7fa32e65ea8cda22d9c66bc36c64537dcea6c9abf67ead358dbc32",
+      "reference_sha256": "aacba6548bc4943c4ea002bb060e59afa8fb7d6e0bcd89d71625f227e310c342",
+      "reference_command": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE -i C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_screen_content_64x64.obu -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_screen_content_64x64.reference.yuv --muxer yuv",
+      "notes": "A refused fixture, like general_inter_64x64: --tune-content=screen sets seq_force_screen_content_tools to SELECT, so the inter frame reads allow_screen_content_tools = 1. That derives force_integer_mv, which the block stage already handles, but an inter frame may contain intra blocks and intra_block_mode_info reads palette_mode_info when the flag is set, which it does not. The test pins that such a frame is refused whole; with the gate bypassed the same stream reconstructs [0, 0, 0] per plane because no block actually selects palette."
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=4 --end-usage=q --cq-level=32 --kf-max-dist=1000 --tune-content=screen --enable-palette=1 --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_palette_64x64.obu C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_palette_64x64.input.yuv",
+      "name": "inter_palette_64x64",
+      "obu_sha256": "5d8ad1721f6c439d560fc286cb3039117cde3ca871cfbac2fc175ea58a273ef2",
+      "reference_sha256": "f50af78302ff026d6ec11b445be0db7f793fde0af63574d54fdf2bd10b41ec14",
+      "reference_command": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE -i C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_palette_64x64.obu -o C:/Users/\u8c26\u53cbLee/Desktop/Project/mb/pixelforge/tests/fixtures/av1-inter\\inter_palette_64x64.reference.yuv --muxer yuv",
+      "notes": "The palette rung: --tune-content=screen plus --enable-palette=1 over a source whose inter frame carries a three-stripe flat patch in the bottom-right quadrant. The inter frame reads allow_screen_content_tools = 1 and one intra block inside it codes palette_mode_info with two luma colours, so both the palette syntax of an inter-frame intra block and its index-map prediction are exercised. cpu-used=4 is required: this libaom build segfaults before flushing at cpu-used=0..3 for this source."
+    },
+    {
+      "command": "D:\\ProgramData\u0007naconda3\\Library\bin\u0007omenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=0 --end-usage=q --cq-level=32 --kf-max-dist=1000 --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 --enable-warped-motion=1 -o tests/fixtures/av1-inter\\inter_warped_64x64.obu tests/fixtures/av1-inter\\inter_warped_64x64.input.yuv",
+      "name": "inter_warped_64x64",
+      "obu_sha256": "1f4eae0a1a42c13646a19dc84746e4534b682e7c76b50a63aa7518f5d19c12b3",
+      "reference_sha256": "18c7aa62775f23ab2ec65622277363ad8775f6da64936c97931ae5516587bb20",
+      "reference_command": "D:\\ProgramData\u0007naconda3\\Library\bin\\dav1d.EXE -i tests/fixtures/av1-inter\\inter_warped_64x64.obu -o tests/fixtures/av1-inter\\inter_warped_64x64.reference.yuv --muxer yuv",
+      "notes": "Isolated warped motion: the minimal tool set with only --enable-warped-motion=1 added. The inter frame signals both is_motion_mode_switchable and allow_warped_motion, so read_motion_mode takes the three-symbol branch whenever find_warp_samples reports a candidate. No block selects LOCALWARP in this stream, so the frame reconstructs; a stream that does select it is refused instead."
+    },
+    {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 -w 64 -h 64 --limit=3 --cpu-used=0 --end-usage=q --cq-level=32 --kf-max-dist=1000 --enable-order-hint=1 --enable-ref-frame-mvs=1 --error-resilient=0 --enable-dual-filter=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o tests/fixtures/av1-inter\\inter_temporalmv_64x64.obu tests/fixtures/av1-inter\\inter_temporalmv_64x64.input.yuv",
+      "name": "inter_temporalmv_64x64",
+      "obu_sha256": "193ee67622a3ac005f30ca9e7b907e1ba93c986a7ab32a5af1489d6f47c12d4f",
+      "reference_sha256": "88730cae1cc8db46e927aad0f9e3465fe17b9347c385b72cb14325dfb7559c0b",
+      "reference_command": "D:\\ProgramData\\anaconda3\\Library\\bin\\dav1d.EXE -i tests/fixtures/av1-inter\\inter_temporalmv_64x64.obu -o tests/fixtures/av1-inter\\inter_temporalmv_64x64.reference.yuv --muxer yuv",
+      "notes": "Isolated temporal motion vectors: the minimal tool set with only --enable-order-hint=1 --enable-ref-frame-mvs=1 added, which is the flag pair that turns use_ref_frame_mvs from a derivation into a read. The inter frame carries order_hint 1, reference_select 0 and skip_mode_present 0, so motion_field_estimation projects the key frame buffer and find_mv_stack runs its temporal scan. av1_inter_frame_supported no longer lists use_ref_frame_mvs."
     }
   ],
   "frames_per_fixture": 2,

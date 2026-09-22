@@ -14,15 +14,19 @@ are 64x64, and each fixture names its own input source and dimensions.
 
 Each fixture ships the raw OBU (`.obu`), the FFmpeg `trace_headers` transcript
 (`.trace.txt`) that acts as the syntax oracle, and dav1d's native planes
-(`.reference.yuv`, both frames). Five also ship the deterministic input
-(`.input.y4m`) they were encoded from; `inter_lf_delta_64x64`,
-`inter_primary_ref_64x64` and `inter_cdf_inherit_64x64` are derived from another
-fixture's bytes instead. The generated white-box test
+(`.reference.yuv`, both frames). The six derived from the `--i420` Y4M path also
+ship the deterministic input (`.input.y4m`) they were encoded from;
+`inter_lossless_64x64`, `inter_obmc_64x64`, `inter_screen_content_64x64`,
+`inter_palette_64x64`, `inter_warped_64x64` and `inter_temporalmv_64x64` ship
+theirs as raw planar `.input.yuv`, because they were encoded through aomenc's
+`-w`/`-h` raw input path rather than a Y4M muxer.
+`inter_lf_delta_64x64`, `inter_primary_ref_64x64` and
+`inter_cdf_inherit_64x64` are derived from another fixture's bytes instead. The generated white-box test
 `av1_inter_reference_wbtest.mbt` embeds the OBUs and both frames' planes, asserts
 every frame-header field against the transcript, and compares reconstruction
 against dav1d sample-for-sample.
 
-## The eight fixtures
+## The fixtures
 
 `general_inter_64x64.obu` is one untouched libaom encode with the default tool
 set, so frame 1 is an inter frame that reads the whole general grammar:
@@ -247,3 +251,124 @@ The same build also segfaults at teardown on *some* two-frame encodes: the
 8-count / period-64, which is why the amplitudes and periods in `encode_input`
 are pinned rather than chosen for looks. Probe candidate content with a throwaway
 encode before adding a fixture that leans on it.
+
+`inter_lossless_64x64.obu` is the lossless rung: the same `MINIMAL_FLAGS` set plus
+`--lossless=1`, so both frames carry `base_q_idx == 0` and the coefficient path runs
+without quantisation error. dav1d 1.2.1's planes for the inter frame are the truth and
+the generated test asserts `[0, 0, 0]` per plane: motion compensation, the residual and
+the frame filters must all agree exactly, because a lossless reconstruction has no
+quantisation slack to hide a wrong prediction or a mis-scaled coefficient. This fixture
+pins that `coded_lossless` inter frames are reconstructed rather than refused; the
+`av1_inter_frame_supported` gate no longer lists `coded_lossless` because the block
+stage handles it sample-exactly.
+
+`inter_obmc_64x64.obu` is the overlapped-block-motion-compensation rung: the same
+`MINIMAL_FLAGS` set with only `--enable-obmc=1` added, which is the single flag
+that turns the frame header's `is_motion_mode_switchable` from a derivation into
+a read. Its input is the decoded pair of `general_inter_64x64` re-fed as a
+source, so frame 0 is a key frame the encoder already knows it can predict from
+exactly. The inter frame partitions into four 32x32 blocks; the top-right one at
+MI row 0, column 8 carries `use_obmc = 1`, so `read_motion_mode` selects OBMC for
+it and the overlap blending process runs on all three planes: the left pass
+blends the eight columns it shares with the top-left block, and the above pass
+contributes nothing because that block sits on the frame's top row
+(`AvailU` is 0). dav1d 1.2.1's planes are the truth and the generated test
+asserts `[0, 0, 0]` per plane.
+
+This fixture is the one that caught a silent-wrong-picture bug rather than a
+rejection: `read_motion_mode` used to read the `use_obmc` symbol, set
+`motion_mode = 1`, and then report success, so the block was predicted as if the
+mode were SIMPLE. Luma still matched dav1d (the neighbour's prediction happened
+to round to the same samples where the two overlap strips met), which is exactly
+the kind of near-miss that makes an unimplemented tool dangerous: the frame
+decoded, most of it was right, and only the blend columns were wrong - 16 luma
+and 48 chroma samples. `av1_obmc_blend` now implements the two passes of
+AV1 §7.11.3.9, and `av1_inter_frame_supported` no longer lists
+`is_motion_mode_switchable`.
+
+## Above-pass coverage
+
+`inter_obmc_64x64` only exercises the **left** pass: its OBMC block sits on the
+frame's top row, so `AvailU` is 0 and the above pass never runs. The libaom build
+in `D:\ProgramData\anaconda3\Library\bin` segfaults before flushing on most other
+two-frame encodes (five of seven candidate sources produced a zero-length OBU),
+so a second fixture with a lower-row OBMC block could not be produced from it.
+`av1_obmc_wbtest.mbt` drives `av1_obmc_blend` directly instead and pins the above
+pass on both luma and chroma: the strip geometry (`predW` from `step4`, `predH`
+capped at `h >> 1` and `32 >> subY`), the mask being indexed by **row** rather
+than by column, the `Round2(m * own + (64 - m) * neighbour, 6)` rounding, and the
+fact that an intra neighbour contributes nothing. Disabling the above pass makes
+the two positive cases fail with the exact expected values, so they are not
+passing by accident.
+
+`inter_screen_content_64x64.obu` is the screen-content rung:
+`--tune-content=screen` sets `seq_force_screen_content_tools` to SELECT, so the
+inter frame reads `allow_screen_content_tools = 1` from the bitstream instead of
+deriving it. On an inter frame that flag does two things: it derives
+`force_integer_mv`, which the MV reader already handles, and it lets
+`intra_block_mode_info` read `palette_mode_info` for intra blocks inside the
+frame. Both are implemented, so the frame reconstructs sample-exactly.
+
+`inter_palette_64x64.obu` is the same tool set over a source whose inter frame
+carries a three-stripe flat patch in the bottom-right quadrant, so one intra
+block inside the inter frame actually selects palette (two luma colours, no
+chroma palette) and the index-map prediction runs. This is the fixture that
+pins the palette path of an inter frame; `--cpu-used=4` is required because this
+libaom build segfaults before flushing at `--cpu-used=0..3` for this source.
+
+Both fixtures also pin `allow_intrabc = false`: AV1 §6.8.2 reads that bit only
+under `if ( FrameIsIntra )`, so it can never be set on an inter frame, and the
+gate entry in `av1_inter_frame_supported` that used to list it was dead code.
+
+\`inter_warped_64x64.obu\` is the warped-motion rung: the same minimal tool set
+with only \`--enable-warped-motion=1\` added. That flag makes the frame header
+derive \`allow_warped_motion\`, so \`read_motion_mode\` takes the **three-symbol**
+\`motion_mode\` branch whenever \`find_warp_samples\` reports a candidate, instead
+of the binary \`use_obmc\` one. Both symbol shapes are in the stream, and the
+frame reconstructs sample-exactly because no block selects LOCALWARP.
+
+\`find_warp_samples\` itself is pinned by \`av1_warp_samples_wbtest.mbt\`, because
+it reads no entropy symbols and a wrong candidate count would desynchronise the
+symbol stream rather than merely pick a worse predictor. Its scan limit is
+derived, not measured: a 64x64-superblock profile caps a block at 16 four-by-four
+units per axis and the scan steps by at least the smallest block's two units, so
+18 samples can never be truncated and the result is independent of the
+unspecified \`LEAST_SQUARES_SAMPLES_MAX\`.
+
+A block that does select LOCALWARP is refused whole: the warp estimation and the
+warped prediction grid are not implemented, and this repository's rule is that a
+legal but unimplemented tool must not be silently decoded into a wrong picture.
+
+## The fourteenth fixture
+
+`inter_temporalmv_64x64.obu` is the temporal-motion-vector rung: the same minimal
+tool set with `--enable-order-hint=1 --enable-ref-frame-mvs=1` added, which is the
+flag pair that turns `use_ref_frame_mvs` from a derivation into a read. Order
+hints have to travel with it - AV1 §6.8.13 reads the bit only on an inter frame
+whose sequence enables them - so this is the first fixture in the repository whose
+inter frame carries a non-zero `order_hint` (1) at all. The frame sets
+`reference_select = 0` and `skip_mode_present = 0`, so no compound block reaches
+the candidate stack and the temporal scan is a single-reference lookup.
+
+What it pins is the whole chain: `motion_field_estimation` (§7.9.1) projects the
+key frame's buffer while the uncompressed header is read, and `av1_temporal_scan`
+(§7.10.2.5) pushes the projected vectors between the near weighting and the
+corner scan of `av1_find_mv_stack`. The key frame's saved field is intra
+everywhere, so its projection writes no usable cell; what the scan contributes
+here is `ZeroMvContext = 1` from the block's own cell, which is a *read* quantity
+- the wrong context mis-lexes the inter mode tree instead of merely picking a
+worse predictor. Both halves were measured: deleting the whole scan makes the
+frame fail to decode at all, and deleting only that assignment fails the fixture
+too. dav1d 1.2.1's planes are the truth and the generated test asserts
+`[0, 0, 0]` per plane, so `av1_inter_frame_supported` no longer lists
+`use_ref_frame_mvs`.
+
+The scan's remaining behaviour - the candidate push, the weight-2 merge, the
+precision lowering, the stride, the same-superblock extension and the two refusal
+paths - is pinned by `av1_mv_temporal_wbtest.mbt`, because this stream's grid
+never holds a usable vector and cannot reach them. What no fixture reaches yet is
+a projection that *does* land: the only reference here is a key frame, and the
+libaom build in `D:\ProgramData\anaconda3\Library\bin` cannot produce the
+two-inter-frame sequence a live projection would need. `motion_field_estimation`
+and `av1_mv_projection` therefore rest on the normative text plus their own unit
+tests until an encoder build can emit that stream.

@@ -207,7 +207,7 @@ pub fn av1_decode_dc_tile(
   superres_denom? : Int = 8,
 ) -> Image? {
   if loop_filter is Some(_) || restoration is Some(_) || upscaled_width != 0 {
-    let (frame, _stripe_store) = match
+    let (frame, _stripe_store, _cdfs) = match
       av1_decode_tile_planes(
         width,
         height,
@@ -307,7 +307,7 @@ pub fn av1_decode_tile_group(
     upscaled_width != 0 {
     let cols = Array::makei(tile_cols + 1, fn(i) { i * tile_width })
     let rows = Array::makei(tile_rows + 1, fn(i) { i * tile_height })
-    let (frame, _stripe_store) = match
+    let (frame, _stripe_store, _cdfs) = match
       av1_decode_tile_planes(
         width,
         height,
@@ -429,7 +429,7 @@ pub fn av1_decode_tile_group_with_boundaries(
     Some(value) => value
     None => return None
   }
-  let (frame, _stripe_store) = match
+  let (frame, _stripe_store, _cdfs) = match
     av1_decode_tile_planes(
       width,
       height,
@@ -445,19 +445,19 @@ pub fn av1_decode_tile_group_with_boundaries(
       use_128x128_superblock,
       bit_depth,
       reduced_tx_set,
-        enable_filter_intra,
-        tx_mode_select,
-        cdef,
-        monochrome~,
-        enable_intra_edge_filter~,
-        loop_filter~,
-        restoration~,
-        upscaled_width~,
-        superres_denom~,
-      ) {
-      Some(value) => value
-      None => return None
-    }
+      enable_filter_intra,
+      tx_mode_select,
+      cdef,
+      monochrome~,
+      enable_intra_edge_filter~,
+      loop_filter~,
+      restoration~,
+      upscaled_width~,
+      superres_denom~,
+    ) {
+    Some(value) => value
+    None => return None
+  }
   av1_frame_to_rgba(frame)
 }
 

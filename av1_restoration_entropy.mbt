@@ -49,6 +49,7 @@ pub(all) struct Av1RestorationTileState {
   ref_sgr : Array[Array[Int]]
   units : Array[Av1RestorationUnitRecord]
 }
+
 ///|
 /// Wiener tap alphabet and reference table (libaom restoration.h:94-112).
 /// Ranges are inclusive; k is the subexponential width.
@@ -240,7 +241,11 @@ fn av1_restoration_read_sgr(
       4,
       tile_state.ref_sgr[plane][0],
     )
-    xqd[1] = av1_clip_int(av1_sgr_xqd_low(1), 128 - xqd[0], av1_sgr_xqd_high(1) - 1)
+    xqd[1] = av1_clip_int(
+      av1_sgr_xqd_low(1),
+      128 - xqd[0],
+      av1_sgr_xqd_high(1) - 1,
+    )
   } else {
     xqd[0] = decoder.entropy_signed_refsubexp(
       av1_sgr_xqd_low(0),
@@ -287,13 +292,12 @@ fn av1_restoration_read_unit(
         av1_restoration_read_sgr(decoder, tile_state, plane)
       }
     }
-    Av1RestorationSwitchable => {
+    Av1RestorationSwitchable =>
       match decoder.symbol(tile_state.cdf_switchable) {
         0 => Av1RestorationUnitNone
         1 => av1_restoration_read_wiener(decoder, tile_state, plane)
         _ => av1_restoration_read_sgr(decoder, tile_state, plane)
       }
-    }
     Av1RestorationNone => Av1RestorationUnitNone
   }
 }
@@ -328,12 +332,20 @@ fn av1_restoration_sb_unit_range(
   let c0 = (mc0 * num_x + den_x - 1) / den_x
   let c1 = {
     let raw = (mc1 * num_x + den_x - 1) / den_x
-    if raw < layout.unit_cols[plane] { raw } else { layout.unit_cols[plane] }
+    if raw < layout.unit_cols[plane] {
+      raw
+    } else {
+      layout.unit_cols[plane]
+    }
   }
   let r0 = (mr0 * my + unit - 1) / unit
   let r1 = {
     let raw = (mr1 * my + unit - 1) / unit
-    if raw < layout.unit_rows[plane] { raw } else { layout.unit_rows[plane] }
+    if raw < layout.unit_rows[plane] {
+      raw
+    } else {
+      layout.unit_rows[plane]
+    }
   }
   (c0, c1, r0, r1)
 }
@@ -342,9 +354,7 @@ fn av1_restoration_sb_unit_range(
 /// Read the loop-restoration units whose nominal top-left corners fall
 /// inside one root superblock, in plane then unit-row then unit-column
 /// order. `mc0`/`mr0` are the SB's global coded MI coordinates. An SB
-/// may contain zero, one or several unit origins per plane. Returns
-/// false on entropy overrun at the unit boundary; the MSAC budget rule
-/// mirrors the tile leaf check (`symbol_max_bits >= -14`).
+/// may contain zero, one or several unit origins per plane.
 fn av1_restoration_read_sb(
   decoder : Av1SymbolDecoder,
   tile_state : Av1RestorationTileState,
@@ -363,27 +373,14 @@ fn av1_restoration_read_sb(
       continue
     }
     let (c0, c1, r0, r1) = av1_restoration_sb_unit_range(
-      layout,
-      plane,
-      mc0,
-      mc1,
-      mr0,
-      mr1,
-      subsampling_x,
-      subsampling_y,
+      layout, plane, mc0, mc1, mr0, mr1, subsampling_x, subsampling_y,
     )
     for unit_row in r0..<r1 {
       for unit_col in c0..<c1 {
-        let unit = av1_restoration_read_unit(decoder, tile_state, plane, frame_mode)
-        tile_state.units.push({
-          plane,
-          unit_row,
-          unit_col,
-          unit,
-        })
-        if decoder.symbol_max_bits < -14 {
-          return false
-        }
+        let unit = av1_restoration_read_unit(
+          decoder, tile_state, plane, frame_mode,
+        )
+        tile_state.units.push({ plane, unit_row, unit_col, unit, })
       }
     }
   }

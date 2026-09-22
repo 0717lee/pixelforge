@@ -391,15 +391,10 @@ fn av1_intra_transform(
     let tx_type = if plane_index == 0 {
       if inter {
         match state.inter {
-          Some(info) => av1_inter_luma_tx_type(
-            decoder,
-            state,
-            info,
-            tx_width,
-            tx_height,
-            x4,
-            y4,
-          )
+          Some(info) =>
+            av1_inter_luma_tx_type(
+              decoder, state, info, tx_width, tx_height, x4, y4,
+            )
           None => return false
         }
       } else {
@@ -416,13 +411,7 @@ fn av1_intra_transform(
             None => return false
           }
           av1_inter_chroma_tx_type(
-            state,
-            info,
-            current,
-            tx_width,
-            tx_height,
-            x,
-            y,
+            state, info, current, tx_width, tx_height, x, y,
           )
         }
         None => return false
@@ -499,26 +488,29 @@ fn av1_intra_transform(
       Some(value) => value
       None => return false
     }
-  } else if all_zero != 1 {
-    return false
   } else if inter && plane_index == 0 {
     // An all-zero luma transform still records DCT_DCT, because the block's
     // chroma transforms inherit it (AV1 §5.11.39).
     match state.inter {
-      Some(info) => av1_inter_record_tx_types(
-        info.field,
-        x4,
-        y4,
-        tx_width,
-        tx_height,
-        Av1TxDctDct,
-      )
+      Some(info) =>
+        av1_inter_record_tx_types(
+          info.field,
+          x4,
+          y4,
+          tx_width,
+          tx_height,
+          Av1TxDctDct,
+        )
       None => ()
     }
   }
-  if decoder.symbol_max_bits < -14 {
-    return false
-  }
+  // AV1 §5.11.39 also writes `TxTypes[...] = DCT_DCT` for an all-zero luma
+  // transform of an *intra* block. That write is deliberately not mirrored here:
+  // this decoder has no intra-wide TxTypes grid, and nothing on the intra path
+  // would read it - a chroma transform of an intra block derives its type from
+  // `Mode_To_Txfm[UVMode]` (§5.11.47), and the loop filter and the transform-size
+  // state read `plane.tx_sizes`, which the tail below writes for every leaf,
+  // all-zero ones included.
   let colors = if plane_index == 0 {
     state.palette.y_colors
   } else if plane_index == 1 {
@@ -533,8 +525,8 @@ fn av1_intra_transform(
       let row = y + i / tx_width
       let col = x + i % tx_width
       plane.pixels[(if row < plane.height { row } else { plane.height - 1 }) *
-        plane.width +
-        (if col < plane.width { col } else { plane.width - 1 })]
+      plane.width +
+      (if col < plane.width { col } else { plane.width - 1 })]
     })
   } else if !colors.is_empty() {
     let block = match state.prediction_block {
@@ -820,7 +812,7 @@ fn av1_intra_read_mode_angle(
   } else {
     0
   }
-  if delta < -3 || delta > 3 || decoder.symbol_max_bits < -14 {
+  if delta < -3 || delta > 3 {
     return false
   }
   if plane == 0 {
@@ -874,9 +866,6 @@ fn av1_intra_cdef_index(
     index = 0
     for _ in 0..<config.bits {
       index = (index << 1) | decoder.bool()
-    }
-    if decoder.symbol_max_bits < -14 {
-      return false
     }
   }
   let x1 = (block.col + block.width - 1) / 64
@@ -1003,7 +992,7 @@ fn av1_intra_residuals(
                 width,
                 height,
                 skip,
-                inter=inter,
+                inter~,
               ) {
               return false
             }
@@ -1255,7 +1244,7 @@ fn av1_intra_only_block(
     luma_tx_width,
     luma_tx_height,
   )
-  decoder.symbol_max_bits >= -14
+  true
 }
 
 ///|
@@ -1309,6 +1298,13 @@ fn av1_decode_intra_tile_state(
     v_dc: 0,
     v_ac: 0,
   },
+  /// The frame entropy context this tile starts from. `None` seeds every
+  /// table with the normative defaults (a frame whose primary reference
+  /// names no slot, or `PRIMARY_REF_NONE`).
+  frame_cdfs? : Av1FrameCdfs? = None,
+  /// When present, the tile's final entropy state is captured here, so the
+  /// caller can store it as the frame context (AV1 §8.3).
+  cdfs_out? : Array[Av1FrameCdfs?]? = None,
 ) -> Av1IntraState? {
   if width <= 0 ||
     height <= 0 ||
@@ -1361,7 +1357,13 @@ fn av1_decode_intra_tile_state(
     None => return None
   }
   let decoder = av1_msac_new(payload, !disable_cdf_update)
-  let cdfs = av1_partition_cdf_state()
+  // Every adaptive table the tile owns starts from the frame context, so a
+  // frame that inherits one through `primary_ref_frame` decodes with the
+  // reference's adapted probabilities instead of the defaults.
+  av1_intra_cdfs_of(state, frame_cdfs)
+  // The partition trees and the loop-restoration selectors are tile-owned like
+  // the block tables: each starts from the inherited frame context.
+  let cdfs = av1_partition_cdfs_of(frame_cdfs)
   let sb_size = if use_128x128_superblock { 128 } else { 64 }
   // Per-tile loop-restoration entropy state: the mode CDF rows adapt
   // across every superblock of this tile and the coefficient references
@@ -1370,6 +1372,14 @@ fn av1_decode_intra_tile_state(
     Some(layout) =>
       Some(av1_restoration_tile_state_new(layout.config.modes.length()))
     None => None
+  }
+  match lr_tile_state {
+    Some(lr_state) =>
+      match frame_cdfs {
+        Some(snapshot) => av1_lr_cdfs_restore(lr_state, snapshot)
+        None => ()
+      }
+    None => ()
   }
   let mut row = 0
   while row < coded_height {
@@ -1420,6 +1430,13 @@ fn av1_decode_intra_tile_state(
       for record in lr_state.units {
         state.restoration_units.push(record)
       }
+    None => ()
+  }
+  // The context_update_tile_id tile (tile 0) ends by writing its final rows
+  // into the frame context the next frame may inherit (AV1 §8.3).
+  match cdfs_out {
+    Some(sink) =>
+      sink.push(Some(av1_frame_cdfs_capture(state, cdfs, lr_tile_state)))
     None => ()
   }
   Some(state)

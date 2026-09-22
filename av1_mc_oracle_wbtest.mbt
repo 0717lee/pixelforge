@@ -70,6 +70,14 @@ fn av1_mc_test_frame(
     gm_params: Array::make(av1_total_refs_per_frame, av1_identity_gm_params()),
     loop_filter_ref_deltas: av1_default_loop_filter_ref_deltas(),
     loop_filter_mode_deltas: [0, 0],
+    cdfs: None,
+    // This frame never went through the inter block stage, so it carries no
+    // motion field and is ineligible as a temporal-candidate source.
+    mf_refs: [],
+    mf_mvs: [],
+    mi_cols: 0,
+    mi_rows: 0,
+    saved_order_hints: [],
   }
 }
 

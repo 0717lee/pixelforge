@@ -43,14 +43,15 @@ test "rectangular coefficient scans cover both adjusted domains and 1D classes" 
   assert_eq(diagonal[0], 0)
   assert_eq(diagonal[1], 32)
   assert_eq(diagonal[2], 1)
-  assert_eq(vertical[1], 32)
-  assert_eq(horizontal[16], 16)
+  assert_eq(vertical[1], 1)
+  assert_eq(horizontal[16], 256)
   let transposed = av1_coeff_scan_rect(16, 32, AV1_SCAN_DEFAULT)
   assert_eq(transposed[0], 0)
   assert_eq(transposed[1], 1)
   assert_eq(transposed[2], 16)
 }
 
+///|
 /// Large rectangular transforms code the adjusted 32x32 domain and expand
 /// into a full 64x32/32x64 coefficient plane for inverse reconstruction.
 test "large rectangular coefficient decoder expands adjusted domain" {
@@ -64,7 +65,9 @@ test "large rectangular coefficient decoder expands adjusted domain" {
   ).unwrap()
   assert_eq(horizontal.coeffs.length(), 64 * 32)
   for row in 0..<32 {
-    for col in 32..<64 { assert_eq(horizontal.coeffs[row * 64 + col], 0) }
+    for col in 32..<64 {
+      assert_eq(horizontal.coeffs[row * 64 + col], 0)
+    }
   }
   let vertical_context = av1_coeff_context(33, 4, 0)
   let vertical = av1_decode_coeffs_leaf_with_decoder(
@@ -76,10 +79,13 @@ test "large rectangular coefficient decoder expands adjusted domain" {
   ).unwrap()
   assert_eq(vertical.coeffs.length(), 32 * 64)
   for row in 32..<64 {
-    for col in 0..<32 { assert_eq(vertical.coeffs[row * 32 + col], 0) }
+    for col in 0..<32 {
+      assert_eq(vertical.coeffs[row * 32 + col], 0)
+    }
   }
 }
 
+///|
 test "small rectangular coefficient decoder uses area-class EOB tables" {
   let a = av1_decode_coeffs_leaf_with_decoder(
     av1_msac_new([b'\x00', b'\x00', b'\x00'], false),

@@ -1,6 +1,71 @@
 # Changelog
 
 ## Unreleased
+- Closed the stage-B inter fixture: `inter_cdf_inherit_64x64`'s inter frame now
+  matches dav1d sample for sample (`[0, 0, 0]`, was `[3992, 842, 928]`), the
+  production loader (`av1_cdf_load_enabled`) is on, and the OBU and its dav1d
+  truth are untouched. Two conformance bugs were in the way, neither of them in
+  the inheritance machinery itself.
+- Fixed the 1-D coefficient scans being swapped between the two directional
+  transform classes. `av1_coeff_scan_square` and `av1_coeff_scan_rect` emitted
+  the transpose for `AV1_SCAN_VERT` and the identity for `AV1_SCAN_HORZ`, but the
+  spec's `get_scan` maps the `V_*` types to `Mrow_Scan_*` (row-major) and the
+  `H_*` types to `Mcol_Scan_*` (column-major) - `Mrow_Scan_16x16` is the
+  identity and `Mcol_Scan_16x16` the transpose, likewise the rectangular
+  `Mrow_Scan_16x8` / `Mcol_Scan_16x8` (AV1 spec get_scan; go-av1
+  `getScan`/`scans_all_gen.go`). No existing sample could expose it: every leaf
+  in the pixel-exact corpus is `scan_class == DEFAULT`, and this fixture holds
+  the first `H_*` leaf. The wrong scan order moved the 2-D position a
+  `coeff_base` context is derived from, so one late coefficient of one 16x16
+  block read a neighbouring CDF row - identical symbol values, identical pixels
+  for that read, but a differently adapted row that desynchronised every later
+  read in the frame.
+- Removed the `symbol_max_bits >= -14` over-read guards. The spec only requires
+  that bound at `exit_symbol`: AV1 §8.2 explicitly allows `SymbolMaxBits` to go
+  negative inside `read_symbol` and names the values read past the payload end
+  as padding zero bits, which `read_bits` supplies (verified equivalent to
+  libdav1d's "shift in ones, stop XORing" over 646 consecutive past-the-end
+  reads). libdav1d does not enforce the check: on this fixture instrumented
+  dav1d reads past its 11-byte tile payload from symbol 41 of 646 and ends at
+  `SymbolMaxBits = -563`, so refusing on the budget also refused the reference
+  decoder's own picture. The counter itself stays, because `renorm`'s
+  `Min(shift, Max(0, SymbolMaxBits))` is the spec's padding mechanism.
+- Verified the past-the-end path against libdav1d on three independent streams.
+  The `av1_cdef_alpha_gate_wbtest` payloads whose CDEF index entropy runs past a
+  one-byte tile are accepted by libdav1d (measured: it decodes all three, 4096
+  samples each), and this decoder now reproduces its bytes exactly (plane sums
+  522880, 523883, 525119; leading samples identical). The old comment stating
+  libdav1d rejects them was wrong and is corrected.
+- Rewrote the five tests that pinned the removed guard, keeping each test's
+  subject but pinning the reference-matching behaviour: the transform-tree
+  coefficient walk completes from padding bits (1 leaf), `vartx` reads the same
+  16-leaf tree from a one-byte payload, `read_sb` completes its unit reads, the
+  truncated palette read completes with its decoded colors, and the CDEF-alpha
+  tile decodes to dav1d's plane. The 1-D scan assertions moved with the swap
+  (`vertical[1] == 1`, `horizontal[16] == 256`).
+- Documentation: `HANDOFF.md` records the instrumented dav1d build (dav1d 1.2.1
+  from source with MSVC + meson, `src/msac.c` patched to log every symbol with
+  its pre-adaptation CDF row), the complementary-CDF convention between the two
+  decoders (ours and dav1d's rows sum to 32768), and the read-by-read
+  localisation that led to the scan swap.
+- Formatting: the tree was re-formatted by the installed MoonBit toolchain
+  (0.1.20260827), whose formatter re-wraps long literals and statements
+  differently than the 0.10.11+6ff76a5f9 version CI pins; no `fmt` check runs in
+  CI and no code changed beyond the entries above.
+- Fixed the saved frame entropy context keeping its adaptation counters, which
+  made an inheriting frame adapt at the wrong rate from its very first symbol
+  (AV1 §6.10 `load_cdfs`, libaom's `av1_reset_cdf_symbol_counters`; go-av1
+  applies it in `resetCounts` before saving). The counters are the last entry of
+  every CDF row and select the adaptation rate together with the symbol count,
+  so the saving frame's own decode and every row value were still exact - only a
+  frame that loaded the context saw the difference, which is why it had stayed
+  hidden while `inter_cdf_inherit_64x64` disagreed with dav1d over most of the
+  picture. Measured on that fixture with the loader enabled and the §8.2
+  over-read guard relaxed: the inter frame's disagreement drops from
+  [4029, 464, 708] to [2138, 210, 493], and one parameterized probe stream now
+  matches dav1d at [0, 0, 0]. The production loader stays off until the fixture
+  itself is exact; the [3992, 842, 928] fence is unchanged, as is the OBU and its
+  dav1d truth.
 - Archived the fence for the entropy-state snapshot. `inter_cdf_inherit_64x64` is
   `inter_minimal_64x64` with one byte rewritten - `primary_ref_frame` 7 to 0, the key
   frame left free to keep its *adapted* distributions - which makes it a legal,

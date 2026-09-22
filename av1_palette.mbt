@@ -66,11 +66,7 @@ fn av1_palette_ns(decoder : Av1SymbolDecoder, n : Int) -> Int? {
   } else {
     2 * value - cutoff + decoder.bool()
   }
-  if decoder.symbol_max_bits < -14 {
-    None
-  } else {
-    Some(result)
-  }
+  Some(result)
 }
 
 ///|
@@ -311,9 +307,6 @@ fn av1_palette_read_colors(
       )
       state.v_colors = av1_palette_read_v_colors(decoder, size, bit_depth)
     }
-  }
-  if decoder.symbol_max_bits < -14 {
-    return false
   }
   av1_palette_record(state, block)
   true

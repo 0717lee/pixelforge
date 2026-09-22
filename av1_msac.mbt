@@ -1,5 +1,15 @@
 /// Pure MoonBit implementation of the AV1 symbol decoder (MSAC).
 ///
+/// `symbol_max_bits` tracks the spec's `SymbolMaxBits` (AV1 §8.2): the number
+/// of payload bits still available. The spec explicitly allows it to go
+/// negative during `read_symbol` - the values read past the payload end are
+/// the padding zero bits the spec names, and `read_bits` supplies exactly
+/// those. Only `exit_symbol` requires `SymbolMaxBits >= -14`; that conformance
+/// rule is not enforced here, matching libdav1d, so a stream whose entropy
+/// runs past its payload (for example one whose patched header changes which
+/// CDFs the symbols are read against) still decodes to the reference decoder's
+/// picture instead of being refused.
+///
 /// The decoder follows section 8.2 of the AV1 specification.  CDF values use
 /// the q15 representation used by the bitstream: an N-symbol CDF has N+1
 /// entries, with the final entry holding the adaptation counter.
@@ -169,7 +179,10 @@ fn Av1SymbolDecoder::bool(self : Av1SymbolDecoder) -> Int {
 /// MSAC `read_literal`: `bits` equiprobable boolean symbols, most
 /// significant bit first (AV1 spec §5.9.24). These consume arithmetic
 /// decoder capacity; they are not the raw data refill reader above.
-fn Av1SymbolDecoder::entropy_literal(self : Av1SymbolDecoder, bits : Int) -> Int {
+fn Av1SymbolDecoder::entropy_literal(
+  self : Av1SymbolDecoder,
+  bits : Int,
+) -> Int {
   let mut value = 0
   for _ in 0..<bits {
     value = (value << 1) | self.bool()

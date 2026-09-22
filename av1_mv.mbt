@@ -242,21 +242,45 @@ pub(all) struct Av1MvFrame {
   /// for it is refused rather than derived from an incomplete candidate list.
   use_ref_frame_mvs : Bool
   force_integer_mv : Int
+  /// `is_motion_mode_switchable` gates the per-block `use_obmc` / `motion_mode`
+  /// symbol of AV1 §5.11.27.
+  is_motion_mode_switchable : Bool
+  /// `allow_warped_motion` picks the three-symbol `motion_mode` branch over the
+  /// binary `use_obmc` one.
+  allow_warped_motion : Bool
   gm_type : Array[Int]
   gm_params : Array[Array[Int]]
   ref_frame_sign_bias : Array[Int]
+  /// Coded frame dimensions, which `is_scaled` compares against each stored
+  /// reference (AV1 §5.11.26: a reference is scaled when its visible extent
+  /// differs from the current frame's).
+  frame_width : Int
+  frame_height : Int
+  /// The 8x8 temporal grid this frame needs, or `None` when the frame does not
+  /// set `use_ref_frame_mvs`.
+  temporal : Av1MotionFieldGrid?
 }
 
 ///|
-/// Project a parsed frame header onto what motion derivation needs.
-pub fn av1_mv_frame_of(hf : Av1FrameHeaderInfo) -> Av1MvFrame {
+/// Project a parsed frame header onto what motion derivation needs. A frame
+/// that sets `use_ref_frame_mvs` also carries the 8x8 grid its temporal scan
+/// reads; `av1_inter_frame_of` supplies it.
+pub fn av1_mv_frame_of(
+  hf : Av1FrameHeaderInfo,
+  temporal? : Av1MotionFieldGrid? = None,
+) -> Av1MvFrame {
   {
     allow_high_precision_mv: hf.allow_high_precision_mv,
     use_ref_frame_mvs: hf.use_ref_frame_mvs,
     force_integer_mv: hf.force_integer_mv,
+    is_motion_mode_switchable: hf.is_motion_mode_switchable,
+    allow_warped_motion: hf.allow_warped_motion,
     gm_type: hf.gm_type,
     gm_params: hf.gm_params,
     ref_frame_sign_bias: hf.ref_frame_sign_bias,
+    frame_width: hf.frame_width,
+    frame_height: hf.frame_height,
+    temporal,
   }
 }
 
@@ -885,8 +909,10 @@ fn av1_stack_contexts(
 ///|
 /// Build the candidate stack and the inter-mode contexts for one block (AV1
 /// §7.10.2). Motion-vector reference storage (`use_ref_frame_mvs`) adds a
-/// temporal scan between the near weighting and the corner scan; it is refused
-/// at the frame gate until that projection lands, so it is absent here.
+/// temporal scan between the near weighting and the corner scan; it reads the
+/// frame's projected 8x8 grid, and a frame that asks for it without one is
+/// refused rather than decoded with a candidate list that lost its temporal
+/// half.
 pub fn av1_find_mv_stack(
   field : Av1MotionField,
   block : Av1MvBlock,
@@ -925,6 +951,13 @@ pub fn av1_find_mv_stack(
   }
   stack.zero_mv_context = 0
   stack.found_match = 0
+  // A frame that names its references also projects their vectors onto an 8x8
+  // grid; the temporal scan reads that grid between the near weighting and the
+  // corner scan, and is the stage that decides `zero_mv_context`.
+  if frame.use_ref_frame_mvs &&
+    !av1_temporal_scan(stack, block, frame, is_compound) {
+    return None
+  }
   av1_scan_point(field, stack, block, frame, -1, -1, is_compound)
   if stack.found_match == 1 {
     found_above_match = 1

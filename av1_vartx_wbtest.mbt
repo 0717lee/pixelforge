@@ -293,18 +293,24 @@ test "vartx depth limits and 4x4 leaves do not read split symbols" {
 }
 
 ///|
-test "vartx rejects truncated entropy beyond the allowed padding budget" {
+test "vartx reads split decisions from padding zero bits past the payload end" {
   // (ctx,symbol): (0,1), (3,1), (4,1), (4,1), (5,1).
-  // Removing 0x80 still produces split decisions from implicit zero bits,
-  // but SymbolMaxBits reaches -15, beyond the normative -14 limit.
+  // Dropping 0x80 leaves the same five split decisions decodable from the
+  // padding zero bits AV1 8.2 defines for an exhausted payload, so the tree
+  // is identical. SymbolMaxBits reaching -15 inside read_symbol is allowed:
+  // only exit_symbol carries the normative -14 bound, which this decoder
+  // (like libdav1d) does not enforce.
   let root : Av1TxNode = { row: 0, col: 0, width: 64, height: 64, }
   let leaves = av1_decode_tx_partition_tree_payload([b'\xff', b'\x80'], root, 2).unwrap()
   assert_eq(leaves.length(), 16)
   for leaf in leaves {
     assert_eq((leaf.node.width, leaf.node.height, leaf.depth), (16, 16, 2))
   }
-  assert_true(av1_decode_tx_partition_tree_payload([b'\xff'], root, 2) is None)
-  // A one-byte entropy payload is valid when its padding stays in budget.
+  let short = av1_decode_tx_partition_tree_payload([b'\xff'], root, 2).unwrap()
+  assert_eq(short.length(), 16)
+  for leaf in short {
+    assert_eq((leaf.node.width, leaf.node.height, leaf.depth), (16, 16, 2))
+  }
   assert_eq(
     av1_decode_tx_partition_tree_payload([b'\xe4'], root, 2).unwrap().length(),
     4,

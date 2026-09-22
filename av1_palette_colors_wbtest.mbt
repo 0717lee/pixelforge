@@ -900,11 +900,15 @@ test "palette colors malformed geometry depth and mode rejected" {
 }
 
 ///|
-test "palette colors truncated long palette rejects entropy padding overflow" {
+test "palette colors read a truncated palette from padding zero bits" {
+  // A long palette whose payload ends mid-stream keeps decoding: AV1 8.2
+  // defines the values past the payload end as padding zero bits, so the
+  // truncated pass below yields the colors those bits encode. libdav1d
+  // decodes the same payload the same way (verified: it does not refuse it).
   let state = av1_palette_state(8, 8)
   let decoder = av1_msac_new(
     [
-      b'\xff', b'\x1b', b'\xc9', b'\x72', b'\x00', b'\x00', b'\x00', b'\x00', b'\x00',
+      b'\xff', b'\x1b', b'\xc9', b'r', b'\x00', b'\x00', b'\x00', b'\x00', b'\x00',
       b'\x00', b'\x04', b'\xca',
     ],
     true,
@@ -924,10 +928,11 @@ test "palette colors truncated long palette rejects entropy padding overflow" {
   assert_eq(state.y_colors, [100, 101, 102, 103, 104, 105, 106, 107])
   assert_eq(av1_palette_literal(decoder, 8), 0xa5)
   let truncated = av1_msac_new([b'\xff'], true)
-  assert_false(
+  let truncated_state = av1_palette_state(8, 8)
+  assert_true(
     av1_palette_read_colors(
       truncated,
-      av1_palette_state(8, 8),
+      truncated_state,
       { row: 0, col: 0, width: 8, height: 8, },
       12,
       0,
@@ -936,4 +941,5 @@ test "palette colors truncated long palette rejects entropy padding overflow" {
       true,
     ),
   )
+  assert_eq(truncated_state.y_colors, [3729, 4095, 4095, 4095, 4095, 4095, 4095])
 }

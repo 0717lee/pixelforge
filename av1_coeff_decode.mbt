@@ -137,14 +137,14 @@ fn av1_coeff_scan_square(side : Int, scan_class : Int) -> Array[Int] {
   if scan_class == AV1_SCAN_VERT {
     let out : Array[Int] = []
     for k in 0..<(side * side) {
-      out.push(k % side * side + k / side)
+      out.push(k)
     }
     return out
   }
   if scan_class == AV1_SCAN_HORZ {
     let out : Array[Int] = []
     for k in 0..<(side * side) {
-      out.push(k)
+      out.push(k % side * side + k / side)
     }
     return out
   }
@@ -173,16 +173,16 @@ fn av1_coeff_scan_rect(
 ) -> Array[Int] {
   let out : Array[Int] = []
   if scan_class == AV1_SCAN_VERT {
-    for c in 0..<width {
-      for r in 0..<height {
+    for r in 0..<height {
+      for c in 0..<width {
         out.push(r * width + c)
       }
     }
     return out
   }
   if scan_class == AV1_SCAN_HORZ {
-    for r in 0..<height {
-      for c in 0..<width {
+    for c in 0..<width {
+      for r in 0..<height {
         out.push(r * width + c)
       }
     }
@@ -292,8 +292,18 @@ fn av1_coeff_base_ctx_rect(
   if tx_width > tx_height && col < 2 {
     return ctx + 16
   }
+  let rect_group = if tx_width >= 64 {
+    4
+  } else if tx_width >= 32 {
+    3
+  } else if tx_width >= 16 {
+    2
+  } else {
+    1
+  }
   ctx +
-  av1_coeff_base_ctx_offset[1][if row < 4 { row } else { 4 }][if col < 4 {
+  av1_coeff_base_ctx_offset[rect_group][if row < 4 { row } else { 4 }][if col <
+    4 {
     col
   } else {
     4
@@ -501,6 +511,14 @@ fn av1_dequant_clip(
 /// 32x32 and 64x64 code an adjusted 32x32 region; the result is padded to the
 /// full transform size expected by the inverse transform stage. Smaller
 /// squares decode in their own domain with class-selected scans.
+
+///|
+let av1_coeff_dump : Array[String] = []
+
+///|
+let av1_coeff_dump_on : Array[Int] = [0]
+
+///|
 fn av1_decode_coeffs_leaf_with_decoder(
   decoder : Av1SymbolDecoder,
   base_q_idx : Int,
@@ -724,8 +742,21 @@ fn av1_decode_coeffs_leaf_with_decoder(
         }
       }
     }
-    if decoder.symbol_max_bits < -14 {
-      return None
+    if av1_coeff_dump_on[0] != 0 {
+      av1_coeff_dump.push(
+        "tx" +
+        context.tx_ctx.to_string() +
+        " h" +
+        actual_height.to_string() +
+        " c" +
+        c.to_string() +
+        " p" +
+        pos.to_string() +
+        " x" +
+        ctx.to_string() +
+        " v" +
+        value.to_string(),
+      )
     }
     quant[pos] = value
   }
@@ -764,9 +795,6 @@ fn av1_decode_coeffs_leaf_with_decoder(
       }
     }
     cul_level = cul_level + av1_coeff_abs(quant[pos])
-    if decoder.symbol_max_bits < -14 {
-      return None
-    }
   }
   cul_level = if cul_level > 63 { 63 } else { cul_level }
   // The plane carries its own quantizer index when the frame signals

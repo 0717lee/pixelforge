@@ -16,10 +16,7 @@
 /// Transform extents a coding block may reach (AV1 §5.11.15, Max_Tx_Size_Rect):
 /// each axis is capped at 64 samples.
 fn av1_max_rect_tx(width : Int, height : Int) -> (Int, Int) {
-  (
-    if width > 64 { 64 } else { width },
-    if height > 64 { 64 } else { height },
-  )
+  (if width > 64 { 64 } else { width }, if height > 64 { 64 } else { height })
 }
 
 ///|
@@ -38,11 +35,7 @@ fn av1_tx_split(width : Int, height : Int) -> (Int, Int) {
 ///|
 /// get_tx_size( plane, txSz ) for a chroma plane (AV1 §5.11.35): the chroma
 /// residual block's own maximum, with any 64-sample axis folded back to 32.
-fn av1_chroma_tx_size(
-  width : Int,
-  height : Int,
-  lossless : Bool,
-) -> (Int, Int) {
+fn av1_chroma_tx_size(width : Int, height : Int, lossless : Bool) -> (Int, Int) {
   if lossless {
     return (4, 4)
   }
@@ -82,11 +75,7 @@ fn av1_plane_residual_size(
 ///|
 /// get_tx_set for an inter block (AV1 §5.11.48). Sets 1 to 3 replace the two
 /// intra sets; 0 means the transform type is fixed to DCT_DCT.
-fn av1_inter_tx_set(
-  width : Int,
-  height : Int,
-  reduced : Bool,
-) -> Int {
+fn av1_inter_tx_set(width : Int, height : Int, reduced : Bool) -> Int {
   let larger = if width > height { width } else { height }
   let smaller = if width < height { width } else { height }
   let up = av1_msac_floor_log2(larger) - 2
@@ -158,9 +147,10 @@ fn av1_inter_tx_set_symbols(set : Int) -> Int {
 fn av1_inter_tx_type_in_set(set : Int, tx_type : Av1TxType) -> Bool {
   match tx_type {
     Av1TxDctDct => true
-    Av1TxVerticalAdst | Av1TxHorizontalAdst | Av1TxVerticalFlipadst |
-      Av1TxHorizontalFlipadst =>
-      set == 1
+    Av1TxVerticalAdst
+    | Av1TxHorizontalAdst
+    | Av1TxVerticalFlipadst
+    | Av1TxHorizontalFlipadst => set == 1
     _ => set == 1 || set == 2 || set == 3
   }
 }
@@ -254,20 +244,19 @@ fn av1_inter_luma_tx_type(
     return Av1TxDctDct
   }
   let cdfs = info.cdfs
-  let index =
-    if set == 1 {
-      if sqr < 0 || sqr >= cdfs.inter_tx_type_set1.length() {
-        return Av1TxDctDct
-      }
-      decoder.symbol(cdfs.inter_tx_type_set1[sqr])
-    } else if set == 2 {
-      decoder.symbol(cdfs.inter_tx_type_set2)
-    } else {
-      if sqr < 0 || sqr >= cdfs.inter_tx_type_set3.length() {
-        return Av1TxDctDct
-      }
-      decoder.symbol(cdfs.inter_tx_type_set3[sqr])
+  let index = if set == 1 {
+    if sqr < 0 || sqr >= cdfs.inter_tx_type_set1.length() {
+      return Av1TxDctDct
     }
+    decoder.symbol(cdfs.inter_tx_type_set1[sqr])
+  } else if set == 2 {
+    decoder.symbol(cdfs.inter_tx_type_set2)
+  } else {
+    if sqr < 0 || sqr >= cdfs.inter_tx_type_set3.length() {
+      return Av1TxDctDct
+    }
+    decoder.symbol(cdfs.inter_tx_type_set3[sqr])
+  }
   if index < 0 || index >= av1_inter_tx_set_symbols(set) {
     return Av1TxDctDct
   }
@@ -311,7 +300,11 @@ fn av1_inter_chroma_tx_type(
   }
   let code = field.tx_types[luma_row * field.cols + luma_col]
   let tx_type = av1_tx_type_of_code(code)
-  if av1_inter_tx_type_in_set(set, tx_type) { tx_type } else { Av1TxDctDct }
+  if av1_inter_tx_type_in_set(set, tx_type) {
+    tx_type
+  } else {
+    Av1TxDctDct
+  }
 }
 
 ///|
@@ -334,39 +327,38 @@ fn av1_read_var_tx_size(
     return true
   }
   let field = info.field
-  let split =
-    if tx_width == 4 && tx_height == 4 {
-      0
-    } else if depth >= 2 {
-      0
-    } else {
-      let above = av1_above_tx_width(
-        field,
-        block.mi_row,
-        row,
-        col,
-        row == block.mi_row && block.avail_u,
-      )
-      let left = av1_left_tx_height(
-        field,
-        block.mi_col,
-        row,
-        col,
-        col == block.mi_col && block.avail_l,
-      )
-      let ctx = av1_txfm_split_ctx(
-        above,
-        left,
-        block.block_width,
-        block.block_height,
-        tx_width,
-        tx_height,
-      )
-      if ctx < 0 || ctx >= state.vartx.rows.length() {
-        return false
-      }
-      decoder.symbol(state.vartx.rows[ctx])
+  let split = if tx_width == 4 && tx_height == 4 {
+    0
+  } else if depth >= 2 {
+    0
+  } else {
+    let above = av1_above_tx_width(
+      field,
+      block.mi_row,
+      row,
+      col,
+      row == block.mi_row && block.avail_u,
+    )
+    let left = av1_left_tx_height(
+      field,
+      block.mi_col,
+      row,
+      col,
+      col == block.mi_col && block.avail_l,
+    )
+    let ctx = av1_txfm_split_ctx(
+      above,
+      left,
+      block.block_width,
+      block.block_height,
+      tx_width,
+      tx_height,
+    )
+    if ctx < 0 || ctx >= state.vartx.rows.length() {
+      return false
     }
+    decoder.symbol(state.vartx.rows[ctx])
+  }
   let width4 = tx_width / 4
   let height4 = tx_height / 4
   if split == 1 {
@@ -391,7 +383,9 @@ fn av1_read_var_tx_size(
     }
     return true
   }
-  av1_motion_field_store_tx(field, row, col, width4, height4, tx_width, tx_height)
+  av1_motion_field_store_tx(
+    field, row, col, width4, height4, tx_width, tx_height,
+  )
   leaves.push({
     row: (row - info.tile_row_start) * 4,
     col: (col - info.tile_col_start) * 4,
@@ -432,16 +426,7 @@ fn av1_read_block_tx_size(
         let leaves : Array[Av1TxNode] = []
         roots.push(leaves)
         if !av1_read_var_tx_size(
-            decoder,
-            state,
-            info,
-            block,
-            row,
-            col,
-            max_width,
-            max_height,
-            0,
-            leaves,
+            decoder, state, info, block, row, col, max_width, max_height, 0, leaves,
           ) {
           return None
         }
@@ -466,9 +451,7 @@ fn av1_read_block_tx_size(
   }
   let mut tx_width = max_width
   let mut tx_height = max_height
-  if allow_select &&
-    block.size_index > 0 &&
-    state.tx_mode_select {
+  if allow_select && block.size_index > 0 && state.tx_mode_select {
     let context = av1_tx_depth_ctx(info, block, max_width, max_height)
     let depth = match
       av1_decode_tx_depth_for_block(
@@ -531,7 +514,7 @@ fn av1_tx_depth_ctx(
     }
   }
   (if above >= max_width { 1 } else { 0 }) +
-    (if left >= max_height { 1 } else { 0 })
+  (if left >= max_height { 1 } else { 0 })
 }
 
 ///|
@@ -563,15 +546,15 @@ fn av1_inter_predict(
     let pred_h = block.block_height >> sub_y
     let base_x = (block.mi_col >> sub_x) * 4
     let base_y = (block.mi_row >> sub_y) * 4
-    let cand_row = (block.mi_row >> sub_y) << sub_y
-    let cand_col = (block.mi_col >> sub_x) << sub_x
+    let cand_row = block.mi_row >> sub_y << sub_y
+    let cand_col = block.mi_col >> sub_x << sub_x
     let target = state.planes[plane]
     let mut r = 0
     let mut y = 0
-    while y < ((residual_h / 4) * 4) {
+    while y < residual_h / 4 * 4 {
       let mut c = 0
       let mut x = 0
-      while x < ((residual_w / 4) * 4) {
+      while x < residual_w / 4 * 4 {
         let unit = ((cand_row + r) * field.cols + cand_col + c) * 2
         if unit + 1 >= field.refs.length() {
           return false
@@ -597,8 +580,12 @@ fn av1_inter_predict(
           height: pred_h,
           mv_row: field.mv_rows[unit],
           mv_col: field.mv_cols[unit],
-          filter_vertical: field.interp_v[(cand_row + r) * field.cols + cand_col + c],
-          filter_horizontal: field.interp_h[(cand_row + r) * field.cols + cand_col + c],
+          filter_vertical: field.interp_v[(cand_row + r) * field.cols +
+          cand_col +
+          c],
+          filter_horizontal: field.interp_h[(cand_row + r) * field.cols +
+          cand_col +
+          c],
           compound: false,
         }
         let prediction = av1_motion_compensate(request)
@@ -608,8 +595,8 @@ fn av1_inter_predict(
           prediction,
           pred_w,
           pred_h,
-          (base_x + x) - (info.tile_col_start >> sub_x) * 4,
-          (base_y + y) - (info.tile_row_start >> sub_y) * 4,
+          base_x + x - (info.tile_col_start >> sub_x) * 4,
+          base_y + y - (info.tile_row_start >> sub_y) * 4,
           (1 << state.bit_depth) - 1,
         )
         c = c + 1
@@ -617,6 +604,233 @@ fn av1_inter_predict(
       }
       r = r + 1
       y = y + pred_h
+    }
+    // A block that coded OBMC blends its neighbours' vectors over the strips
+    // they share with it, on top of the prediction just written.
+    if block.motion_mode == 1 && !av1_obmc_blend(state, info, block, plane) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// The five OBMC blending ramps (AV1 §7.11.3.9). A strip picks the ramp whose
+/// extent matches its own length, so an 8-sample strip and a 32-sample one
+/// reach full weight at different distances from the shared edge.
+let av1_obmc_masks : Array[Array[Int]] = [
+  [45, 64],
+  [39, 50, 59, 64],
+  [36, 42, 48, 53, 57, 61, 64, 64],
+  [34, 37, 40, 43, 46, 49, 52, 54, 56, 58, 60, 61, 64, 64, 64, 64],
+  [
+    33, 35, 36, 38, 40, 41, 43, 44, 45, 47, 48, 50, 51, 52, 53, 55, 56, 57, 58, 59,
+    60, 60, 61, 62, 64, 64, 64, 64, 64, 64, 64, 64,
+  ],
+]
+
+///|
+/// get_obmc_mask( length ).
+fn av1_obmc_mask(length : Int) -> Array[Int] {
+  if length <= 2 {
+    av1_obmc_masks[0]
+  } else if length <= 4 {
+    av1_obmc_masks[1]
+  } else if length <= 8 {
+    av1_obmc_masks[2]
+  } else if length <= 16 {
+    av1_obmc_masks[3]
+  } else {
+    av1_obmc_masks[4]
+  }
+}
+
+///|
+/// predict_overlap for one OBMC candidate (AV1 §7.11.3.9). The neighbour's own
+/// vector and its own interpolation filter interpolate a strip of the reference,
+/// the strip is clipped to the sample range, and then it is blended into the
+/// prediction the block already wrote into the plane.
+fn av1_obmc_overlap(
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  target : Av1IntraPlane,
+  plane : Int,
+  tile_x : Int,
+  tile_y : Int,
+  limit : Int,
+  cand_row : Int,
+  cand_col : Int,
+  x4 : Int,
+  y4 : Int,
+  sub_x : Int,
+  sub_y : Int,
+  pred_w : Int,
+  pred_h : Int,
+  mask : Array[Int],
+  pass : Int,
+) -> Bool {
+  let field = info.field
+  let index = cand_row * field.cols + cand_col
+  let unit = index * 2
+  let reference = match av1_inter_reference(info, field.refs[unit]) {
+    Some(value) => value
+    None => return false
+  }
+  let pred_x = (x4 * 4) >> sub_x
+  let pred_y = (y4 * 4) >> sub_y
+  let request : Av1MotionRequest = {
+    reference,
+    frame_width: info.mi_cols * 4,
+    frame_height: info.mi_rows * 4,
+    plane,
+    x: pred_x,
+    y: pred_y,
+    width: pred_w,
+    height: pred_h,
+    mv_row: field.mv_rows[unit],
+    mv_col: field.mv_cols[unit],
+    filter_vertical: field.interp_v[index],
+    filter_horizontal: field.interp_h[index],
+    compound: false,
+  }
+  let obmc = av1_motion_compensate(request)
+  for i in 0..<pred_h {
+    for j in 0..<pred_w {
+      let weight = if pass == 0 { mask[i] } else { mask[j] }
+      let row = pred_y + i - tile_y
+      let column = pred_x + j - tile_x
+      if row < 0 || column < 0 || row >= target.height || column >= target.width {
+        return false
+      }
+      let at = row * target.width + column
+      let neighbour = av1_mc_clip(0, limit, obmc[i * pred_w + j])
+      let blended = weight * target.pixels[at] + (64 - weight) * neighbour + 32
+      target.pixels[at] = blended >> 6
+    }
+  }
+  true
+}
+
+///|
+/// overlapped_motion_compensation( ) for one plane (AV1 §7.11.3.9). The above
+/// pass blends the top half of each column strip from the neighbours above and
+/// the left pass blends the left half of each row strip from the neighbours to
+/// the left. Both read the plane's current contents, so the two passes compose
+/// in the order the specification applies them.
+fn av1_obmc_blend(
+  state : Av1IntraState,
+  info : Av1InterInfo,
+  block : Av1InterBlock,
+  plane : Int,
+) -> Bool {
+  let field = info.field
+  let sub_x = if plane == 0 { 0 } else { state.sub_x }
+  let sub_y = if plane == 0 { 0 } else { state.sub_y }
+  let w = block.block_width >> sub_x
+  let h = block.block_height >> sub_y
+  let (residual_w, residual_h) = av1_plane_residual_size(
+    block.block_width,
+    block.block_height,
+    plane,
+    sub_x,
+    sub_y,
+  )
+  let target = state.planes[plane]
+  let tile_x = (info.tile_col_start >> sub_x) * 4
+  let tile_y = (info.tile_row_start >> sub_y) * 4
+  let limit = (1 << state.bit_depth) - 1
+  if block.avail_u && residual_w >= 8 && residual_h >= 8 {
+    let log2_width = av1_msac_floor_log2(block.block_width)
+    let n_limit = if 4 < log2_width { 4 } else { log2_width }
+    let mut x4 = block.mi_col
+    let mut count = 0
+    while count < n_limit &&
+          x4 < info.mi_cols &&
+          x4 < block.mi_col + block.width4 {
+      let cand_row = block.mi_row - 1
+      let cand_col = x4 | 1
+      if cand_row < 0 || cand_col < 0 || cand_col >= field.cols {
+        return false
+      }
+      let index = cand_row * field.cols + cand_col
+      let extent = field.width4[index]
+      let step4 = if extent < 2 { 2 } else if extent > 16 { 16 } else { extent }
+      if field.refs[index * 2] > av1_intra_frame {
+        count = count + 1
+        let scaled = (step4 * 4) >> sub_x
+        let pred_w = if w < scaled { w } else { scaled }
+        let half = 32 >> sub_y
+        let pred_h = if half < h >> 1 { half } else { h >> 1 }
+        if !av1_obmc_overlap(
+            state,
+            info,
+            target,
+            plane,
+            tile_x,
+            tile_y,
+            limit,
+            cand_row,
+            cand_col,
+            x4,
+            block.mi_row,
+            sub_x,
+            sub_y,
+            pred_w,
+            pred_h,
+            av1_obmc_mask(pred_h),
+            0,
+          ) {
+          return false
+        }
+      }
+      x4 = x4 + step4
+    }
+  }
+  if block.avail_l {
+    let log2_height = av1_msac_floor_log2(block.block_height)
+    let n_limit = if 4 < log2_height { 4 } else { log2_height }
+    let mut y4 = block.mi_row
+    let mut count = 0
+    while count < n_limit &&
+          y4 < info.mi_rows &&
+          y4 < block.mi_row + block.height4 {
+      let cand_col = block.mi_col - 1
+      let cand_row = y4 | 1
+      if cand_col < 0 || cand_row < 0 || cand_row >= field.rows {
+        return false
+      }
+      let index = cand_row * field.cols + cand_col
+      let extent = field.height4[index]
+      let step4 = if extent < 2 { 2 } else if extent > 16 { 16 } else { extent }
+      if field.refs[index * 2] > av1_intra_frame {
+        count = count + 1
+        let scaled = (step4 * 4) >> sub_y
+        let pred_h = if h < scaled { h } else { scaled }
+        let half = 32 >> sub_x
+        let pred_w = if half < w >> 1 { half } else { w >> 1 }
+        if !av1_obmc_overlap(
+            state,
+            info,
+            target,
+            plane,
+            tile_x,
+            tile_y,
+            limit,
+            cand_row,
+            cand_col,
+            block.mi_col,
+            y4,
+            sub_x,
+            sub_y,
+            pred_w,
+            pred_h,
+            av1_obmc_mask(pred_w),
+            1,
+          ) {
+          return false
+        }
+      }
+      y4 = y4 + step4
     }
   }
   true
@@ -651,11 +865,7 @@ fn av1_inter_residual(
   // Motion compensation, not intra prediction, fills an inter block, so the
   // colour-from-luma state is explicitly off for the whole block.
   av1_cfl_begin_block(state.cfl, tile_block, false)
-  let chunks_x = if block.block_width > 64 {
-    block.block_width / 64
-  } else {
-    1
-  }
+  let chunks_x = if block.block_width > 64 { block.block_width / 64 } else { 1 }
   let chunks_y = if block.block_height > 64 {
     block.block_height / 64
   } else {
@@ -670,16 +880,8 @@ fn av1_inter_residual(
       let chunk = chunk_y * chunks_x + chunk_x
       if roots.is_empty() {
         if !av1_inter_residual_raster(
-            decoder,
-            state,
-            block,
-            0,
-            origin_x,
-            origin_y,
-            chunk_width,
-            chunk_height,
-            luma_width,
-            luma_height,
+            decoder, state, block, 0, origin_x, origin_y, chunk_width, chunk_height,
+            luma_width, luma_height,
           ) {
           return false
         }
@@ -710,11 +912,7 @@ fn av1_inter_residual(
         let sub_x = state.sub_x
         let sub_y = state.sub_y
         let (residual_w, residual_h) = av1_plane_residual_size(
-          chunk_width,
-          chunk_height,
-          plane,
-          sub_x,
-          sub_y,
+          chunk_width, chunk_height, plane, sub_x, sub_y,
         )
         let (tx_width, tx_height) = av1_chroma_tx_size(
           residual_w,
@@ -819,7 +1017,11 @@ fn av1_intra_in_inter_block(
       block.width <= 32 && block.height <= 32
     }
     let mode = decoder.symbol(
-      if cfl_allowed { state.uv_cfl[y_mode] } else { state.uv_no_cfl[y_mode] },
+      if cfl_allowed {
+        state.uv_cfl[y_mode]
+      } else {
+        state.uv_no_cfl[y_mode]
+      },
     )
     if mode == AV1_INTRA_CFL {
       if !cfl_allowed || !av1_cfl_read_alphas(decoder, state.cfl) {
@@ -836,8 +1038,24 @@ fn av1_intra_in_inter_block(
     }
     uv_mode = mode
   }
+  // `palette_mode_info` (AV1 §5.11.21) sits between the uv mode and filter
+  // intra, exactly as in the intra-only block path.
+  if !av1_palette_read_colors(
+      decoder,
+      state.palette,
+      block,
+      state.bit_depth,
+      y_mode,
+      uv_mode,
+      has_chroma,
+      state.allow_screen_content_tools,
+    ) {
+    return false
+  }
+  // `filter_intra_mode_info` requires PaletteSizeY == 0 (AV1 §5.11.29).
   if state.enable_filter_intra &&
     y_mode == AV1_INTRA_DC &&
+    state.palette.y_colors.is_empty() &&
     block.width <= 32 &&
     block.height <= 32 {
     match decoder.symbol(state.filter_intra[block_index]) {
@@ -851,6 +1069,10 @@ fn av1_intra_in_inter_block(
       }
       _ => return false
     }
+  }
+  // The palette index map precedes transform-size syntax, as for an intra frame.
+  if !av1_intra_palette_maps(decoder, state, block) {
+    return false
   }
   inter.y_mode = y_mode
   let size = match av1_read_block_tx_size(decoder, state, info, inter) {
@@ -873,7 +1095,12 @@ fn av1_intra_in_inter_block(
   }
   av1_tx_traversal_record_size(
     state.tx_neighbors,
-    { row: block.row, col: block.col, width: block.width, height: block.height, },
+    {
+      row: block.row,
+      col: block.col,
+      width: block.width,
+      height: block.height,
+    },
     tx_width,
     tx_height,
   )
@@ -968,13 +1195,7 @@ fn av1_inter_tile_block(
   }
   if !current.is_inter {
     return av1_intra_in_inter_block(
-      decoder,
-      state,
-      info,
-      current,
-      block,
-      block_index,
-      has_chroma,
+      decoder, state, info, current, block, block_index, has_chroma,
     )
   }
   if !av1_inter_block_motion(decoder, info, current) {
@@ -989,12 +1210,12 @@ fn av1_inter_tile_block(
     current.width4,
     current.height4,
     current.y_mode,
-    [ current.ref_frame, av1_none_frame ],
-    [ current.mv_row, 0 ],
-    [ current.mv_col, 0 ],
+    [current.ref_frame, av1_none_frame],
+    [current.mv_row, 0],
+    [current.mv_col, 0],
     skip=current.skip,
-    skip_mode=(if current.skip_mode { 1 } else { 0 }),
-    interp=[ current.interp_vertical, current.interp_horizontal ],
+    skip_mode=if current.skip_mode { 1 } else { 0 },
+    interp=[current.interp_vertical, current.interp_horizontal],
   )
   av1_intra_record_modes(
     state,
@@ -1014,17 +1235,11 @@ fn av1_inter_tile_block(
     return false
   }
   if !av1_inter_residual(
-      decoder,
-      state,
-      current,
-      block,
-      tx_width,
-      tx_height,
-      roots,
+      decoder, state, current, block, tx_width, tx_height, roots,
     ) {
     return false
   }
-  decoder.symbol_max_bits >= -14
+  true
 }
 
 ///|
@@ -1036,16 +1251,37 @@ pub fn av1_inter_frame_supported(
   header : Av1FrameHeaderInfo,
   sequence : Av1SequenceInfo,
 ) -> Bool {
-  if header.reference_select ||
-    header.is_motion_mode_switchable ||
-    header.allow_warped_motion ||
-    header.use_ref_frame_mvs ||
-    header.skip_mode_present ||
-    header.allow_intrabc ||
-    header.allow_screen_content_tools ||
-    header.coded_lossless {
+  // `allow_intrabc` is deliberately absent: AV1 §6.8.2 reads that bit only
+  // under `if ( FrameIsIntra )`, so it is never set on an inter frame and the
+  // check could not fire. Intra block copy is refused one level up, where the
+  // frame is actually decoded (`av1_frame_planes`).
+  //
+  // `allow_screen_content_tools` used to be listed here too. On an inter frame
+  // it only derives `force_integer_mv`, which the MV reader already handles,
+  // plus the palette syntax of `intra_block_mode_info` for intra blocks inside
+  // the frame; both paths are implemented and pinned by
+  // `inter_screen_content_64x64` and `inter_palette_64x64`.
+  // `allow_warped_motion` used to be listed here. It is gone because the
+  // three-symbol `motion_mode` branch it selects is now read correctly:
+  // `find_warp_samples` decides the branch, and a block that picks LOCALWARP is
+  // refused by `av1_read_motion_mode` rather than decoded with a warp this
+  // decoder does not have. `inter_warped_64x64` pins both halves.
+  // `use_ref_frame_mvs` used to be listed here as well. It is gone because
+  // `motion_field_estimation` (§7.9.1) projects each reference's saved vectors
+  // onto this frame's 8x8 grid before the tiles are decoded, and
+  // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
+  // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
+  // same stream is refused rather than decoded.
+  if header.reference_select || header.skip_mode_present {
     return false
   }
+  // Ordering note: `skip_mode_present` is listed after `reference_select` on
+  // purpose. AV1 §6.8.14 only reads it when `skipModeAllowed`, which requires
+  // `reference_select` to be 1, so a frame that reaches this line with
+  // `skip_mode_present` set has already been refused by `reference_select`.
+  // Removing either entry alone would unblock the other; the pair has to go
+  // together, and `skip_mode` itself (a compound block whose motion is copied
+  // from two reference frames) is not implemented either.
   if sequence.enable_interintra_compound || sequence.enable_masked_compound {
     return false
   }

@@ -224,7 +224,13 @@ fn av1_decode_tile_planes(
   subsampling_x? : Bool = true,
   subsampling_y? : Bool = true,
   inter? : Av1InterFrame? = None,
-) -> (Av1FramePlanes, Av1RestorationStripeStore?)? {
+  /// The frame entropy context every tile starts from (AV1 §5.9). `None`
+  /// seeds the normative defaults.
+  cdfs? : Av1FrameCdfs? = None,
+  /// When present, the context_update_tile_id tile (tile 0) pushes its final
+  /// entropy state here for the frame-end update.
+  cdfs_out? : Array[Av1FrameCdfs?]? = None,
+) -> (Av1FramePlanes, Av1RestorationStripeStore?, Av1FrameCdfs?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
   let sub_x = if subsampling_x { 1 } else { 0 }
   let sub_y = if subsampling_y { 1 } else { 0 }
@@ -269,12 +275,9 @@ fn av1_decode_tile_planes(
         // inert when none of the eight strengths selects a non-zero level.
         for reference in 0..<8 {
           for mode_type in 0..<2 {
-            let level = match av1_loop_filter_edge_level(
-                config,
-                plane,
-                direction,
-                reference,
-                mode_type,
+            let level = match
+              av1_loop_filter_edge_level(
+                config, plane, direction, reference, mode_type,
               ) {
               Some(value) => value
               None => 0
@@ -355,6 +358,7 @@ fn av1_decode_tile_planes(
       }
     None => ()
   }
+  let mut tile_index = 0
   for tile in tiles {
     let left = col_starts[tile.col]
     let top = row_starts[tile.row]
@@ -369,6 +373,7 @@ fn av1_decode_tile_planes(
             left / 4,
             (top + av1_partition_coded_extent(tile_height)) / 4,
             (left + av1_partition_coded_extent(tile_width)) / 4,
+            cdfs~,
           ),
         )
       None => None
@@ -397,10 +402,15 @@ fn av1_decode_tile_planes(
         sub_x~,
         sub_y~,
         inter=tile_inter,
+        // Only the context_update_tile_id tile (0 by default) writes the
+        // frame-end context; every other tile's rows are discarded.
+        frame_cdfs=cdfs,
+        cdfs_out=if tile_index == 0 { cdfs_out } else { None },
       ) {
       Some(value) => value
       None => return None
     }
+    tile_index = tile_index + 1
     for p in 0..<planes.length() {
       let divisor_x = if p == 0 { 1 } else { 1 << sub_x }
       let divisor_y = if p == 0 { 1 } else { 1 << sub_y }
@@ -603,7 +613,13 @@ fn av1_decode_tile_planes(
     }
     _ => frame
   }
-  Some((frame, stripe_store))
+  // The frame context after decoding: the context_update_tile_id tile's final
+  // rows when a capture was requested, otherwise nothing to hand back.
+  let frame_cdfs : Av1FrameCdfs? = match cdfs_out {
+    Some(sink) => if sink.length() == 0 { None } else { sink[0] }
+    None => None
+  }
+  Some((frame, stripe_store, frame_cdfs))
 }
 
 ///|
@@ -670,10 +686,11 @@ fn av1_decode_frame_planes(
   // so a later temporal unit may legitimately have none of its own.
   let seq = match sequence {
     Some(value) => value
-    None => match av1_sequence_info(data) {
-      Some(value) => value
-      None => return None
-    }
+    None =>
+      match av1_sequence_info(data) {
+        Some(value) => value
+        None => return None
+      }
   }
   if !seq.monochrome &&
     seq.matrix_coefficients != 1 &&
@@ -719,6 +736,28 @@ fn av1_decode_frame_planes(
   let film_grain = header.film_grain
   let frame_height = header.frame_height
   let sb_size = if seq.use_128x128_superblock { 128 } else { 64 }
+  // `load_cdfs` versus `setup_past_independence` (AV1 §6.10, §7.20). A frame
+  // whose `primary_ref_frame` names a slot starts every tile table from that
+  // slot's stored entropy context; `PRIMARY_REF_NONE` (every key and
+  // intra-only frame) starts from the normative defaults. A slot that never
+  // stored a context behaves as the defaults, matching a decoder whose frame
+  // context memory was never written.
+  let inherited : Av1FrameCdfs? = if !av1_cdf_load_enabled ||
+    header.primary_ref_frame < 0 ||
+    header.primary_ref_frame >= av1_primary_ref_none ||
+    header.primary_ref_frame >= header.ref_frame_idx.length() {
+    None
+  } else {
+    let slot = header.ref_frame_idx[header.primary_ref_frame]
+    match state.slots[slot] {
+      Some(stored) =>
+        match stored.cdfs {
+          Some(snapshot) => Some(av1_frame_cdfs_copy(snapshot))
+          None => None
+        }
+      None => None
+    }
+  }
   let cols = match
     av1_frame_tile_starts(
       header.tile_col_starts_sb,
@@ -733,7 +772,8 @@ fn av1_decode_frame_planes(
     Some(value) => value
     None => return None
   }
-  let (decoded, _stripe_store) = match
+  let cdfs_sink : Array[Av1FrameCdfs?] = []
+  let (decoded, _stripe_store, frame_cdfs) = match
     av1_decode_tile_planes(
       header.frame_width,
       frame_height,
@@ -762,6 +802,8 @@ fn av1_decode_frame_planes(
       subsampling_x=seq.subsampling_x,
       subsampling_y=seq.subsampling_y,
       inter~,
+      cdfs=inherited,
+      cdfs_out=Some(cdfs_sink),
     ) {
     Some(value) => value
     None => return None
@@ -769,7 +811,14 @@ fn av1_decode_frame_planes(
   // The reference buffer keeps the grain-free reconstruction: AV1 applies film
   // grain only on the displayed picture, so a later frame must not predict
   // from noisy samples.
-  av1_frame_map_update(state, header, decoded)
+  av1_frame_map_update(
+    state,
+    header,
+    decoded,
+    seq,
+    cdfs=frame_cdfs,
+    field=inter.map(fn(info) { info.field }),
+  )
   // Film grain is the last step before colour conversion: it modifies the
   // displayed picture while the stored reference samples stay grain free.
   match film_grain {

@@ -115,6 +115,22 @@ pub(all) struct Av1RefFrame {
   gm_params : Array[Array[Int]]
   loop_filter_ref_deltas : Array[Int]
   loop_filter_mode_deltas : Array[Int]
+  /// The entropy context stored with this picture; `None` marks a slot
+  /// refreshed while `disable_frame_end_update_cdf` suppressed the write, so
+  /// the previous frame context survives (AV1 §7.20 `save_cdfs`).
+  cdfs : Av1FrameCdfs?
+  /// `MfRefFrames`/`MfMvs` from the motion-field storage process (§7.19), at
+  /// MI granularity with two motion vectors per unit. Empty for a frame that
+  /// never went through the inter block stage, which is what makes a key frame
+  /// ineligible as a temporal-candidate source.
+  mf_refs : Array[Int]
+  mf_mvs : Array[Int]
+  mi_cols : Int
+  mi_rows : Int
+  /// `SavedOrderHints`, the per-reference-name order hints this frame carried.
+  /// The temporal projection needs them to measure how far a vector saved by an
+  /// older frame has to travel (AV1 §7.9.2 `refOffset`).
+  saved_order_hints : Array[Int]
 }
 
 ///|
@@ -136,6 +152,11 @@ pub(all) struct Av1FrameMap {
   saved_loop_filter_ref_deltas : Array[Array[Int]]
   saved_loop_filter_mode_deltas : Array[Array[Int]]
   current_frame_id : Int
+  /// The frame context a frame with a `primary_ref_frame` inherits. `None`
+  /// marks the never-written state, which behaves as the normative defaults;
+  /// an enabled frame end writes the context_update_tile_id tile's adapted
+  /// rows here (AV1 §8.3 `frame_end_update_cdf`, §7.20 `save_cdfs`).
+  mut saved_cdfs : Av1FrameCdfs?
 }
 
 ///|
@@ -163,6 +184,7 @@ pub fn av1_frame_map() -> Av1FrameMap {
     ),
     saved_loop_filter_mode_deltas: Array::make(av1_num_ref_frames, [0, 0]),
     current_frame_id: 0,
+    saved_cdfs: None,
   }
 }
 
@@ -308,11 +330,78 @@ fn av1_set_frame_refs(
 ///
 /// All refreshed slots deliberately alias one `Av1RefFrame`: a later frame may
 /// use any of them as its primary reference and must see identical state.
+///
+/// `cdfs` is the context_update_tile_id tile's final entropy state. The frame
+/// context is a single evolving object: an enabled frame end writes this
+/// frame's adapted rows into it, a disabled one leaves it as the previous
+/// frame left it, and every refreshed slot then shares it (AV1 §8.3
+/// `frame_end_update_cdf`, §7.20 `save_cdfs`). `None` is the never-written
+/// state, which a later load treats as the normative defaults.
 fn av1_frame_map_update(
   map : Av1FrameMap,
   header : Av1FrameHeaderInfo,
   frame : Av1FramePlanes,
+  sequence : Av1SequenceInfo,
+  cdfs? : Av1FrameCdfs? = None,
+  field? : Av1MotionField? = None,
 ) -> Unit {
+  // Motion field motion vector storage (§7.19). Runs over the inter frame's
+  // motion field before the slots are refreshed, so `map.order_hints` still
+  // names the frames being referenced rather than this one.
+  let mi_cols = 2 * ((header.frame_width + 7) / 8)
+  let mi_rows = 2 * ((header.frame_height + 7) / 8)
+  let mf_refs : Array[Int] = Array::make(mi_cols * mi_rows, av1_none_frame)
+  let mf_mvs : Array[Int] = Array::make(mi_cols * mi_rows * 2, 0)
+  match field {
+    Some(motion) =>
+      if motion.cols == mi_cols && motion.rows == mi_rows {
+        for row in 0..<mi_rows {
+          for col in 0..<mi_cols {
+            let unit = row * mi_cols + col
+            for list in 0..<2 {
+              let name = motion.refs[unit * 2 + list]
+              if name > av1_intra_frame {
+                // `header.order_hints` is indexed by reference name and already
+                // projects each name onto its slot's stored hint.
+                let dist = av1_relative_dist(
+                  sequence,
+                  header.order_hints[name],
+                  header.order_hint,
+                )
+                if dist < 0 {
+                  let mv_row = motion.mv_rows[unit * 2 + list]
+                  let mv_col = motion.mv_cols[unit * 2 + list]
+                  if mv_row <= av1_mv_refmvs_limit &&
+                    mv_row >= -av1_mv_refmvs_limit &&
+                    mv_col <= av1_mv_refmvs_limit &&
+                    mv_col >= -av1_mv_refmvs_limit {
+                    mf_refs[unit] = name
+                    mf_mvs[unit * 2] = mv_row
+                    mf_mvs[unit * 2 + 1] = mv_col
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    None => ()
+  }
+  let slot_cdfs : Av1FrameCdfs? = if header.disable_frame_end_update_cdf {
+    map.saved_cdfs.map(fn(previous) { av1_frame_cdfs_copy(previous) })
+  } else {
+    match cdfs {
+      Some(snapshot) => {
+        // The adaptation counters stop here: a frame loading this snapshot must
+        // restart the rate schedule from zero (libaom
+        // `av1_reset_cdf_symbol_counters`).
+        av1_frame_cdfs_reset_counts(snapshot)
+        map.saved_cdfs = Some(snapshot)
+        Some(av1_frame_cdfs_copy(snapshot))
+      }
+      None => map.saved_cdfs.map(fn(previous) { av1_frame_cdfs_copy(previous) })
+    }
+  }
   let ref_frame : Av1RefFrame = {
     planes: frame.planes,
     coded_width: frame.coded_width,
@@ -334,6 +423,12 @@ fn av1_frame_map_update(
     gm_params: header.gm_params,
     loop_filter_ref_deltas: Array::copy(header.loop_filter_ref_deltas),
     loop_filter_mode_deltas: Array::copy(header.loop_filter_mode_deltas),
+    cdfs: slot_cdfs,
+    mf_refs,
+    mf_mvs,
+    mi_cols,
+    mi_rows,
+    saved_order_hints: Array::copy(header.order_hints),
   }
   for slot in 0..<av1_num_ref_frames {
     if ((header.refresh_frame_flags >> slot) & 1) == 0 {

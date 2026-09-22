@@ -42,9 +42,17 @@ fn av1_mv_test_frame(
     allow_high_precision_mv,
     use_ref_frame_mvs: false,
     force_integer_mv,
+    is_motion_mode_switchable: false,
+    allow_warped_motion: false,
     gm_type: Array::make(av1_total_refs_per_frame, av1_gm_identity),
     gm_params: Array::make(av1_total_refs_per_frame, av1_identity_gm_params()),
     ref_frame_sign_bias: Array::make(av1_total_refs_per_frame, 0),
+    // Unused by the stack scans; is_scaled is only consulted by the motion-mode
+    // branch, which this fixture leaves unreachable.
+    frame_width: 0,
+    frame_height: 0,
+    // No temporal grid: the scan is skipped entirely.
+    temporal: None,
   }
 }
 

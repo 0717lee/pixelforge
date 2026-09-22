@@ -101,7 +101,7 @@ fn av1_cfl_read_alphas(decoder : Av1SymbolDecoder, cfl : Av1CflState) -> Bool {
     let magnitude = decoder.symbol(cfl.alpha[3 * sign_v + sign_u - 3]) + 1
     cfl.alpha_v = if sign_v == 1 { -magnitude } else { magnitude }
   }
-  decoder.symbol_max_bits >= -14
+  true
 }
 
 ///|

@@ -13,12 +13,22 @@ fn av1_cdef_alpha_test_stream(
   // It has no U/V quantizer deltas; loop-filter delta_enabled is 1 and its
   // update flag is 0. Build the syntax rather than splice at a bit offset.
   let fields = [
-    (0, 1), (0, 1), (0, 1), (1, 1), // CDF update, tools, render, uniform tile.
-    (80, 8), (0, 1), // Base quantizer and Y DC delta flag.
-    (0, 1), (0, 1), (0, 1), // Qmatrix, segmentation, delta-Q.
-    (0, 6), (0, 6), (0, 3), // Luma vertical/horizontal LF and sharpness.
-    (1, 1), (0, 1), // Loop-filter delta enabled, no delta update.
-    (damping - 3, 2), (bits, 2),
+    (0, 1),
+    (0, 1),
+    (0, 1),
+    (1, 1), // CDF update, tools, render, uniform tile.
+    (80, 8),
+    (0, 1), // Base quantizer and Y DC delta flag.
+    (0, 1),
+    (0, 1),
+    (0, 1), // Qmatrix, segmentation, delta-Q.
+    (0, 6),
+    (0, 6),
+    (0, 3), // Luma vertical/horizontal LF and sharpness.
+    (1, 1),
+    (0, 1), // Loop-filter delta enabled, no delta update.
+    (damping - 3, 2),
+    (bits, 2),
   ]
   for _ in 0..<(1 << bits) {
     fields.push((primary, 4))
@@ -77,8 +87,8 @@ test "alpha preserves CDEF disabled and zero-strength single-entry frames" {
     // These exact four streams were independently decoded by FFmpeg to
     // 4096 gray samples, all 128. Keep the bit writer tied to those bytes.
     let verified : Array[Byte] = [
-      b'\x12', b'\x00', b'\x0a', b'\x06', b'\x18', b'\x15', b'\x7f', b'\xfe',
-      b'\x24', b'\x40', b'\x32', b'\x07', b'\x15', b'\x00', b'\x00', b'\x01',
+      b'\x12', b'\x00', b'\x0a', b'\x06', b'\x18', b'\x15', b'\x7f', b'\xfe', b'\x24',
+      b'\x40', b'\x32', b'\x07', b'\x15', b'\x00', b'\x00', b'\x01',
     ]
     verified.push([b'\x00', b'\x20', b'\x40', b'\x60'][damping - 3])
     verified.push(b'\x00')
@@ -103,7 +113,7 @@ test "alpha preserves CDEF disabled and zero-strength single-entry frames" {
 }
 
 ///|
-test "alpha rejects missing CDEF index entropy even with zero-strength tables" {
+test "alpha decodes CDEF index entropy past the payload end from padding zero bits" {
   for bits in 1..<4 {
     let stream = av1_cdef_alpha_test_stream(bits, 0, 0, 3)
     let frame = av1_cdef_alpha_test_header(stream)
@@ -113,14 +123,14 @@ test "alpha rejects missing CDEF index entropy even with zero-strength tables" {
     assert_eq(config.y_primary.length(), 1 << bits)
     assert_eq(frame.tile_payload, [b'\x44'])
     // The isolated entropy is valid without CDEF index syntax. With index
-    // bits required it is truncated; libdav1d independently rejects all three.
-    assert_eq(
-      av1_decode_alpha_tile(64, 64, frame.tile_payload, frame.base_q_idx)
-      .unwrap()
-      .length(),
-      4096,
-    )
-    assert_true(av1_decode_alpha(stream) is None)
+    // bits required the payload runs out, and AV1 8.2 defines the values
+    // read past its end as padding zero bits, so the symbol walk completes.
+    // libdav1d accepts the very same stream: it emits a 4096-sample plane
+    // whose bytes are exactly these.
+    let alpha = av1_decode_alpha(stream).unwrap()
+    assert_eq(alpha.length(), 4096)
+    let expected = [(129, 128), (129, 129), (127, 127)]
+    assert_eq((alpha[0].to_int(), alpha[9].to_int()), expected[bits - 1])
   }
 }
 

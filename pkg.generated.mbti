@@ -74,6 +74,10 @@ pub fn av1_frame_map_show(Av1FrameMap, Int) -> Av1RefFrame?
 
 pub fn av1_frame_tile_payloads(Av1FrameHeaderInfo) -> Array[Av1TilePayload]?
 
+pub fn av1_inter_frame_of(Av1FrameHeaderInfo, Av1SequenceInfo, Av1FrameMap) -> Av1InterFrame?
+
+pub fn av1_inter_frame_supported(Av1FrameHeaderInfo, Av1SequenceInfo) -> Bool
+
 pub fn av1_intra_predict(Int, Int, Int, Array[Int], Array[Int], Int, Int, have_above? : Bool, have_left? : Bool) -> Array[Int]?
 
 pub fn av1_inverse_dct(Array[Int], Int, Int) -> Array[Int]?
@@ -86,13 +90,35 @@ pub fn av1_inverse_transform_2d(Av1TxType, Array[Int], Int, Int, Int, lossless? 
 
 pub fn av1_motion_field(Int, Int) -> Av1MotionField
 
-pub fn av1_motion_field_store(Av1MotionField, Int, Int, Int, Int, Int, Array[Int], Array[Int], Array[Int]) -> Unit
+pub fn av1_motion_field_estimation(Av1SequenceInfo, Int, Array[Int], Array[Av1RefFrame?], Int, Int) -> Av1MotionFieldGrid
+
+pub fn av1_motion_field_store(Av1MotionField, Int, Int, Int, Int, Int, Array[Int], Array[Int], Array[Int], skip? : Int, skip_mode? : Int, interp? : Array[Int]) -> Unit
 
 pub fn av1_msac_decode_first(Array[Byte], Array[Int]) -> Int?
 
 pub fn av1_msac_read_first(Array[Byte], Int) -> Int?
 
-pub fn av1_mv_frame_of(Av1FrameHeaderInfo) -> Av1MvFrame
+pub fn av1_mv_block_position(Int, Int, Int, Int, Int, Int, Int) -> (Int, Int, Bool)
+
+pub let av1_mv_div_mult_size : Int
+
+pub fn av1_mv_frame_of(Av1FrameHeaderInfo, temporal? : Av1MotionFieldGrid?) -> Av1MvFrame
+
+pub let av1_mv_invalid : Int
+
+pub let av1_mv_max_frame_distance : Int
+
+pub let av1_mv_max_offset_height : Int
+
+pub let av1_mv_max_offset_width : Int
+
+pub fn av1_mv_projection(Int, Int, Int, Int) -> (Int, Int)
+
+pub fn av1_mv_projection_component(Int, Int, Int) -> Int
+
+pub let av1_mv_refmvs_limit : Int
+
+pub let av1_mv_stack_stamp : Int
 
 pub fn av1_parse_show_existing_frame(Array[Byte], Av1ShowExistingFrameConfig) -> Av1ShowExistingFrameEnvelope?
 
@@ -151,6 +177,8 @@ pub fn av1_tx_traversal_state(Int, Int) -> Av1TxTraversalState
 pub fn av1_video_decode_frame(Av1VideoDecoder, Array[Byte], allow_monochrome? : Bool) -> Image?
 
 pub fn av1_video_decoder() -> Av1VideoDecoder
+
+pub let av1_warp_samples_scan_limit : Int
 
 pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int) -> Image?
 
@@ -316,6 +344,10 @@ pub(all) struct Av1FilmGrainParams {
   clip_to_restricted_range : Bool
 }
 
+pub(all) struct Av1FrameCdfs {
+  tables : Array[Array[Array[Int]]]
+}
+
 pub(all) struct Av1FrameHeaderInfo {
   frame_width : Int
   upscaled_width : Int
@@ -396,6 +428,42 @@ pub(all) struct Av1FrameMap {
   saved_loop_filter_ref_deltas : Array[Array[Int]]
   saved_loop_filter_mode_deltas : Array[Array[Int]]
   current_frame_id : Int
+  mut saved_cdfs : Av1FrameCdfs?
+}
+
+pub(all) struct Av1InterBlock {
+  mi_row : Int
+  mi_col : Int
+  width4 : Int
+  height4 : Int
+  block_width : Int
+  block_height : Int
+  size_index : Int
+  avail_u : Bool
+  avail_l : Bool
+  mut skip : Int
+  mut skip_mode : Bool
+  mut is_inter : Bool
+  mut y_mode : Int
+  mut ref_frame : Int
+  mut mv_row : Int
+  mut mv_col : Int
+  mut interp_vertical : Int
+  mut interp_horizontal : Int
+  mut ref_mv_idx : Int
+  mut motion_mode : Int
+}
+
+pub(all) struct Av1InterFrame {
+  field : Av1MotionField
+  frame : Av1MvFrame
+  refs : Array[Av1RefFrame?]
+  interpolation_filter : Int
+  enable_dual_filter : Bool
+  skip_mode_present : Bool
+  skip_mode_frame : Array[Int]
+  mi_cols : Int
+  mi_rows : Int
 }
 
 pub(all) struct Av1LoopFilterConfig {
@@ -414,9 +482,24 @@ pub(all) struct Av1MotionField {
   y_modes : Array[Int]
   is_inter : Array[Bool]
   written : Array[Bool]
+  skips : Array[Int]
+  skip_modes : Array[Int]
+  tx_width : Array[Int]
+  tx_height : Array[Int]
+  tx_types : Array[Int]
+  interp_v : Array[Int]
+  interp_h : Array[Int]
   refs : Array[Int]
   mv_rows : Array[Int]
   mv_cols : Array[Int]
+}
+
+pub(all) struct Av1MotionFieldGrid {
+  refs : Array[Int]
+  mv_rows : Array[Array[Int]]
+  mv_cols : Array[Array[Int]]
+  w8 : Int
+  h8 : Int
 }
 
 pub(all) struct Av1MotionRequest {
@@ -453,9 +536,14 @@ pub(all) struct Av1MvFrame {
   allow_high_precision_mv : Bool
   use_ref_frame_mvs : Bool
   force_integer_mv : Int
+  is_motion_mode_switchable : Bool
+  allow_warped_motion : Bool
   gm_type : Array[Int]
   gm_params : Array[Array[Int]]
   ref_frame_sign_bias : Array[Int]
+  frame_width : Int
+  frame_height : Int
+  temporal : Av1MotionFieldGrid?
 }
 
 pub(all) struct Av1MvStack {
@@ -504,6 +592,12 @@ pub(all) struct Av1RefFrame {
   gm_params : Array[Array[Int]]
   loop_filter_ref_deltas : Array[Int]
   loop_filter_mode_deltas : Array[Int]
+  cdfs : Av1FrameCdfs?
+  mf_refs : Array[Int]
+  mf_mvs : Array[Int]
+  mi_cols : Int
+  mi_rows : Int
+  saved_order_hints : Array[Int]
 }
 
 pub(all) struct Av1ReferenceState {

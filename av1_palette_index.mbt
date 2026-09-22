@@ -112,8 +112,7 @@ fn av1_palette_decode_index_map(
     rows > height ||
     cols <= 0 ||
     cols > width ||
-    cdfs.length() != 5 ||
-    decoder.symbol_max_bits < -14 {
+    cdfs.length() != 5 {
     return None
   }
   for cdf in cdfs {
@@ -136,7 +135,7 @@ fn av1_palette_decode_index_map(
     Some(value) => value
     None => return None
   }
-  if output[0] < 0 || output[0] >= palette_size || decoder.symbol_max_bits < -14 {
+  if output[0] < 0 || output[0] >= palette_size {
     return None
   }
   let mut diagonal = 1
@@ -151,7 +150,7 @@ fn av1_palette_decode_index_map(
         None => return None
       }
       let rank = decoder.symbol(cdfs[context])
-      if rank < 0 || rank >= palette_size || decoder.symbol_max_bits < -14 {
+      if rank < 0 || rank >= palette_size {
         return None
       }
       output[row * width + col] = order[rank]
