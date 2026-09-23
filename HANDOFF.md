@@ -4467,3 +4467,34 @@ split（或读错了 split 的解释），此后的 r 值却仍然对得上—�
 `PARTITION_VERT` 必然切成 16x32 ✓ 我方却切成 32x16，即把 VERT/HORZ 的轴选反了
 （或 sub-block 的 (w,h) 传反了）。单测：`inter_localwarp_64x64` 的 inter 帧第一行
 断言 mi(0,8) 处是一个 32x32。
+
+# 第七十次推进补充（2026-09-23，var-tx 分歧面已排除公式与几何，剩邻居状态）
+
+## 一、逐项核对过、已证明一致的部分
+
+| 项 | 结论 |
+| --- | --- |
+| 块树 | 与 dav1d 一致（用 `Post-intermode`/`Post-residualmv` 的 mv 指纹逐块对过：mi(0,0)/(0,8)/(0,12) 的 mv 与尺寸全对上）。上一轮"mi(0,8)  dav1d 是 32x32"是**误判**——那些 `poc=…bl=` 行属于关键帧 |
+| `av1_txfm_split_ctx` 公式 | 与 spec §9.3.4 一致：`(txSzSqrUp != maxTxSz)*3 + (TX_SIZES-1-maxTxSz)*6 + above + left`；我方用 `6*(4-max_tx) + smaller + above + left`，二者等价（已对 7 组块/变换尺寸核过 base 值 0/3/6/9/12/15/18） |
+| CDF 表 | `av1_vartx_cdf_state()` 21 行，值即 libaom `default_txsplit_cdf`，与公式自洽（`av1_vartx_wbtest.mbt` 21 行全钉住） |
+| 分裂几何 | dav1d `dav1d_txfm_dimensions` 的 `.sub`：RTX_16X32→TX_16X16、RTX_32X16→TX_16X16、TX_32X32→TX_16X16，与我方 `av1_tx_split`（长轴对半）一致 |
+
+## 二、剩下的分歧面（下一轮入口）
+
+分歧在**变换尺寸**：mi(0,12)（16x32、LOCALWARP 块）我方解出 16x16×2，
+dav1d 是 8x8/8x16 一组；mi(0,8) 我方 16x32、dav1d 是 8x8。由于
+motion_mode/滤波符号都读对了（r 值全对），而变换树在它们**之后**读，
+所以此前对拍的 r 值序列覆盖不到这一段——这与"符号流一致"不再矛盾。
+
+按上面排除的顺序，只剩两处：
+1. **邻居状态**：spec 的 `get_above_tx_width/get_left_tx_height` 在
+   "上方/左侧是 **skipped inter** 块"时返回**块宽/块高**，否则返回
+   `Tx_Width[InterTxSizes[…]]`（变换网格）。我方 `av1_above_tx_width` /
+   `av1_left_tx_height` 的 skipped-inter 分支与 `field.tx_width/height`
+   网格是否在**每个 4x4 位置**都与规范一致，需要逐点打。
+2. **dav1d 的一个额外守卫**：`if (is_split && t_dim->max > TX_8X8)`——
+   即"节点自身的 max 类 ≤ 8x8 时即使符号说要 split 也不再分"。我方只有
+   `tx_width == 4 && tx_height == 4 → 不分`，少了这一条。
+
+先查 2（一行），再查 1（逐点打印）。修好后 `inter_localwarp_64x64` 的围栏
+应从 376 直接掉向 0。
