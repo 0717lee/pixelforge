@@ -1217,22 +1217,26 @@ fn av1_read_motion_mode(
   if size_index < 0 || size_index >= info.cdfs.use_obmc.length() {
     return false
   }
-  // `find_warp_samples` reads no symbols; its count decides which of the two
-  // symbol shapes this block codes (AV1 §5.11.27).
-  let num_samples = av1_warp_samples(
+  // Which of the two symbol shapes this block codes is decided by the
+  // matching-reference masks, not by `find_warp_samples`' count: the spec
+  // (§5.11.27) reads NumSamples, but libdav1d's `read_motion_mode` takes the
+  // warp branch exactly when `find_matching_ref` produced a bit, and the two
+  // answers differ - a block can have warp candidates the matching masks skip.
+  // dav1d is the reference decoder, so its rule is the one implemented here.
+  let (top_mask, left_mask) = av1_warp_matching_masks(
     info.field,
     block.mi_row,
     block.mi_col,
     block.width4,
     block.height4,
-    block.avail_u,
+    block.width4,
+    block.height4,
     block.avail_l,
-    block.mv_row,
-    block.mv_col,
+    block.avail_u,
     block.ref_frame,
   )
   if info.frame.force_integer_mv == 0 &&
-    num_samples != 0 &&
+    (top_mask != 0L || left_mask != 0L) &&
     info.frame.allow_warped_motion &&
     !av1_mv_is_scaled(info, block.ref_frame) {
     // The three-symbol `motion_mode`: 0 = SIMPLE, 1 = OBMC, 2 = LOCALWARP.

@@ -4822,3 +4822,35 @@ masks, np, 每个采样点的 (row, col, bw, bh, mv_y, mv_x, in_x, in_y, out_x, 
 `top_mask == 1` 的单点情形用了 `off = mi_col & (aw4 - 1)` 取邻居——若该邻居
 比我方块宽，off 的算法会把采样点放到块外，dav1d 此时走的是 `else` 分支
 （逐位循环）而不是单点分支。逐行对一遍 `derive_warpmv` 的两个分支条件即可。
+
+# 第七十九次推进补充（2026-09-23，分支判据改成 dav1d 的 mask 规则；分歧点锁定在 (12,12)）
+
+## 一、已落地的改动（保留）
+
+`av1_read_motion_mode` 的"读三符号还是读 use_obmc"判据，从 spec 的
+`find_warp_samples != 0` 改为 **libdav1d 的规则**：`find_matching_ref` 的
+`(mask[0] | mask[1]) != 0`。规范 §5.11.27 用 NumSamples，但两者会分歧
+（一个块可以有 warp 候选而 matching masks 为空），dav1d 是参考解码器，
+所以以它的规则为准。三目标 1264/1264 保持全绿。
+
+## 二、分歧点（很窄，尚未修）
+
+我方 inter 帧读到的四个 LOCALWARP 符号（r=48256 / 34764 / 39948 / 52180）
+与 dav1d 的四个逐一对应 ✓；但我方在 **mi(12,12)** 还多读了一个（r=61808），
+dav1d 在对应块**不读** motion_mode 符号。
+
+⇒ 符号流从 (12,12) 开始分叉，这正是坏区 (48,6)/(48,7) 所在的块。
+⇒ 我方在该块读符号，说明我方的"可 overlappable 邻居 + matching mask"非空；
+   dav1d 不读，说明它的 refmvs 网格里该块的邻域状态与我方不同。
+⇒ 而 (12,12) 之前的块全都对上（包括它的左邻 (10,12) 与上邻 (8,12)），
+   所以差异出在**某个早前块写入邻域状态的规则**上——最可能是
+   `av1_motion_field_store` 与 dav1d `refmvs_save` 的差异（例如
+   sub-8x8 块或 skipped 块的 ref 是否写入、以及第二参考写 -1 的时机）。
+
+## 三、下一轮入口
+
+在 `av1_motion_field_store` 打印每次写入的 (row, col, w4, h4, ref0, ref1,
+mv0)，与 dav1d 的 refmvs 写入点对拍（dav1d 在 decode_b 尾部经
+`case_set`/`splat_mv` 写 spatial refmvs；先查 (10,12) 这个 16x8 块）。
+若我方多写了某格（例如把 skipped 块的 ref 也写进去而 dav1d 只在
+`!b->skip` 时写），就会让 (12,12) 的上邻被判成同参考。
