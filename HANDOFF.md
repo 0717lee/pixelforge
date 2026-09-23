@@ -4668,3 +4668,45 @@ superblock）的走法是：
    10=32x16,11=32x64,12=64x32,13=4x16,14=16x4,15=8x32,16=32x8,17=16x64,18=64x16）。
 注意：上一轮那份"变换尺寸对比"是从**全量测试**的 grep 结果里挑的，被别的 fixture
 污染了，别再引用；要在只解码本 fixture 的前提下重新取。
+
+# 第七十五次推进补充（2026-09-23，dav1d 的 poc= 是**节点级**打印；残差定位到系数读取）
+
+## 一、先纠正一个会一直误导人的点
+
+dav1d 的 `poc=…,bl=…` 来自 `decode_partition`（src/decode.c:2385），打印的是
+**partition 节点**（bl 是 BlockLevel：0=128,1=64,2=32,3=16,4=8），不是叶子块。
+所以 `bl=2` 出现在 (0,8) 只表示"这里有一个 32x32 节点"，它的子块可以是 16x32。
+这也解释了我方 `av1_inter_tile_block` 一次叶子被多次调用（sub-8x8/chroma 子块
+通道）——按块打印的列表天然比叶子多。
+
+## 二、本轮的干净对比（只解码 inter_localwarp_64x64）
+
+我方右下 32x32 内四个 16x16 叶子的 luma 变换（解码顺序）：
+
+| 我方变换 | eob |
+| --- | --- |
+| (32,32) 8x8 | 39 |
+| (40,32) 8x16 | 52 |
+| (48,32) 8x8 | 8 |
+| (48,40) 16x8 | 26 |
+| (40,56) 8x8 | 5 |
+| (48,48) 16x8 | 1 |
+| (48,56) 16x8 | 16 |
+
+dav1d 同区域（`Post-y-cf-blk`，tx 枚举见上一轮）：8x8(51) / 8x16(54) /
+8x8(10) / 16x8(18) / 8x8(2) / 16x8(116) …
+
+⇒ **变换形状序列对齐（8x8/8x16/8x8/16x8/8x8/16x8），但 eob 值不同**，
+即第一个系数符号（`txb_skip`）或后续系数符号读到不同值。块入口 range 相同、
+块级符号相同，所以分歧就在**系数符号的 CDF 行/上下文**。
+
+## 三、下一轮入口（一次做对）
+
+在 `av1_intra_transform` 里、读完 `all_zero`（txb_skip）之后立刻打印
+`(x, y, txw, txh, minus1?, msac range_after)`，与 dav1d `Post-y-cf-blk` 行自带的
+`r=` 逐条对：dav1d 的 cf-blk 行的 r 就是 txb_skip+系数读完之后的状态，
+所以第一条不一致的 r 就定位到第一个读错的符号。若 txb_skip 的 r 一致而 eob 的
+r 不一致，则问题在 eob/系数上下文（`av1_coeff_context` 的 above/left 取样）；
+若 txb_skip 的 r 就不一致，则问题在 txb_skip 的 CDF 行
+（`txb_skip[tx_context][skip_context]`，tx_context 由
+`av1_tx_size_ctx_rect(txw,txh)` 给出，矩形 8x16/16x8 的 ctx 与方块不同）。
