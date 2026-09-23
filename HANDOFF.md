@@ -4854,3 +4854,37 @@ mv0)，与 dav1d 的 refmvs 写入点对拍（dav1d 在 decode_b 尾部经
 `case_set`/`splat_mv` 写 spatial refmvs；先查 (10,12) 这个 16x8 块）。
 若我方多写了某格（例如把 skipped 块的 ref 也写进去而 dav1d 只在
 `!b->skip` 时写），就会让 (12,12) 的上邻被判成同参考。
+
+# 第八十次推进补充（2026-09-23，store 规则核对完毕，剩下"插桩 dav1d 看它的 refmvs"）
+
+## 一、本轮核对的结果（都对上了，所以不是这里）
+
+把我方 `av1_motion_field_store` 在下半帧的每次写入（mi / w4 h4 / ref0 / ref1 /
+y / skip / mv）全量打印，与 dav1d `splat_oneref_mv`/`splat_tworef_mv`/
+`splat_intraref` 的语义逐条对：
+
+| 规则 | dav1d | 我方 |
+| --- | --- | --- |
+| 单参考块写什么 | `{ref[0]+1, interintra ? 0 : -1}` | `{ref_frame, ref_frame1}`（非 interintra 时为 -1）✓ |
+| 双参考块写什么 | `{ref[0]+1, ref[1]+1}` | 同 ✓ |
+| 是否只对非 skip 块写 | 否，`decode_b` 尾部无条件写（`splat_oneref_mv` 在 `else` 分支，skip 也写） ✓ | 同 ✓ |
+| sub-8x8 块 | 同样写满 bw4×bh4 | 同 ✓ |
+| intra 块在 inter 帧里 | `splat_intraref` 写 `{0,-1}` + INVALID_MV | 我方 `ref_frame=INTRA` ✓ |
+
+⇒ 我方 (12,12) 的上邻 (11,12) 属 (10,12) 块（ref=7, ref1=-1），
+`matches` 判定同参考成立 ⇒ 我方 mask 非空 ⇒ 读符号。
+dav1d 在同一个块不读 ⇒ 它的 mask 为空 ⇒ **它的 (11,12) 处状态与我方不同**，
+但符号流到 (12,12) 之前全部一致。矛盾还没解开，且纯靠我方侧打印已经到顶。
+
+## 二、下一轮：直接插桩 dav1d 的 find_matching_ref
+
+插桩构建在 `Temp/dav1dbuild/dav1d-1.2.1`，`cmd //c build3.bat` 重建。在
+`src/decode.c` 的 `find_matching_ref` 里加打印：`(bx, by, bw4, bh4, ref,
+masks[0], masks[1], have_topleft, have_topright, 每个被检查 unit 的
+ref.ref[0]/ref.ref[1])`，对本流跑一次，与上面那张"我方写入表"逐格对。
+重点看 (11,12) 这一格在 dav1d 里到底是 `{7,-1}` 还是别的值——若不同，
+差异就在**更早的某个块**写入时机（例如 dav1d 在 frame-threading pass 2
+才写、或写完又被 `load_tmvs` 覆盖）；若相同，则 `have_topleft`/`have_topright`
+的取值不同，此时只需把这两个量的计算对齐（我方目前是
+`have_top_right = have_top` 的保守近似，dav1d 还要求
+`imax(bw4,bh4) < 32 && bx+bw4 < col_end && EDGE_I444_TOP_HAS_RIGHT`）。
