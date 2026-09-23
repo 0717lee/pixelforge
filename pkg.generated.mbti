@@ -184,6 +184,8 @@ pub fn av1_video_decode_frame(Av1VideoDecoder, Array[Byte], allow_monochrome? : 
 
 pub fn av1_video_decoder() -> Av1VideoDecoder
 
+pub fn av1_warp_from_global_motion(Array[Int]) -> Av1WarpModel?
+
 pub let av1_warp_samples_scan_limit : Int
 
 pub fn av1_wedge_mask(Int, Int, Int, Int) -> Array[Int]?
@@ -476,6 +478,7 @@ pub(all) struct Av1InterBlock {
   mut interp_horizontal : Int
   mut ref_mv_idx : Int
   mut motion_mode : Int
+  mut warp : Array[Av1WarpModel]
 }
 
 pub(all) struct Av1InterFrame {
@@ -907,6 +910,11 @@ pub(all) enum Av1TxType {
 pub(all) struct Av1VideoDecoder {
   mut sequence : Av1SequenceInfo?
   map : Av1FrameMap
+}
+
+pub(all) struct Av1WarpModel {
+  matrix : Array[Int]
+  coefficients : Array[Int]
 }
 
 pub struct AvifAlphaExtent {

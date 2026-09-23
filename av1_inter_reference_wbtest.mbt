@@ -40041,7 +40041,7 @@ test "inter_localwarp_64x64: a local-warp block reconstructs from its estimated 
       }
     }
   }
-  assert_eq(bad, [376, 16, 8])
+  assert_eq(bad, [0, 0, 0])
 }
 
 ///|

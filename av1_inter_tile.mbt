@@ -93,17 +93,20 @@ fn av1_inter_tx_set(width : Int, height : Int, reduced : Bool) -> Int {
 
 ///|
 /// Tx_Type_Inter_Inv_Set1..3 (AV1 §5.11.47): the decoded index back to a
-/// transform type.
+/// transform type. Set 1 keeps the plain DCT_DCT in the middle of its range -
+/// index 7, between the four colour variants and the mixed pairs - exactly as
+/// libaom's `tx_type_inter_inv_set1` and libdav1d's `dav1d_tx_types_per_set`
+/// lay it out.
 fn av1_inter_tx_type_of(set : Int, index : Int) -> Av1TxType {
   match (set, index) {
     (1, 0) => Av1TxIdentityIdentity
-    (1, 1) => Av1TxDctDct
-    (1, 2) => Av1TxVerticalDct
-    (1, 3) => Av1TxHorizontalDct
-    (1, 4) => Av1TxVerticalAdst
-    (1, 5) => Av1TxHorizontalAdst
-    (1, 6) => Av1TxVerticalFlipadst
-    (1, 7) => Av1TxHorizontalFlipadst
+    (1, 1) => Av1TxVerticalDct
+    (1, 2) => Av1TxHorizontalDct
+    (1, 3) => Av1TxVerticalAdst
+    (1, 4) => Av1TxHorizontalAdst
+    (1, 5) => Av1TxVerticalFlipadst
+    (1, 6) => Av1TxHorizontalFlipadst
+    (1, 7) => Av1TxDctDct
     (1, 8) => Av1TxAdstDct
     (1, 9) => Av1TxDctAdst
     (1, 10) => Av1TxFlipadstDct
@@ -557,8 +560,14 @@ fn av1_inter_predict(
     // A LOCALWARP block with a representable model skips the whole
     // motion-compensation path: each 8x8 chunk of the plane is filtered
     // through the model itself, so there is no single subpel phase to filter
-    // at and no filter symbol to read (AV1 §7.11.3.8).
-    if block.motion_mode == 2 && block.warp.length() == 1 {
+    // at and no filter symbol to read (AV1 §7.11.3.8). The warp filter works on
+    // 8-pixel chunks, so libdav1d only routes a plane through it when that
+    // plane's own block is at least 8x8 samples; a smaller chroma block
+    // predicts through the ordinary motion-compensation path at the block's own
+    // vector and the eight-tap regular filter it reads no symbol for.
+    if block.motion_mode == 2 &&
+      block.warp.length() == 1 &&
+      pred_w >= 8 && pred_h >= 8 {
       let reference = match
         av1_inter_reference(info, field.refs[(block.mi_row * field.cols + block.mi_col) * 2]) {
         Some(value) => value

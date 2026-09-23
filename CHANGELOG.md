@@ -2,23 +2,39 @@
 
 ## Unreleased
 - Added `inter_localwarp_64x64`, the first stream in the repository that actually
-  selects LOCALWARP, and fixed the two bugs it exposed. The block is reached by
-  flipping one bit of `inter_warped_64x64`'s inter-frame tile payload - the bit
-  was found by brute force with the debug dav1d build, which prints every
-  block's decoded motion mode - because libaom itself never writes
-  `motion_mode = 2` for these groups: a uniform translation costs less per block
-  than a warp model. Two fixes came out of it, neither of them reachable before:
-  the warp masks were 32-bit where `find_matching_ref`'s corner markers live at
-  bit 32, so any block with a non-empty left mask also gained a spurious
-  top-left sample; and the horizontal pass of the two-phase warp filter
-  addressed the reference without the output column's own offset. After both,
-  three of the five LOCALWARP blocks reconstruct sample-exactly and the symbol
-  stream matches dav1d's msac ranges block for block. The frame is still wrong
-  in three regions, so the fixture pins the current per-plane counts as a fence
-  with the diagnosis trail in the fixture table; the lead is that our motion
-  field disagrees with dav1d's refmvs grid around mi(12,12) while every symbol
-  matches.
-- - Closed the last inter-tool gate in `av1_inter_frame_supported`: a rotate-zoom
+  selects LOCALWARP. The block is reached by flipping one bit of
+  `inter_warped_64x64`'s inter-frame tile payload - the bit was found by brute
+  force with the debug dav1d build, which prints every block's decoded motion
+  mode - because libaom itself never writes `motion_mode = 2` for these groups: a
+  uniform translation costs less per block than a warp model. Four bugs came out
+  of it, none of them reachable before. The warp masks were 32-bit where
+  `find_matching_ref`'s corner markers live at bit 32, so any block with a
+  non-empty left mask also gained a spurious top-left sample. The horizontal pass
+  of the two-phase warp filter addressed the reference without the output
+  column's own offset. `av1_read_motion_mode` took the spec's
+  `find_warp_samples != 0` branch for the symbol's shape, where libdav1d's
+  `read_motion_mode` takes the warp branch exactly when `find_matching_ref`
+  produced a bit - the two answers differ, and dav1d is the reference decoder. And
+  `av1_inter_tx_type_of`'s set-1 row was off by one position for indices 1 to 7:
+  it placed `DCT_DCT` at index 1 and shifted the four colour-variant
+  ADST/FLIPADST types down a slot, where libaom and libdav1d keep the plain
+  `DCT_DCT` at index 7, between the colour variants and the mixed pairs. That
+  last one is the subtlest: a block whose transform-type symbol lands on 7
+  decoded as `H_FLIPADST` instead of `DCT_DCT`, which changed the transform's
+  scan class, which picked the wrong end-of-block CDF row, which diverged the
+  whole residual after it - and it was invisible in the symbol stream until the
+  CDF row itself was dumped. With all four fixed, the inter frame's whole msac
+  symbol stream - 721 symbols, their values and their ranges - matches
+  libdav1d's symbol for symbol and all three planes are sample-exact, so the
+  fixture pins [0, 0, 0].
+- A plane of a warped block is only routed through the warp filter when that
+  plane's own block is at least 8x8 samples wide, because the warp filter works
+  in 8-pixel chunks and libdav1d sends a smaller block - the 4x4 chroma of an
+  8x8 luma block, say - through the ordinary motion-compensation path at the
+  block's own vector and the eight-tap regular filter it reads no symbol for.
+  Before this gate, such a chroma block differed from dav1d by one LSB in a few
+  samples.
+- Closed the last inter-tool gate in `av1_inter_frame_supported`: a rotate-zoom
   or affine global-motion model now decodes instead of being refused. The
   injector gained a `model` kind, and `inter_globalmv_rotzoom_64x64` sets
   `is_global(LAST_FRAME)` plus `is_rot_zoom` on `inter_minimal_64x64` and codes a
@@ -40,7 +56,7 @@
   an integer-motion frame never takes the grid at all - and a compound block
   that would need a warp for each of its two lists is refused one level up,
   because this block stage blends its lists together.
-- - Wired the warped-motion **prediction** half, so a block that selects
+- Wired the warped-motion **prediction** half, so a block that selects
   LOCALWARP now reconstructs instead of being refused:
   `av1_warp_predict` walks the block in 8x8 chunks, evaluates the model at each
   chunk's centre in luma coordinates, shifts it by the plane's subsampling and
@@ -58,7 +74,7 @@
   same representability test. No fixture selects LOCALWARP yet, so this path is
   implemented and unit-pinned but not sample-verified against dav1d; the
   triggering stream is the next slice.
-- - Ported the warped-motion **estimation** half of LOCALWARP into
+- Ported the warped-motion **estimation** half of LOCALWARP into
   `av1_warp_model.mbt`: `find_matching_ref`-style sample collection is not here
   yet, but the pieces it feeds are - `dav1d_find_affine_int`'s weighted
   least-squares solve of the two affine rows with its `div_lut` reciprocal (the
@@ -74,7 +90,7 @@
   their matrix is positive definite and the fit's singular branch is
   unreachable rather than merely rare - the test that was meant to cover it is
   replaced by one that covers the 256-unit sample threshold instead.
-- - Closed the global-motion gate for translation models, and reached one at all.
+- Closed the global-motion gate for translation models, and reached one at all.
   libaom writes `is_global` as zero for every reference of these two-frame
   groups whatever the encoder flags say - the neighbour-based motion predictor
   makes a uniform translation cheaper per block than the model's own ~30 bits -
@@ -96,7 +112,7 @@
   skips, so the symbols after those blocks re-symbolise into a different legal
   decode - the reference planes are committed for that decode, not for the
   base's.
-- - Closed the stage-D animation integration seam with two three-frame tests. The
+- Closed the stage-D animation integration seam with two three-frame tests. The
   animated-AVIF seam (`avif_decode_animation_samples`) is now driven over the
   three temporal units of `inter_skipmode_64x64`, whose third sample names both
   earlier frames as references through skip mode: one stateful decoder walks

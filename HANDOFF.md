@@ -4888,3 +4888,67 @@ ref.ref[0]/ref.ref[1])`，对本流跑一次，与上面那张"我方写入表"�
 的取值不同，此时只需把这两个量的计算对齐（我方目前是
 `have_top_right = have_top` 的保守近似，dav1d 还要求
 `imax(bw4,bh4) < 32 && bx+bw4 < col_end && EDGE_I444_TOP_HAS_RIGHT`）。
+
+# 第八十一次推进补充（2026-09-23，LOCALWARP 闭合：`[0,0,0]`，符号流与 dav1d 逐字一致）
+
+## 一、根因：变换类型集合 1 的索引错位一格（不是预测、不是 refmvs、不是 store）
+
+前几轮把入口锁定在 (12,12) 的 mask 分歧，本轮先按上一节的建议插桩了 dav1d 的
+`find_matching_ref`（`Temp/dav1dbuild/dav1d-1.2.1`，`cmd //c build3.bat`），
+结果**推翻了前面的假设**：我方与 dav1d 的 refmvs 状态其实一致，前 12 块的
+mask/mode 全对，(12,12)/(14,12) 的 ref 读错是**下游后果**。
+
+真正的分工序：把 dav1d 的 msac 符号流（`msac.c` 的 `dav1d_msac_decode_symbol_adapt_c`）
+逐个符号打成 `(n_symbols, val, cdf[0], r_before, r_after)`，我方在
+`Av1SymbolDecoder::symbol` 里打同样的五元组（注意 dav1d 的 CDF 存的是补数，
+`cdf[0]` 要取 `32768 - 我方 cdf[0]` 才能对上；dav 的 `n_symbols` 比我方
+`cdf.length()-1` 少 1）。关掉 x86 asm 分发（注释掉 `x86/msac.h` 里的六个
+`#define …_sse2`，否则 `symbol_adapt4/8/16` 与 `bool_adapt` 走汇编、打不到日志）。
+
+对齐后：**前 459 个符号逐字一致（val / r_before / r_after 全同）**，第 460 个
+分叉——一个 6 符号 CDF，我方读 4、dav1d 读 2，而入口 range 完全相同
+（都有 r0=52568）。入口 range 相同 ⇒ 熵解码状态没分歧 ⇒ **分叉只可能来自
+CDF 行选错**。把该行打印出来：我方 `cdf[0]=1249` 即
+`defaultEobPt64Cdf[3][0][1]` 的默认值；dav1d 的 `cdf[0]=26658` 即补数 6110，
+正好是 `[3][0][0]` 那一行被读了一次之后的形状。⇒ **我方在 (14,10) 这 8x8 块
+上选了 is_1d=1 的 eob 行，dav1d 选了 is_1d=0**。
+
+再往前一格：`eob` 之前是 inter 块的变换类型符号（CDF15，双方 val=7 一致），
+`av1_inter_tx_type_of(1, 7)` 给出 `H_FLIPADST` ⇒ `av1_tx_scan_class` 给
+SCAN_HORZ ⇒ pt_ctx=1。dav1d 的 `dav1d_tx_types_per_set[24+7] = DCT_DCT` ⇒
+SCAN_DEFAULT ⇒ pt_ctx=0。所以**set 1 的索引→类型映射整体错位一格**：
+我方把 `DCT_DCT` 放在 index 1，把四种带方向的 ADST/FLIPADST 依次下移；libaom 的
+`tx_type_inter_inv_set1` 与 dav1d 的 `dav1d_tx_types_per_set` 都把 `V_DCT`
+放在 1、`DCT_DCT` 放在 **7**（夹在四个方向变体与混合对之间）。
+
+一条符号错位 ⇒ 变换类型错 ⇒ scan class 错 ⇒ eob 行错 ⇒ 残差全错。这解释了
+为什么"符号流一致而像素不耦合"，也解释了为什么 dav1d 侧 mask 看起来"对不上"
+——那是我方残差分叉之后块状态连锁错的结果。
+
+## 二、修的两处（都在 `av1_inter_tile.mbt`）
+
+1. **`av1_inter_tx_type_of` 的 set 1 行**：
+   0→IDTX, 1→V_DCT, 2→H_DCT, 3→V_ADST, 4→H_ADST, 5→V_FLIPADST, 6→H_FLIPADST,
+   **7→DCT_DCT**, 8→ADST_DCT, …, 15→FLIPADST_ADST（set 2/3 原本就对）。
+2. **LOCALWARP 的 chroma 预测门**：warp 滤波按 8 像素一块走，dav1d 只在
+   `imin(cbw4,cbh4) > 1`（即该平面自身块 ≥8x8 样本）时才把平面送进
+   `warp_affine`；4x4 chroma 块改走普通运动补偿（块自身 MV + 8-tap regular）。
+   我方改为 `pred_w >= 8 && pred_h >= 8` 才走 warp。（第一处修完 luma 归零、
+   chroma 只剩 4 个样本，就是这条：最后一个 8x8 LOCALWARP 块的 4x4 chroma。）
+
+## 三、验收
+
+- 三目标 `moon test --target native|js`（默认 wasm-gc）**1264/1264 全绿**。
+- `inter_localwarp_64x64` 的 inter 帧 **三个平面 [0,0,0]**（fixture 的
+  "围栏"改回验收计数），与 dav1d 逐样本一致。
+- inter 帧全部 721 个 msac 符号的 `(n_symbols, val, r_before, r_after)`
+  与 dav1d 逐字一致；上半帧（含第一个 LOCALWARP 块）此前已逐样本正确。
+- 收尾前已确认 `grep -rn av1_zz` 为空、scratch 测试文件已删。
+
+## 四、下一轮入口
+
+LOCALWARP 主线已闭合，回到阶段表里剩下的唯一一项：**segmentation feature
+的应用**（需要 encoder 发出带分段的流；目前 `av1_frame_supported` 会拒绝）。
+可先确认 `--enable-segmentation=1` + `--aq-mode`/`--enable-deltalf` 之类的
+aomenc 组合能否生成带 `seg_id`/feature 的 64x64 两帧流，再决定是"实现 feature"
+还是"继续拒绝并记录证据"。
