@@ -4543,3 +4543,33 @@ mi(0,8) 这一行读到的上下文与 dav1d 不同，可能来自上一块（mi
 做法：在 `av1_coeff_context` 打印该变换的 (above_level, left_level, above_dc,
 left_dc, whole)，与 dav1d `Post-y-cf-blk` 前的上下文对比；先查 mi(0,0) 的
 above 数组是否正确覆盖了 32x32 的 8 列。
+
+# 第七十二次推进补充（2026-09-23，dav1d 的首个变换是 16x32，说明顶层分块仍不同）
+
+## 一、新数据点（决定性）
+
+dav1d `dav1d_max_txfm_size_for_bs[BS_32x32][0] = TX_32X32`，且 TX_32X32 的
+`.sub = TX_16X16`——**32x32 块的变换树只能分裂出 16x16/8x8，永远出不了 16x32**。
+而 dav1d inter 帧的第一个 `Post-y-cf-blk` 是 `tx=9`（RTX_16X32），它只能来自
+`BS_16x32`（其 max 正是 RTX_16X32）。
+
+⇒ **dav1d 的第一个 inter 块是 16x32；我方的第一个 inter 块是 32x32**
+（`ZZBTX r=0 c=0 w=32 h=32`）。顶层分块依然不同。
+
+## 二、这推翻了上一轮"符号流一致"的部分证据
+
+上一轮只对拍了 **motion_mode** 符号的 r 值，没对拍每个块的 skip/ref/intermode。
+若顶层分块不同，前面若干符号的*条数*就不同，motion_mode 的 r 值仍可能对上是
+巧合（符号数相同、值相同）。所以"符号流逐字一致"这个前提需要重新验证。
+
+## 三、下一轮（一次做对）
+
+按顺序打印并逐条对（每块一条），直到第一条分歧：
+1. 我方每块的 `(mi, w×h, skip)` —— 上一轮已有插桩经验（`av1_inter_tile_block`
+   里加打印即可）；
+2. dav1d 每块的 `poc=…,bl=` / `Post-skip[]` / `Post-intermode[…]`。
+
+预期第一处分歧就在 mi(0,0)/mi(0,8) 一带：我方把 64x64 分成 32x32×4，
+dav1d 的第一块是 16x32（即 64x64 → 可能是 32x64/16x32 这类矩形分块）。
+修正处分：`av1_partition_children` 的 64x64 分支或 `av1_partition_leaves`
+的递归（矩形 PARTITION 是否在 64x64 层级被允许）。
