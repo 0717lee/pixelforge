@@ -1,8 +1,8 @@
 # PixelForge 开发交接
 
-更新日期：2026-09-23（第六十一次推进）。适用对象：首次接手本项目的开发者、维护者或代码代理。本文从项目目标、代码基线到验收步骤提供完整入口，不需要先阅读聊天记录或取得原作者的临时文件。除外部链接外，文件路径均相对仓库根目录。
+更新日期：2026-09-23（第 84 次推进）。适用对象：首次接手本项目的开发者、维护者或代码代理。本文从项目目标、代码基线到验收步骤提供完整入口，不需要先阅读聊天记录或取得原作者的临时文件。除外部链接外，文件路径均相对仓库根目录。
 
-**当前结论（2026-09-23，第六十一次推进）：AVIF/AV1 解码主线仍未完成，但阶段 B 已闭合、阶段 C 的 inter 工具门大部分已闭合，阶段 D 的三帧动画已闭合。** 具体地说：`inter_cdf_inherit_64x64` 已从 `[3992,842,928]` 变为 `[0,0,0]`（生产开关 `av1_cdf_load_enabled` 已开启，OBU 与 dav1d 真值未动，见第 10 节第四十三次推进）；compound（含 distance/difference 加权与 interintra）、skip mode（三帧序列）、OBMC/warped motion 的语法门、屏幕内容/调色板、时间运动矢量和平移型全局运动均已解除且逐样本一致（`inter_compound_64x64`/`inter_distcomp_64x64`/`inter_diffwtd_64x64`/`inter_interintra_64x64`/`inter_skipmode_64x64`/`inter_globalmv_64x64` 等，见第 10 节第五十九至六十一次推进）；三帧动画容器（BMFF + 状态解码 + 时间戳选帧）已由 `avif_grid_animation_test.mbt` 与 `av1_inter_reference_wbtest.mbt` 的两个三帧用例钉住。**仍未闭合的三项**：(1) LOCALWARP 与 ROTZOOM/AFFINE 全局运动，都需要 AV1 §7.11.3.5 的逐像素 warp 预测网格；(2) segmentation 的 `segment_id` 符号与 feature 应用（`segmentation_params` 语法已全量解析，但 libaom 不发分段流，翻 enable 位会让每块读 seg_id 从而导致熵错位，判定成本过高，见第五十九次推进）；(3) 上述门之外的收尾：README/证据/CI 一致性（阶段 E）。现在 native/js/wasm-gc 为 1255/1255 全绿。
+**当前结论（2026-09-23，第 84 次推进）：AVIF/AV1 像素解码主线已完成。** 四个阶段全部闭合：阶段 B（`inter_cdf_inherit_64x64` 继承路径对 dav1d [0,0,0]）、阶段 C（inter 帧间工具门的剩余部分——LOCALWARP、旋转缩放/仿射全局运动、segmentation 的 `segment_id` + `SEG_LVL_ALT_Q`、`delta_q_params` 的逐超级块 quantizer 增量——全部解除且有逐样本外部核验）、阶段 D（AVIF 容器与三帧以上参考状态变化的动画）、阶段 E（证据/文档/产物/CI 一致性收口）。18 个 fixture 的 `--check` 全绿，三个 `moon test` 目标 1266/1266，`moon check` 0 errors，Web 产物可复现、WASM 验证与 CLI 冒烟通过。仍被明确拒绝且不会静默错解码的工具：`delta_lf_present`（缺逐 SB 去块强度表）、segmentation 其余 7 个 feature level（loop filter 四档/强制参考帧/强制 skip/强制 globalmv）、`using_qmatrix`、masked/wedge compound、`allow_intrabc`——每一项的拒绝理由写在各次推进补充与 `av1_frame_header.mbt` 的门里。本文按时间倒序记录每次推进的取证与修复，最新的一次在最上面。
 
 以下第 5 段是这一路的历史记录（阶段 B 的收敛过程），保留以便复现诊断方法：
 
@@ -4892,6 +4892,22 @@ ref.ref[0]/ref.ref[1])`，对本流跑一次，与上面那张"我方写入表"�
 的取值不同，此时只需把这两个量的计算对齐（我方目前是
 `have_top_right = have_top` 的保守近似，dav1d 还要求
 `imax(bw4,bh4) < 32 && bx+bw4 < col_end && EDGE_I444_TOP_HAS_RIGHT`）。
+
+# 主线状态（截至 2026-09-23，第 84 次推进）
+
+- 三个 `moon test` 目标 **1266/1266** 全绿；`moon check` 0 errors。
+- 18 个 fixture `--check` verified（每个都是 libaom 编码 + dav1d 平面 + FFmpeg
+  trace 三份证据，`manifest.json` 带 sha256 与命令）。
+- 两个"已知错误样本"都已归零并写成验收断言：`inter_cdf_inherit_64x64`
+  （阶段 B）与 `inter_localwarp_64x64`（曾是 [376,16,8] 的围栏）。
+- `delta_q` / `SEG_LVL_ALT_Q` / `segment_id` / LOCALWARP / 旋转缩放全局运动均有
+  逐样本证据。仍拒绝且理由明确：`delta_lf_present`、segmentation 的其余 7 个
+  level、`using_qmatrix`、masked/wedge compound、`allow_intrabc`。
+- 本轮提交：`0884e10`（LOCALWARP 闭合）、`42f0947`（segmentation ALT_Q）、
+  `e369c10`（delta_q_params 调研）、`9be611b`（delta_q 落地）、本文前的 status
+  块。接手入口见各自推进补充末尾的"下一轮入口"。
+
+---
 
 # 第八十一次推进补充（2026-09-23，LOCALWARP 闭合：`[0,0,0]`，符号流与 dav1d 逐字一致）
 
