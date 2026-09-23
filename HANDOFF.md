@@ -4332,3 +4332,46 @@ precDiff=1）严格等价；而 ROTZOOM/AFFINE 的**平移项**是 precBits=6（
   skip mode、OBMC/warped motion 语法、屏幕内容/调色板、时间运动矢量、平移与
   ROTZOOM/AFFINE 全局运动都有逐样本证据。仍未闭合的只有 segmentation feature
   （需要 encoder 发分段的流）与 LOCALWARP 的样本级触发（位 hunt 未做）。
+
+# 第六十六次推进补充（2026-09-23，LOCALWARP 触发流到手，两个真 bug 修掉，差三个区域）
+
+## 一、触发流：瓦片位 brute force
+
+用插桩 dav1d（`DEBUG_BLOCK_INFO` 会打印每个块的 `Post-motionmode[%d]`）暴力翻遍
+`inter_warped_64x64` inter 帧 tile payload 的每一位，找到 24 个能让某个块解出
+`motion_mode = 2` 的位。选 offset 67 bit 0（4 个 LOCALWARP 块、dav1d 解码
+rc=0），生成新样本 `inter_localwarp_64x64`（73 字节，基流 73 字节不变，只翻一 bit）。
+生成器新增 `tile_patch_of` 种类：取已提交 OBU 翻一个 bit。
+
+**为什么必须是 inter_warped**：同法试过最小集 + `--enable-warped-motion=1` 自编码
+的流（`inter_localwarp` 最初的入口），该流 7 个 `is_global` 之外一个
+motion_mode 符号都不读（`allow_warped_motion` 被 aomenc 编成 0），无从翻起。
+
+## 二、顺着它修掉两个真 bug
+
+1. **warp 掩码是 32 位**：`find_matching_ref` 的两个角标记在 bit 32，MoonBit 的
+   `Int` 是 32 位，`1 << 32` 直接没了、`>> 32` 变成 `>> 0`，于是**只要 left_mask 非零
+   就多加一个 top-left 采样点**。改成 Int64 后块 2 的采样数从 2 回到 1。
+2. **warp 水平滤波 pass 漏了列偏移**：读参考样本时用了 `origin_x + tap - 3`，
+   漏了输出列自身的位置，应该是 `origin_x + column + tap - 3`（dav1d 的
+   `src[x + tap - 3]`）。修完 mi(0,12)、mi(8,12) 两个 warp 块从全错变成逐样本一致。
+
+两个 bug 都在"没有任何 fixture 选中 LOCALWARP"时不可能被发现——这条触发流的价值
+就在这里。
+
+## 三、符号流比对的方法（可复用）
+
+在 `av1_read_motion_mode` 打印 `msac range + mode + mi + masks`，与 dav1d 的
+`Post-motionmode[N]: r=NNNN [mask: 0x…/0x…]` 逐条对：前 10 个符号（含 5 个
+LOCALWARP 块的 mode 读取）**r 值全部相同**，包括 3 个 identity 模型块。
+
+## 四、当前差在哪（下一轮入口）
+
+围栏 `[376, 16, 8]`，坏区域只剩三处：mi(8,8) 的 16x16、mi(12,12) 与 mi(14,10)
+两个 warp 块。关键线索：**mi(12,12) 处我们的 masks 是 `0x1/0x100000000`，
+dav1d 是 `0x0/0x1`**——即我方认为左上邻块 (11,12) 同参考（我们 field 里确实是
+ref 7），dav1d 认为不同；而我方认为不同参考的 (12,11)（field 里 ref 4）dav1d 却
+认为同。这说明我方 motion field 在该区域的参考/分块状态与 dav1d 的 refmvs 网格
+不同，而符号流又是逐字相同的——所以差异在**块级状态怎么落进 field**（很可能是
+sub-8x8 或 rect 块的 `av1_motion_field_store` 覆盖范围/参考写入时机），而不是符号。
+另外 mi(8,8) 在 raster 序里早于 (12,12)，它先错，所以先查它。
