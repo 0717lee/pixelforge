@@ -513,3 +513,27 @@ because a translation model makes a GLOBAL(Global)MV block read a subpel filter
 symbol the identity model skips, the symbols after those blocks re-symbolise
 into a different legal decode than the base's, so the committed reference
 planes are dav1d's output on the patched stream - not on `inter_minimal_64x64`.
+
+## The rotate-zoom global-motion rung
+
+`inter_globalmv_rotzoom_64x64` is the same injection as the translation rung with
+`is_rot_zoom` read as one: the grammar then codes two model coefficients against
+the inherited default, derives the second row from them (`gm_params[4] =
+-gm_params[3]`, `gm_params[5] = gm_params[2]`), and codes the two translation
+components on the affine model's own precision - 12 absolute bits at 6 precision
+bits, i.e. a quarter-pel step, against the 1/64-pel step the diagonal entries
+use. The parsed header carries that distinction, and the fixture asserts both
+coefficients, the derived row, the two translation components and the byte the
+tile payload starts on.
+
+Why the frame can decode at all: `av1_warp_predict` drives a block through a
+model per pixel, and a frame-level model is the same thing - `av1_warp_from_global_motion`
+turns the parsed `gm_params` entry into the coefficients the grid consumes. The
+frame gate therefore refuses a rotate-zoom or affine model only when the grid
+cannot express it (a pure shear, or a coefficient the grid clips, both reported by
+`av1_warp_shear_params`) or when the frame forces integer motion; a compound
+block that would need one warp per list is refused one level up. As with the
+translation rung the picture still moves - a non-translation model removes the
+subpel filter symbol a GLOBAL(Global)MV block would read - so the committed
+reference planes are dav1d's output on the patched stream, not on
+`inter_minimal_64x64`.

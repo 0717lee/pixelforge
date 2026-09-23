@@ -4290,3 +4290,45 @@ ROTZOOM/AFFINE 全局运动（需要 warp 网格）。阶段 D 的三帧动画�
 - 顺带可做且更有价值的一步：既然 warp 网格已经在，ROTZOOM/AFFINE **全局运动**也可以
   闭合——注入器 `inject_global_motion` 现在只写 TRANSLATION，扩成能写 ROTZOOM/AFFINE
   后就能得到一条 dav1d 已验证的流，把帧门里最后一个 inter 工具门关掉。
+
+# 第六十五次推进补充（2026-09-23，ROTZOOM 全局运动门闭合，`av1_inter_frame_supported` 的 inter 工具门清空）
+
+## 一、本轮做了什么
+
+`inject_global_motion` 增加 `model` 种类（Python 侧新增
+`_write_global_param`：按 `idx` 区分精度——idx≥2 的对角项 12 绝对位/15 精度位
+（dav1d 的"参考减半再乘 2"就是这个 precDiff=1 的指纹），idx<2 的平移项在
+ROTZOOM/AFFINE 模型下 12/6，TRANSLATION 下 9-hp / 3-hp）。
+
+新样本 `inter_globalmv_rotzoom_64x64`（同基流 `inter_minimal_64x64`）：
+`is_global(LAST)=1` + `is_rot_zoom=1`，模型 x 缩放 512/65536、剪切 256/65536，
+平移两项为 0。FFmpeg trace 证实
+`is_rot_zoom[1]=1, gm_params[1][2]=512, gm_params[1][3]=256`。
+
+代码侧：
+- `av1_warp_from_global_motion(matrix)`：把帧级 `gm_params` 变成预测半边的模型
+  （`av1_warp_shear_params` 判不可表示时返回 None）。
+- `av1_inter_predict`：GLOBALMV 单参考块 + 该参考的 gm > TRANSLATION 且非
+  `force_integer_mv` 时，走 `av1_warp_predict`（与 LOCALWARP 同一条逐像素路径）。
+- 帧门：不再"凡非 identity 即拒绝"，改为**可表示性测试**（剪切/系数被夹 /
+  force_integer_mv 时拒绝），compound GLOBAL_GLOBALMV 需要逐 list warp 的块在
+  `av1_read_motion_mode` 里直接拒帧（本仓库的 compound 是两个 MC 结果混合，
+  做不了逐 list warp）。
+- 依赖：本轮用上了上一轮落地的 `av1_warp_model.mbt`，所以 warp 那半边不是死代码。
+
+## 二、一个重要发现（写进 README 之前先记在这里）
+
+`read_global_param` 的精度分三档，dav1d 的 `mat[2] = 65536 + 2*subexp(ref =
+(ref-65536)>>1, 12)` 与规范 `(delta << precDiff) + round`（precBits=15 ⇒
+precDiff=1）严格等价；而 ROTZOOM/AFFINE 的**平移项**是 precBits=6（precDiff=10）。
+仓库里 `av1_frame_global_param` 的默认值正好是 15/6 分档，所以这次注入一次就通
+——但如果以后有人动这个函数，必须按 `idx` 分档，不能一刀切。
+
+## 三、状态
+
+- native / js / wasm-gc 各 **1262/1262** 全绿（本轮 +2 个测试）。
+- `--check`：15 样本 verified。
+- **`av1_inter_frame_supported` 里的 inter 工具门已清空**：compound（含各类混合）、
+  skip mode、OBMC/warped motion 语法、屏幕内容/调色板、时间运动矢量、平移与
+  ROTZOOM/AFFINE 全局运动都有逐样本证据。仍未闭合的只有 segmentation feature
+  （需要 encoder 发分段的流）与 LOCALWARP 的样本级触发（位 hunt 未做）。

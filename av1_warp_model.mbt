@@ -1043,3 +1043,20 @@ fn av1_warp_predict(
   }
   out
 }
+
+///|
+/// The warp model a frame-level global-motion entry stands for, or None when
+/// the model cannot be represented on the prediction grid (a pure shear, or one
+/// whose coefficients the grid clips). The matrix is read, never written: the
+/// prediction half only reads it.
+pub fn av1_warp_from_global_motion(matrix : Array[Int]) -> Av1WarpModel? {
+  if matrix.length() < 6 {
+    return None
+  }
+  let coefficients : Array[Int] = [0, 0, 0, 0]
+  if av1_warp_shear_params(matrix, coefficients) {
+    None
+  } else {
+    Some({ matrix, coefficients })
+  }
+}

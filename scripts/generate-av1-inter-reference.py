@@ -744,6 +744,47 @@ FIXTURES = [
         "decode_frames": 1,
     },
     {
+        # The rotate-zoom global-motion rung, and the reason the frame gate can
+        # open for models beyond a translation: `av1_warp_predict` drives a
+        # GLOBAL(Global)MV block through the model per pixel, exactly as it
+        # drives a LOCALWARP block. The injected model is a small rotation with
+        # a 512/65536 x scale and a 256/65536 shear, which the shear test keeps
+        # representable; no block of the base asks for GLOBAL(Global)MV, but a
+        # non-translation model still removes the subpel filter symbol those
+        # blocks would read, so the tiles re-symbolise and the reference planes
+        # are committed for that decode.
+        "name": "inter_globalmv_rotzoom_64x64",
+        "gm_inject": {
+            "base": "inter_minimal_64x64",
+            "frame": 1,
+            "gm_offset": 102,
+            "base_header_bytes": 14,
+            "allow_high_precision_mv": False,
+            "model": "rotzoom",
+            "matrix": [0, 0, 65536 + 512, 256],
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 0,
+                # The transcript's own values are the raw subexp symbols, which
+                # is the encodable form of the two coefficients that are coded;
+                # the second model row and the translation follow from them.
+                "gm_params[1][2]": 512,
+                "gm_params[1][3]": 256,
+                "gm_params[1][0]": 0,
+                "gm_params[1][1]": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    {
         "name": "inter_interintra_64x64",
         "patched_encode": {
             "append_frame_copy": False,
@@ -1056,6 +1097,25 @@ def _write_signed_subexp_with_ref(delta : int, mx : int, ref : int) -> list[int]
     return _subexp_bits(v, num_syms)
 
 
+def _write_global_param(mat_value : int, prev_value : int, idx : int,
+                        abs_bits : int, prec_bits : int) -> list[int]:
+    """Bits for one `read_global_param` (AV1 5.9.24).
+
+    `mat_value` is the model coefficient in WARPEDMODEL_PREC_BITS units,
+    `prev_value` the inherited one, and `idx` the coefficient's position: the
+    diagonal entries (idx 2 and 5) carry the identity bias and are coded one bit
+    finer than the rest, which is what the halved reference in libdav1d's parser
+    encodes.
+    """
+    prec_diff = 16 - prec_bits
+    bias = (1 << 16) if idx % 3 == 2 else 0
+    sub = (1 << prec_bits) if idx % 3 == 2 else 0
+    mx = 1 << abs_bits
+    base = (prev_value >> prec_diff) - sub
+    delta = (mat_value - bias) >> prec_diff
+    return _write_signed_subexp_with_ref(delta, mx, base)
+
+
 def inject_global_motion(spec: dict) -> bytes:
     """Signal a translation warp model for one reference of a frame header.
 
@@ -1082,13 +1142,29 @@ def inject_global_motion(spec: dict) -> bytes:
     assert bits[at + 1 : at + 8] == [0] * 7, "%s models another reference" % spec["base"]
     # A translation model codes only its two components, and both are coded
     # against the default identity model because the base names PRIMARY_REF_NONE.
-    hp = 0 if spec["allow_high_precision_mv"] else 1
-    abs_bits = 9 - hp
-    mx = 1 << abs_bits
-    row, col = spec["translation"]
-    inserted : list[int] = [1, 0, 1]
-    inserted += _write_signed_subexp_with_ref(row, mx, 0)
-    inserted += _write_signed_subexp_with_ref(col, mx, 0)
+    model = spec.get("model", "translation")
+    if model == "translation":
+        hp = 0 if spec["allow_high_precision_mv"] else 1
+        abs_bits = 9 - hp
+        mx = 1 << abs_bits
+        row, col = spec["translation"]
+        # is_global, is_rot_zoom = 0, is_translation = 1.
+        inserted : list[int] = [1, 0, 1]
+        inserted += _write_signed_subexp_with_ref(row, mx, 0)
+        inserted += _write_signed_subexp_with_ref(col, mx, 0)
+    elif model == "rotzoom":
+        # is_global, is_rot_zoom = 1. The second model row is derived from the
+        # first by the grammar, so only two coefficients are coded, and the
+        # translation components then follow on the affine model's own
+        # precision (12 absolute bits, 6 precision bits).
+        mat = spec["matrix"]
+        inserted : list[int] = [1, 1]
+        inserted += _write_global_param(mat[2], 1 << 16, 2, 12, 15)
+        inserted += _write_global_param(mat[3], 0, 3, 12, 15)
+        inserted += _write_global_param(mat[0], 0, 0, 12, 6)
+        inserted += _write_global_param(mat[1], 0, 1, 12, 6)
+    else:
+        raise SystemExit("unknown global-motion model %r" % model)
     out = bits[:at] + inserted + bits[at + 1 : header_bits]
     while len(out) % 8:
         out.append(0)

@@ -1,7 +1,29 @@
 # Changelog
 
 ## Unreleased
-- Wired the warped-motion **prediction** half, so a block that selects
+- Closed the last inter-tool gate in `av1_inter_frame_supported`: a rotate-zoom
+  or affine global-motion model now decodes instead of being refused. The
+  injector gained a `model` kind, and `inter_globalmv_rotzoom_64x64` sets
+  `is_global(LAST_FRAME)` plus `is_rot_zoom` on `inter_minimal_64x64` and codes a
+  model with a 512/65536 x scale and a 256/65536 shear, against the default
+  identity model a PRIMARY_REF_NONE frame inherits. The fixture pins the parse
+  on the parsed header - both coded coefficients, the second row the grammar
+  derives, the two translation components, and the byte the tile payload starts
+  on - and the reconstruction at [0, 0, 0] per plane against dav1d. Because a
+  non-translation model removes the subpel filter symbol a GLOBAL(Global)MV
+  block would otherwise read, the tiles after those blocks re-symbolise into a
+  different legal decode, and the committed reference planes are dav1d's output
+  on the patched stream, as with the translation rung.
+- A GLOBAL(Global)MV block whose reference carries such a model now predicts
+  through the model itself: `av1_warp_from_global_motion` builds the prediction
+  half of a frame-level model and `av1_inter_predict` routes the block to
+  `av1_warp_predict`, the same per-pixel path a LOCALWARP block takes. The frame
+  gate's refusal is now the representability test - `av1_warp_shear_params`
+  reports the shears and the clipped coefficients the grid cannot express, and
+  an integer-motion frame never takes the grid at all - and a compound block
+  that would need a warp for each of its two lists is refused one level up,
+  because this block stage blends its lists together.
+- - Wired the warped-motion **prediction** half, so a block that selects
   LOCALWARP now reconstructs instead of being refused:
   `av1_warp_predict` walks the block in 8x8 chunks, evaluates the model at each
   chunk's centre in luma coordinates, shifts it by the plane's subsampling and

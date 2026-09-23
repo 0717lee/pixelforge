@@ -1195,7 +1195,17 @@ fn av1_read_motion_mode(
       block.y_mode == av1_mode_global_global_mv
     ) {
     if av1_gm_type(info, block.ref_frame) > av1_gm_translation {
+      // A compound block needs one warp prediction per list and this block
+      // stage blends its two lists together, so the frame is refused rather
+      // than decoded with only half of its prediction warped.
+      if block.ref_frame1 > av1_intra_frame {
+        return false
+      }
       return true
+    }
+    if block.y_mode == av1_mode_global_global_mv &&
+      av1_gm_type(info, block.ref_frame1) > av1_gm_translation {
+      return false
     }
   }
   // A single-reference block names NONE as its second reference, so the

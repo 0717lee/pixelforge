@@ -583,6 +583,47 @@ fn av1_inter_predict(
       )
       continue
     }
+    // A GLOBAL(Global)MV block whose reference carries a non-identity
+    // frame-level model predicts through that model per pixel, exactly as a
+    // LOCALWARP block does (AV1 §7.11.3.8). A compound block needs this for
+    // each of its lists at once, so it is refused one level up instead.
+    if block.motion_mode != 2 &&
+      block.y_mode == av1_mode_global_mv &&
+      block.ref_frame1 <= av1_intra_frame &&
+      av1_gm_type(info, block.ref_frame) > av1_gm_translation &&
+      info.frame.force_integer_mv == 0 {
+      match av1_warp_from_global_motion(info.frame.gm_params[block.ref_frame]) {
+        Some(model) => {
+          let reference = match av1_inter_reference(info, block.ref_frame) {
+            Some(value) => value
+            None => return false
+          }
+          let prediction = av1_warp_predict(
+            reference,
+            model,
+            plane,
+            block.mi_col,
+            block.mi_row,
+            base_x,
+            base_y,
+            pred_w,
+            pred_h,
+          )
+          av1_motion_store(
+            target.pixels,
+            target.width,
+            prediction,
+            pred_w,
+            pred_h,
+            base_x - (info.tile_col_start >> sub_x) * 4,
+            base_y - (info.tile_row_start >> sub_y) * 4,
+            (1 << state.bit_depth) - 1,
+          )
+          continue
+        }
+        None => ()
+      }
+    }
     let mut r = 0
     let mut y = 0
     while y < residual_h / 4 * 4 {
@@ -1527,7 +1568,21 @@ pub fn av1_inter_frame_supported(
     return false
   }
   for index in 0..<header.gm_type.length() {
-    if header.gm_type[index] > av1_gm_translation {
+    let typ = header.gm_type[index]
+    if typ <= av1_gm_translation {
+      continue
+    }
+    // A translation model is a plain block motion vector. A rotate-zoom or
+    // affine model drives the block through the warp grid instead (see
+    // `av1_warp_predict`, which LOCALWARP also uses), which needs the model to
+    // be representable on that grid: `av1_warp_shear_params` reports the
+    // shears and the clipped coefficients that are not, and an integer-motion
+    // frame never takes the grid at all.
+    if header.force_integer_mv != 0 {
+      return false
+    }
+    let coefficients : Array[Int] = [0, 0, 0, 0]
+    if av1_warp_shear_params(header.gm_params[index], coefficients) {
       return false
     }
   }
