@@ -1,6 +1,10 @@
 # PixelForge 开发交接
 
-更新日期：2026-09-21（第十一次推进）。适用对象：首次接手本项目的开发者、维护者或代码代理。本文从项目目标、代码基线到验收步骤提供完整入口，不需要先阅读聊天记录或取得原作者的临时文件。除外部链接外，文件路径均相对仓库根目录。
+更新日期：2026-09-23（第六十一次推进）。适用对象：首次接手本项目的开发者、维护者或代码代理。本文从项目目标、代码基线到验收步骤提供完整入口，不需要先阅读聊天记录或取得原作者的临时文件。除外部链接外，文件路径均相对仓库根目录。
+
+**当前结论（2026-09-23，第六十一次推进）：AVIF/AV1 解码主线仍未完成，但阶段 B 已闭合、阶段 C 的 inter 工具门大部分已闭合，阶段 D 的三帧动画已闭合。** 具体地说：`inter_cdf_inherit_64x64` 已从 `[3992,842,928]` 变为 `[0,0,0]`（生产开关 `av1_cdf_load_enabled` 已开启，OBU 与 dav1d 真值未动，见第 10 节第四十三次推进）；compound（含 distance/difference 加权与 interintra）、skip mode（三帧序列）、OBMC/warped motion 的语法门、屏幕内容/调色板、时间运动矢量和平移型全局运动均已解除且逐样本一致（`inter_compound_64x64`/`inter_distcomp_64x64`/`inter_diffwtd_64x64`/`inter_interintra_64x64`/`inter_skipmode_64x64`/`inter_globalmv_64x64` 等，见第 10 节第五十九至六十一次推进）；三帧动画容器（BMFF + 状态解码 + 时间戳选帧）已由 `avif_grid_animation_test.mbt` 与 `av1_inter_reference_wbtest.mbt` 的两个三帧用例钉住。**仍未闭合的三项**：(1) LOCALWARP 与 ROTZOOM/AFFINE 全局运动，都需要 AV1 §7.11.3.5 的逐像素 warp 预测网格；(2) segmentation 的 `segment_id` 符号与 feature 应用（`segmentation_params` 语法已全量解析，但 libaom 不发分段流，翻 enable 位会让每块读 seg_id 从而导致熵错位，判定成本过高，见第五十九次推进）；(3) 上述门之外的收尾：README/证据/CI 一致性（阶段 E）。现在 native/js/wasm-gc 为 1255/1255 全绿。
+
+以下第 5 段是这一路的历史记录（阶段 B 的收敛过程），保留以便复现诊断方法：
 
 **当前结论：AVIF/AV1 解码主线尚未完成。第 4 节两项交付问题已解决（Web 产物重建、CLI 示例补 `--target native`）；参考帧熵上下文继承的快照/保存/装载机制已落地并被隔离测试验证。第十四次推进取得三项决定性证据（补充四十七）：(1) **生产配置（不继承）下我方对 `inter_cdf_inherit_64x64` 的 inter 帧输出与 dav1d 对未补丁孪生流 `inter_minimal_64x64` 的输出逐样本相同**，围栏值 `[3992,842,928]` 就是 dav1d 自身"开补丁 vs 不开补丁"的纯继承效应而非我方错误，阶段 B 剩余工作严格收敛为"让继承开启的输出等于 dav1d 开补丁的输出"；(2) 继承开启并放开越读守卫后，分歧定位到 **inter 帧第一个 luma 叶（32x32, tx_ctx=3, eob=41）扫描位置 k=31 的 `coeff_base`**（我方 level 2、黄金 level 1），chroma 块 (0,0) 已完全正确；(3) **所有被继承的系数 CDF 行经规范默认值 + 关键帧实际符号序列复算逐位精确**（`base[3][21]`/`base[3][22]`/`base_eob[3][1]`/`eob` 四行全部吻合），行值假设被彻底排除。第四至八次推进把分歧定位到第一块 32x32 luma 变换扫描位置 k=31 的 `coeff_base`（base ctx 22 行）；第九次推进取得 dav1d 源码、建成 MSAC 状态级取证工具、并用独立 Python 模型证明关键帧第一叶在给定状态下与规范逐位一致；第十、十一次推进取得 aomenc/dav1d 1.2.1/FFmpeg 三件套、可逐字节复现 fixture 并建成参数化 bisection 流程；**查明该 fixture 是“用默认 CDF 编码、再补丁开启继承”的流，且 `symbol_max_bits >= -14` 守卫是最小样本的唯一阻塞**（放开后 7 类输入全部 `[0,0,0]`），剩余分歧隔离到关键帧色度（仅周期 3 纹理触发），详见第 10 节。**
 
@@ -116,7 +120,7 @@ node verify-wasm.mjs
 | 检查 | 结果 |
 | --- | --- |
 | `moon check` | 通过，64 warnings / 0 errors；存在既有未使用表与辅助函数警告 |
-| JS / wasm-gc / native 全量测试 | 各 **1242/1242** 通过（2026-09-22 第四十三次推进后） |
+| JS / wasm-gc / native 全量测试 | 各 **1255/1255** 通过（2026-09-23 第六十一次推进后） |
 | Web 产物复现检查 | ~~失败~~ **已解决（2026-09-20 二次接手）**：重建后 `--check` 两个文件均 OK |
 | WASM 集成验证 | ~~失败~~ **已解决**：`node verify-wasm.mjs` 全部 PASS |
 | 默认目标 CLI help | 失败：默认 wasm-gc 不受当前 CLI 支持（native-only 定位，见 P2） |
@@ -131,13 +135,19 @@ node verify-wasm.mjs
 
 现有代码和参考样本已覆盖高位深帧内重建、方向预测、filter-intra、调色板、去块、CDEF、superres、Wiener/SGR、alpha/grid 以及部分动画路径。通用帧头、八槽参考帧、亚像素运动补偿和受限单参考 inter 也已有实现。完整差异与来源分别见 [CHANGELOG](CHANGELOG.md) 和 [fixture 目录](tests/fixtures)。不能用已有样本推断所有合法工具组合均已完成。
 
-当前八个 inter fixture 的预期定义在 [scripts/emit-av1-inter-test.py](scripts/emit-av1-inter-test.py) 的 `SPECS`，对应测试在 [av1_inter_reference_wbtest.mbt](av1_inter_reference_wbtest.mbt)：
+inter fixture 的预期定义分两处：生成器输出的八个在
+[scripts/emit-av1-inter-test.py](scripts/emit-av1-inter-test.py) 的 `SPECS`，其余由
+[scripts/generate-av1-inter-reference.py](scripts/generate-av1-inter-reference.py)
+生成并在 [av1_inter_reference_wbtest.mbt](av1_inter_reference_wbtest.mbt) 末尾手工维护
+（另有若干独立生成器脚本：lossless/obmc/screen/palette/warped/temporalmv）。
 
 | 状态 | 样本 |
 | --- | --- |
-| inter 帧原生样本精确 | `inter_minimal`、`inter_still`、`inter_shift`、`inter_edge`、`inter_lf_delta`、`inter_primary_ref`（完整文件名见生成器） |
-| 仍拒绝其 inter 工具组合 | `general_inter_64x64` |
-| inter 帧原生样本精确 | `inter_cdf_inherit_64x64`：Y/U/V 差异数 `[0,0,0]`（2026-09-22 第四十三次推进闭合：VERT/HORZ 系数扫描分支互换 + 越读守卫移除，见第 10 节第四十三次） |
+| inter 帧原生样本精确 | `inter_minimal_64x64`、`inter_still_64x64`、`inter_shift_64x64`、`inter_edge_64x16`、`inter_lf_delta_64x64`、`inter_primary_ref_64x64`、`inter_cdf_inherit_64x64`（`[0,0,0]`）、`inter_lossless_64x64`、`inter_obmc_64x64`、`inter_screen_content_64x64`、`inter_palette_64x64`、`inter_warped_64x64`、`inter_temporalmv_64x64` |
+| inter 工具门已闭合且逐样本精确 | `inter_compound_64x64`、`inter_distcomp_64x64`、`inter_diffwtd_64x64`、`inter_interintra_64x64`、`inter_globalmv_64x64`（平移型全局运动） |
+| 三帧序列 | `inter_skipmode_64x64`：三个时间单元逐一精确，第三帧靠 skip mode 同时引用前两帧 |
+| 所有开关全开的 general 码流 | `general_inter_64x64`：compound / overlapped / warped motion / temporal MV 全部实现，逐样本精确 |
+| 仍拒绝的组合 | 仓库内没有 fixture 选中 LOCALWARP、ROTZOOM/AFFINE 全局运动或启用的 segmentation feature；一旦选中，`av1_read_motion_mode` 或帧门会整帧拒绝 |
 
 2026-09-22 第四十三次推进后，八个 inter 样本全部达到像素精确（含 `inter_cdf_inherit_64x64`），`av1_cdf_load_enabled` 已启用并被该样本的 `[0,0,0]` 围栏钉住；全绿测试自此等价于阶段 B 的 inter 验收。根因与复现方法见第 10 节第四十三次推进（含插桩 dav1d 的构建与使用）。
 
@@ -4178,3 +4188,32 @@ MV 推导、滤波符号的读取偏移，以及门已放开。
 阶段 C 的门只剩 segmentation（需要 encoder 发分段的流，判定成本过高）与
 ROTZOOM/AFFINE 全局运动（需要 warp 网格）。阶段 D 的三帧动画容器已闭合。剩下
 阶段 E：README/证据/CI 收口。
+
+# 第六十二次推进补充（2026-09-23，阶段 E 的文档与工具一致性收口）
+
+本轮没有改解码逻辑，只把"文档/工具说的"和"代码做的"拉齐：
+
+1. **两份 README 的三处陈述过期**：`inter_cdf_inherit_64x64` 早已在第四十三次推进
+   闭合为 `[0,0,0]`，README 却仍把它写成"唯一未闭合样本"并保留 `[3992,842,928]`
+   围栏叙事；`av1_cdf_load_enabled` 也已开启；compound/skip mode/全局运动（平移型）
+   的门都已解除，而 README 还说"仍在逐项解除中"。三处都已改为现状（中英文一致）。
+2. **`general_inter_64x64` 的 SPECS 与提交的测试不一致**：`SPECS` 里
+   `inter_decodable` 还是 `false`（注释说"块级阶段拒绝"），而文件里的测试已经断言
+   它逐样本精确。已把 `SPECS` 改为 `true` 并补上动画用的两个键。
+   注意：这个 fixture 的 inter 帧现在真的能解——拦截它的是"选中 LOCALWARP 的块"，
+   而不是帧级开关。
+3. **`emit-av1-inter-test.py` 以前会截断测试文件**：它 `open(OUT, "w")` 整文件重写，
+   而 `inter_lossless_64x64` 之后的 20 多个 rung 是手工维护的（跑一次就全丢）。
+   现在加了 `HAND_MARKER`：只重写生成的前言，遇到该标记后的内容原样保留，找不到
+   标记就报错退出而不是覆盖未知布局。docstring 里也写清了前言与手工段的关系，
+   以及"重跑会把大数组重排，需要时再 `moon fmt` 并只保留本文件的改动"。
+4. HANDOFF 第 4 节的测试数从 1242/1242 更新为 1255/1255，第 5 节的 fixture 表按
+   现状重写（14 个生成 + 手工 rung 分开列）。
+
+## 状态与下一步
+
+阶段 E 剩余的是"证据清单"层面的整理：各能力的 encoder 版本、命令、预期/实际覆盖
+已由 fixture README、`manifest.json`（含 sha256 与命令说明）和 CHANGELOG 逐条记录，
+`--check` 可复现。仍然开着的是两个需要新能力的门：LOCALWARP 与 ROTZOOM/AFFINE
+全局运动（都要 warp 预测网格），以及 segmentation 的 `segment_id`/feature 应用
+（需要 encoder 发分段的流）。

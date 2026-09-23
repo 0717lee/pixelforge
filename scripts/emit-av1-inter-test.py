@@ -6,6 +6,14 @@ av1_inter_reference_wbtest.mbt.
 
 The template uses @TOKEN@ substitution rather than Python % formatting because
 the MoonBit assertions contain their own %@ / %d format specifiers.
+
+The emitter owns the prologue of `av1_inter_reference_wbtest.mbt` only: every
+rung from `inter_lossless_64x64` onward is hand-maintained in that file and is
+preserved verbatim (see HAND_MARKER). The committed prologue is formatted the
+way the repository's `moon fmt` leaves it, and the emitter writes its own
+layout, so a refresh reflows the big reference arrays; if that is wanted, run
+`moon fmt` afterwards and keep only this file's changes - the rest of the
+repository is not currently fmt-clean under the pinned compiler.
 """
 
 import os
@@ -26,6 +34,12 @@ def frame_plane_of(spec):
     width = int(spec["width"])
     height = int(spec["height"])
     return width * height + 2 * (width // 2) * (height // 2)
+
+# The first rung the committed test file carries below the generated prologue.
+# The emitter regenerates only the prologue and preserves everything from here
+# on, so the rungs added by later sessions survive a refresh.
+HAND_MARKER = "\n///|\nlet inter_lossless_64x64_obu"
+
 NAMES = (
     "general_inter_64x64",
     "inter_minimal_64x64",
@@ -60,9 +74,14 @@ SPECS = {
         "height": "64",
         "bad_counts": "0, 0, 0",
         # Compound-capable signalling, overlapped and warped motion and temporal
-        # motion vectors are all on, so the block stage refuses the frame whole.
-        "inter_decodable": "false",
-        "inter_note": "tools the block stage refuses: compound signalling, overlapped and warped motion, temporal motion vectors",
+        # motion vectors are all on, and every one of them is implemented now,
+        # so the frame decodes: a masked blend reads its wedge or difference
+        # weighting and the block stage blends it, and a LOCALWARP block is the
+        # one thing still refused by `av1_read_motion_mode`.
+        "inter_decodable": "true",
+        "inter_note": "every tool the encode signals is implemented: compound, overlapped and warped motion, temporal vectors",
+        "animation_changed": "true",
+        "animation_note": "The second sample is a different picture, so the presented pixels must differ.",
     },
     # --enable-order-hint=0 and --enable-warped-motion=0 turn each of those
     # frame-header fields into a derivation rather than a read, so the same
@@ -251,19 +270,23 @@ HEADER = (
     "/// General (non reduced-still) AV1 headers carrying real inter frames, checked\n"
     "/// field-by-field against the FFmpeg `trace_headers` transcripts in\n"
     "/// tests/fixtures/av1-inter, plus dav1d's native planes for both frames.\n"
-    "/// Six of the eight reconstruct their inter frame sample-exactly on all three\n"
+    "/// All eight reconstruct their inter frame sample-exactly on all three\n"
     "/// planes: a whole-frame skip with integer motion, a fractional translation\n"
     "/// with a switchable interpolation filter, a sawtooth whose right-hand strips\n"
     "/// reach back into the frame, a dense 4x16 tree, `inter_lf_delta_64x64`, whose\n"
     "/// hand-spliced loop-filter levels make every edge strength come from the\n"
-    "/// reference and the mode of the block beside it, and `inter_primary_ref_64x64`,\n"
-    "/// whose patched header inherits a frame context. `inter_cdf_inherit_64x64`\n"
-    "/// decodes but is deliberately *not* exact: it inherits distributions this\n"
-    "/// decoder does not snapshot yet, so its test pins the per-plane sample counts\n"
-    "/// it gets wrong as the target for that work. `general_inter_64x64` parses\n"
-    "/// completely and is then refused whole, because it needs tools the block stage\n"
-    "/// does not have yet (compound, warped and global motion, temporal motion\n"
-    "/// vectors); a partial reconstruction would be worse than no picture.\n"
+    "/// reference and the mode of the block beside it, `inter_primary_ref_64x64`,\n"
+    "/// whose patched header inherits a frame context, `inter_cdf_inherit_64x64`,\n"
+    "/// whose inherited entropy context is loaded from the named slot, and\n"
+    "/// `general_inter_64x64`, whose switches are all on.\n"
+    "///\n"
+    "/// The rungs past the generated prologue are hand-maintained below it, from\n"
+    "/// `inter_lossless_64x64` on: the emitter regenerates only this prologue and\n"
+    "/// preserves everything from that marker onward. They carry the\n"
+    "/// single-reference compound grammar with its blends, skip mode over three\n"
+    "/// temporal units, the inter tools that ride on a header or sequence-header\n"
+    "/// patch, and `inter_globalmv_64x64`, whose injected translation model is the\n"
+    "/// only way a libaom encode of this size carries global motion.\n"
 )
 
 HELPERS = r"""
@@ -792,8 +815,23 @@ def main():
         body = body.replace(token, value)
     assert "@" not in body, body
     parts.append(body)
+    out = "".join(parts)
+    assert HAND_MARKER not in out, "the generated prologue must not contain the hand sections"
+    everything = ""
+    if os.path.exists(OUT):
+        existing = open(OUT, encoding="utf-8").read()
+        cut = existing.find(HAND_MARKER)
+        if cut < 0:
+            raise SystemExit(
+                "%s carries no %r marker: refusing to overwrite an unknown layout"
+                % (OUT, HAND_MARKER)
+            )
+        everything = existing[cut:]
+    if everything:
+        out += everything
+        print("preserved %d bytes of hand-maintained rungs" % len(everything))
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("".join(parts))
+        fh.write(out)
     print("wrote", OUT, os.path.getsize(OUT), "bytes")
 
 
