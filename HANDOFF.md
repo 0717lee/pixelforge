@@ -4256,3 +4256,37 @@ ROTZOOM/AFFINE 全局运动（需要 warp 网格）。阶段 D 的三帧动画�
 （15 行中间缓冲 + clip），mx/my 由模型在 1/64-pel 上推导，越界时按仓库既有约定
 逐样本夹取（dav1d 用 `emu_edge` 复制边界，等价）；（4）触发流：用瓦片位补丁让某个
 块真的解出 `motion_mode = 2`（可用插桩 dav1d 的 `DEBUG_BLOCK_INFO` 找位）。
+
+# 第六十四次推进补充（2026-09-23，LOCALWARP 的预测半边接上，门从"拒绝"改为"按模型解"）
+
+## 一、本轮做了什么
+
+`av1_warp_model.mbt` 补齐预测半边并接进块级阶段：
+
+| 新增 | 作用 |
+| --- | --- |
+| `av1_warp_matching_masks` | dav1d `find_matching_ref`：沿块上/左边缘取"同一参考"的 4x4 位掩码，bit 32 标记 top-left / top-right 角 |
+| `av1_warp_derive` | `derive_warpmv`：按掩码取采样点、按 `4*iclip(max(bw4,bh4),4,28)` 门限剔除并紧凑化、拟合、转系数；不可表示时返回 None |
+| `av1_warp_affine_chunk` | `warp_affine_8x8`：15 行水平滤波进中间缓冲 + 8 行垂直滤波并 clip；水平步进用 `alpha`，垂直用 `delta`，每采样的相位按 1/64-pel 查表 |
+| `av1_warp_predict` | `mc_warp`：按 8x8 块走整个平面，模型在块的 luma 坐标中心求值后按色度下采样右移，`mx/my` 的推导与 dav1d 逐字一致 |
+
+接线：`Av1InterBlock` 增加 `warp` 字段（估计出的模型或空数组）；`av1_read_motion_mode`
+在 `mode == 2` 时推导并存入；`av1_inter_predict` 见到 `motion_mode == 2 && warp`
+时整块走 warp 路径（跳过常规 MC 的 4x4 循环与滤波符号）。另外
+`av1_needs_interp_filter` 对 LOCALWARP 块返回 false——它由 warp 网格自己滤波，
+两个滤波符号都不在语法里（AV1 §5.11.27）。
+
+门：帧门里 ROTZOOM/AFFINE 全局运动的拒绝理由改为"该模型能否被 warp 网格表示"
+（`av1_warp_shear_params` 的剪切判定），与 LOCALWARP 用同一套依据。
+
+## 二、当前状态与风险（接手必读）
+
+- native / js / wasm-gc 各 1260/1260 全绿。
+- **LOCALWARP 路径已实现但没有任何 fixture 选中它**，因此这条路径目前只有单元级
+  证据（最小二乘与剪切转换对拍 Python 端口），没有样本级（对 dav1d 逐像素）证据。
+  按仓库"合法未实现工具不得无声解成错图"的规则，这条必须尽快补触发流：做法是用瓦片
+  位补丁让某个块真的解出 `motion_mode = 2`，再用插桩 dav1d（`DEBUG_BLOCK_INFO`
+  会打印 `Post-motionmode`）确认位翻对了，最后逐样本比对。
+- 顺带可做且更有价值的一步：既然 warp 网格已经在，ROTZOOM/AFFINE **全局运动**也可以
+  闭合——注入器 `inject_global_motion` 现在只写 TRANSLATION，扩成能写 ROTZOOM/AFFINE
+  后就能得到一条 dav1d 已验证的流，把帧门里最后一个 inter 工具门关掉。

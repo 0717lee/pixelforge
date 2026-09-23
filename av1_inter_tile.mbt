@@ -550,6 +550,39 @@ fn av1_inter_predict(
     let cand_row = block.mi_row >> sub_y << sub_y
     let cand_col = block.mi_col >> sub_x << sub_x
     let target = state.planes[plane]
+    // A LOCALWARP block with a representable model skips the whole
+    // motion-compensation path: each 8x8 chunk of the plane is filtered
+    // through the model itself, so there is no single subpel phase to filter
+    // at and no filter symbol to read (AV1 §7.11.3.8).
+    if block.motion_mode == 2 && block.warp.length() == 1 {
+      let reference = match
+        av1_inter_reference(info, field.refs[(block.mi_row * field.cols + block.mi_col) * 2]) {
+        Some(value) => value
+        None => return false
+      }
+      let prediction = av1_warp_predict(
+        reference,
+        block.warp[0],
+        plane,
+        block.mi_col,
+        block.mi_row,
+        base_x,
+        base_y,
+        pred_w,
+        pred_h,
+      )
+      av1_motion_store(
+        target.pixels,
+        target.width,
+        prediction,
+        pred_w,
+        pred_h,
+        base_x - (info.tile_col_start >> sub_x) * 4,
+        base_y - (info.tile_row_start >> sub_y) * 4,
+        (1 << state.bit_depth) - 1,
+      )
+      continue
+    }
     let mut r = 0
     let mut y = 0
     while y < residual_h / 4 * 4 {
@@ -1484,10 +1517,12 @@ pub fn av1_inter_frame_supported(
   // Global motion is read for every reference of an inter frame, and a
   // translation model is a plain block motion vector: `av1_setup_global_mv`
   // derives it and a GLOBAL(Global)MV block takes it from the stack, so those
-  // frames decode. A rotate-zoom or affine model is different: AV1 §7.11.3.5
-  // drives the block from the warp model per pixel, which is the same warped
-  // prediction grid LOCALWARP needs and this decoder does not have, so those
-  // models still refuse the frame rather than decode it as a prefix.
+  // frames decode. A rotate-zoom or affine model drives the block through the
+  // per-pixel warp grid instead (see `av1_warp_predict`, which LOCALWARP also
+  // uses), so the model has to be representable by that grid: a pure shear is
+  // not, and neither is one whose coefficients the grid clips, which is what
+  // `av1_warp_shear_params` reports. `inter_globalmv_64x64` pins the
+  // translation form; the other forms need a stream that signals one.
   if !header.frame_is_intra && header.tile_payload.is_empty() {
     return false
   }

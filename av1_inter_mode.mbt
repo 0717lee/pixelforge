@@ -244,6 +244,10 @@ pub(all) struct Av1InterBlock {
   /// is decoded here; a block that selects a mode the predictor cannot act on
   /// makes the frame be refused rather than mis-reconstructed.
   mut motion_mode : Int
+  /// The warp model a LOCALWARP block estimated from its neighbours, or an
+  /// empty array when the model is identity (or could not be represented), in
+  /// which case the block predicts with its own motion vector.
+  mut warp : Array[Av1WarpModel]
 }
 
 ///|
@@ -292,6 +296,7 @@ fn av1_inter_block(
     interp_horizontal: av1_interp_eighttap,
     ref_mv_idx: 0,
     motion_mode: 0,
+    warp: [],
   }
 }
 
@@ -1229,10 +1234,29 @@ fn av1_read_motion_mode(
       return false
     }
     if mode == 2 {
-      // LOCALWARP needs the warp estimation and the warped prediction grid of
-      // §7.11.3.5/§7.11.3.8, neither of which is implemented, so the frame is
-      // refused rather than decoded as a prefix of itself.
-      return false
+      // LOCALWARP estimates a warp model from the motion vectors of the
+      // already-decoded neighbours and predicts through it (§7.11.3.5,
+      // §7.11.3.8). A model the prediction cannot represent - a shear, or a
+      // singular fit - comes back as none, which AV1 decodes as identity: the
+      // block then predicts with its own motion vector.
+      block.warp = match
+        av1_warp_derive(
+          info.field,
+          block.mi_row,
+          block.mi_col,
+          block.width4,
+          block.height4,
+          block.width4,
+          block.height4,
+          block.avail_l,
+          block.avail_u,
+          block.ref_frame,
+          block.mv_row,
+          block.mv_col,
+        ) {
+        Some(model) => [model]
+        None => []
+      }
     }
     block.motion_mode = mode
     return true
@@ -1301,6 +1325,11 @@ fn av1_needs_interp_filter(info : Av1InterInfo, block : Av1InterBlock) -> Bool {
   }
   if smaller < 8 || block.skip_mode {
     return true
+  }
+  // A LOCALWARP block is filtered by the warp grid itself, one filter per
+  // sample, so neither filter symbol is in its syntax at all (AV1 §5.11.27).
+  if block.motion_mode == 2 {
+    return false
   }
   if block.ref_frame1 > av1_intra_frame {
     // A compound block reads the symbol unless both of its lists are the

@@ -1,7 +1,25 @@
 # Changelog
 
 ## Unreleased
-- Ported the warped-motion **estimation** half of LOCALWARP into
+- Wired the warped-motion **prediction** half, so a block that selects
+  LOCALWARP now reconstructs instead of being refused:
+  `av1_warp_predict` walks the block in 8x8 chunks, evaluates the model at each
+  chunk's centre in luma coordinates, shifts it by the plane's subsampling and
+  runs the two-pass separable warp filter (fifteen rows of horizontal filtering
+  into a scratch buffer, then eight of vertical filtering with the clip),
+  reading samples with the same edge clamping the ordinary motion-compensation
+  kernel uses. `av1_read_motion_mode` derives the model while the header is
+  read - `find_matching_ref`'s masks over the top and left edges, the sample
+  collection and the 256-unit threshold, then the fit - and stores it on the
+  block; a model the grid cannot represent (a shear or a clipped coefficient)
+  comes back as none, which AV1 decodes as identity, so the block predicts with
+  its own motion vector exactly as libdav1d does. A LOCALWARP block also reads
+  neither subpel filter symbol, because it is filtered by the grid itself.
+  The frame gate's rotate-zoom/affine refusal is now expressed in terms of the
+  same representability test. No fixture selects LOCALWARP yet, so this path is
+  implemented and unit-pinned but not sample-verified against dav1d; the
+  triggering stream is the next slice.
+- - Ported the warped-motion **estimation** half of LOCALWARP into
   `av1_warp_model.mbt`: `find_matching_ref`-style sample collection is not here
   yet, but the pieces it feeds are - `dav1d_find_affine_int`'s weighted
   least-squares solve of the two affine rows with its `div_lut` reciprocal (the
