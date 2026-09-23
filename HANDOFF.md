@@ -4782,3 +4782,43 @@ ctx/symbol/bit —— **一条都没有**。即：本流下半帧的块全部
 就是 `av1_motion_compensate` 在该参考/MV 下的问题（与 warp 无关，是普通 MC）；
 如果输入不同（例如 ref 槽位指向了被 warp 块污染的参考图），则要看参考图的
 写入路径（warp 预测是否只写当前帧而不污染参考槽）。
+
+# 第七十八次推进补充（2026-09-23，参考图是对的；残差=下半帧 warp 块的**估计**）
+
+## 一、本轮排除的两件事
+
+1. **参考槽内容是对的**：对 slot 1/3/4/7 dump 存储参考的下半帧 luma，与
+   fixture 的 frame0（先 `av1_inter_expand` 展开！）逐样本比——**全 0**。
+   注意：上一轮若直接用 RLE 数组按下标取，会得到假的 2003（RLE 是 (值,次数) 对），
+   别再犯。
+2. **预测输入是对的**：按叶子打印 (mi, 尺寸, y_mode, ref, mv, mm, skip, filter)，
+   与 dav1d 的 `Post-intermode[…,mv=y:…,x:…]` / `Post-ref[…]` 逐块一致。
+
+## 二、于是残差定位到：下半帧 LOCALWARP 块的**模型估计**
+
+上半帧的 LOCALWARP 块（mi(0,12)）像素全对 ⇒ "掩码 → 采样 → 最小二乘 → warp
+网格"这条链是通的。下半帧的三个 LOCALWARP 块坏，其中 (14,10) 有直接证据：
+
+| | 我方 | dav1d |
+| --- | --- | --- |
+| masks | `0x1/0x0` | `0x1/0x0` ✓ 相同 |
+| 模型 | alpha=-7104, beta=3392, gamma=-4032, delta=1984 | 全 0（identity） |
+| 块自身 mv | (4,8) | (4,8) ✓ |
+
+掩码相同、块自身 mv 相同，但拟合结果不同 ⇒ **采样点的取值**不同：要么邻居块的
+MV/尺寸取错（`av1_warp_matching_masks` 命中的 unit 与 dav1d 的 `r[-1][bx+off]`
+不是同一个），要么阈值/紧凑化把不同的采样集留了下来。
+
+## 三、下一轮入口（很窄）
+
+对 mi(14,10) 这一个块，打印 `av1_warp_derive` 的完整输入输出：
+```
+masks, np, 每个采样点的 (row, col, bw, bh, mv_y, mv_x, in_x, in_y, out_x, out_y), mvd, kept, matrix, abgd
+```
+与 dav1d 的 `[ 10e65 3ed ffbd / 0 0 ffbd ] alpha=…` 对照——dav1d 对 identity
+模型打印的矩阵是单位阵（第一行 0x10000, 0x0000），说明它**没有拿到有效采样**；
+我方拿到了一个有效采样并拟出了模型。重点核对：dav1d 的 `r[-1][bx]` 指的是
+**块正上方那一列的 4x4 unit**，而我在 `av1_warp_matching_masks` 里对
+`top_mask == 1` 的单点情形用了 `off = mi_col & (aw4 - 1)` 取邻居——若该邻居
+比我方块宽，off 的算法会把采样点放到块外，dav1d 此时走的是 `else` 分支
+（逐位循环）而不是单点分支。逐行对一遍 `derive_warpmv` 的两个分支条件即可。
