@@ -478,3 +478,38 @@ decoded by `avif_decode_animation` and selected by timestamp through
 `avif_decode_animation_frame`. Frame 0 is pinned against a standalone
 `av1_decode` of the key unit - no container, no reference state - and all three
 against the timing-table entrypoint fed the same units.
+
+## The global-motion rung
+
+`inter_globalmv_64x64` is the only fixture whose frame header carries a
+non-identity warp model, and it is built rather than encoded: libaom writes
+`is_global = 0` for every reference of every group it can produce at this size,
+because the neighbour-based motion predictor makes a uniform translation cost
+less per block than the model's own ~30 bits. `inject_global_motion` in
+`scripts/generate-av1-inter-reference.py` takes the committed
+`inter_minimal_64x64`, sets `is_global(LAST_FRAME)`, writes a TRANSLATION model
+as the two subexp deltas 3 and -5 - a 6/8-pel row displacement and a -10/8-pel
+column one - against the default identity model a PRIMARY_REF_NONE frame
+inherits, and shifts the rest of the header by the inserted width. FFmpeg's
+`trace_headers` transcript is the syntax oracle for the result: it reports
+`is_global[1] = 1`, `is_rot_zoom[1] = 0`, `is_translation[1] = 1` and the two
+subexp symbols, and everything after the model block parses exactly as the base
+does.
+
+The block stage needed no work for this: `av1_setup_global_mv` already derives
+a translation model into a plain block motion vector that a GLOBAL(Global)MV
+block takes from its stack, so the only gate change is in
+`av1_inter_frame_supported`, which now refuses a rotate-zoom or affine model
+instead of every non-identity one - those need the per-pixel warp grid of
+AV1 7.11.3.5, which is the same prediction LOCALWARP needs and this decoder
+does not have.
+
+The insertion is measurable because the tile payload is byte-aligned behind the
+uncompressed header: `base_header_bytes` is where the base's tile data starts,
+and only the bytes after the new header width are copied. A model written at
+the wrong width desynchronises the header, and the reconstruction counts on
+this frame fall away from [0, 0, 0]. One consequence is worth stating plainly:
+because a translation model makes a GLOBAL(Global)MV block read a subpel filter
+symbol the identity model skips, the symbols after those blocks re-symbolise
+into a different legal decode than the base's, so the committed reference
+planes are dav1d's output on the patched stream - not on `inter_minimal_64x64`.

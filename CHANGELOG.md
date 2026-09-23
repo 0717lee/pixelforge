@@ -1,7 +1,29 @@
 # Changelog
 
 ## Unreleased
-- Closed the stage-D animation integration seam with two three-frame tests. The
+- Closed the global-motion gate for translation models, and reached one at all.
+  libaom writes `is_global` as zero for every reference of these two-frame
+  groups whatever the encoder flags say - the neighbour-based motion predictor
+  makes a uniform translation cheaper per block than the model's own ~30 bits -
+  so `inject_global_motion` builds the stream instead of encoding it: it sets
+  `is_global(LAST_FRAME)` on `inter_minimal_64x64`, codes a TRANSLATION model as
+  two `decode_signed_subexp_with_ref` deltas (3 and -5, a 6/8-pel row and a
+  -10/8-pel column displacement) against the inherited default model, and
+  shifts the rest of the header by the inserted width. The tile payload is
+  byte-aligned behind the header and is copied through untouched, which is what
+  makes the insertion measurable: a wrong width desynchronises the header and
+  the frame stops matching. `inter_globalmv_64x64` is then pinned against
+  dav1d at [0, 0, 0] per plane, with the model itself asserted on the parsed
+  header (`gm_type`, both shifted deltas, the byte the tile starts on). The
+  frame gate in `av1_inter_frame_supported` now refuses only a rotate-zoom or
+  affine model, which needs the warped prediction grid a LOCALWARP block needs
+  too; `av1_setup_global_mv` already derives every model at the block centre.
+  One consequence is worth recording: a translation model makes a
+  GLOBAL(Global)MV block read a subpel filter symbol that the identity model
+  skips, so the symbols after those blocks re-symbolise into a different legal
+  decode - the reference planes are committed for that decode, not for the
+  base's.
+- - Closed the stage-D animation integration seam with two three-frame tests. The
   animated-AVIF seam (`avif_decode_animation_samples`) is now driven over the
   three temporal units of `inter_skipmode_64x64`, whose third sample names both
   earlier frames as references through skip mode: one stateful decoder walks

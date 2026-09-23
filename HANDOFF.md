@@ -4112,3 +4112,69 @@ ref 帧为 PRIMARY_REF_NONE 时按规范取 1/0/1）、8 段 × 8 层的 feature
 阶段 D 的"三帧以上参考状态变化"由本轮两个测试覆盖。剩余门仍是
 `enable_segmentation` 与全局运动（都要 encoder 自己发这样的流），以及阶段 E 的
 README/CI 与证据收口。
+
+# 第六十一次推进补充（2026-09-23，全局运动的 TRANSLATION 门闭合）
+
+## 一、触发器：libaom 在这个尺寸发不出全局运动，所以是"注入"而不是"编码"
+
+把 encoder 侧能想到的都试过：`--enable-global-motion=1`（本来就是默认开）、
+cpu-used 0/1/2、lag-in-frames 0/25、cq 32/63、`--good`、2/4 帧、平移 8~30 像素、
+缩放源、棋盘纹理源、64/128/256 帧尺寸、ffmpeg 的 libaom-av1 —— **每一条流 7 个
+`is_global` 位都读出来是 0**。原因不是 flags：邻居运动预测让一个整体平移的
+每块成本低于模型自身的 ~30 位，于是 RD 永远不选全局运动。`aomenc --help` 里的
+`--cpu-used=-4`、`--best` 直接是非法参数。
+
+所以用仓库既有的"补丁流"路线：`inject_global_motion` 取已提交的
+`inter_minimal_64x64`，把 `is_global(LAST_FRAME)` 置 1，写 TRANSLATION 模型的
+两个 subexp delta（3 与 -5，即 6/8 像素行位移与 -10/8 像素列位移），然后把
+头部其余部分整体后移插入位宽。三个坑，都是下一轮可以直接复用的结论：
+
+- **subexp 编码器必须自己写**：`_write_signed_subexp_with_ref(delta, mx, ref)`
+  = `recenter(r, delta+mx)` → `subexp_bits(v, 2*mx+1)`，其中
+  `recenter(r, x) = x if x > 2r else (2*(x-r) if x >= r else 2*(r-x)-1)`，
+  `ns(u, S)` 用 `w = S.bit_length()`、`m = (1<<w) - S`：`u < m` 写 w-1 位，
+  否则写 `(u+m)>>1` 再补一位。dav1d 的 `getbits.c` 与 spec 等价（`n` 当"最大值"
+  读，边界 `<=` 与 `<` 差一在整数域上重合），`av1_msac_inverse_recenter` 与
+  dav1d 的 `inv_recenter` 逐字一致。
+- **tile payload 要从 base 的 `base_header_bytes` 开始拷贝**，不是新头部宽度：
+  第一次写反了（`data[payload_at + len(out)//8:]`），结果丢了两字节瓦片数据、
+  补了两字节对齐零，帧还能解但像素是错的。
+- **header_bytes 断言写 16 是错的，实际 15**：`header_bytes` 是"头部语法结束
+  位置向上取整"，本流头部语法在 119 位结束 → 120 位 = 15 字节（对齐零位不算
+  语法）。base 是 14 字节（112 位，末个 is_global 在 108 位）。
+
+## 二、代码侧只动了一行门（外加注释）
+
+`av1_inter_frame_supported` 的 gm 分支从 `!= av1_gm_identity → 拒绝` 改成
+`> av1_gm_translation → 拒绝`：TRANSLATION 需要的东西
+（`av1_setup_global_mv` 推导出的块级 MV）本来就有，ROTZOOM/AFFINE 需要的是
+AV1 §7.11.3.5 的逐像素 warp 网格，与 LOCALWARP 同一套，仍然拒绝。
+`av1_read_motion_mode` 里 gm > TRANSLATION 的提前返回本来就是 dav1d 的行为
+（那种块不读 motion_mode 符号），不用改。
+
+## 三、一个必须写进记录的副作用
+
+TRANSLATION 模型让一个 GLOBAL(Global)MV 块读一个 identity 模型下会跳过的
+subpel 滤波符号（dav1d:
+`has_subpel_filter = imin(bw4,bh4)==1 || gmv[ref].type == TRANSLATION`），
+于是这些块之后的符号重新象征化，解出的是**另一幅合法画面**。所以新 committed
+的 reference yuv 是 dav1d 对补丁流的输出，不是 base 的。测试围栏
+`[0, 0, 0]` 同时钉住：gm 语法位宽、两个 subexp delta 的解码结果
+（`gm_params[1][0] == 3<<14`、`gm_params[1][1] == -5<<14`）、GLOBALMV 块的
+MV 推导、滤波符号的读取偏移，以及门已放开。
+
+## 四、状态
+
+- native / js / wasm-gc：**1255/1255 全绿**（本轮 +2 个测试）。
+- `python scripts/generate-av1-inter-reference.py --check`：14 样本 verified
+  （跑完记得 `git checkout` 掉
+  `inter_cdf_inherit_64x64.trace.txt` / `inter_diffwtd_64x64.trace.txt`，
+  里面有 FFmpeg 的堆地址，每次都会变）。
+- manifest.json 是手维护的（json.dump 会把补丁流的说明性 command 冲掉），
+  新条目按行插入，注意它是 CRLF 且 inter_diffwtd 那一段是 LF。
+
+## 五、下一步
+
+阶段 C 的门只剩 segmentation（需要 encoder 发分段的流，判定成本过高）与
+ROTZOOM/AFFINE 全局运动（需要 warp 网格）。阶段 D 的三帧动画容器已闭合。剩下
+阶段 E：README/证据/CI 收口。

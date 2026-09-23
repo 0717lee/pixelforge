@@ -38,6 +38,12 @@
       "reference_sha256": "fba86baa603f61451681d624b08da3033761f008ca3c414a4e3e393ef77b3f40"
     },
     {
+      "command": "global-motion injection into inter_minimal_64x64 (see inject_global_motion): is_global(LAST_FRAME) plus a TRANSLATION model coded as two subexp deltas, with the rest of the header shifted by the inserted width.",
+      "name": "inter_globalmv_64x64",
+      "obu_sha256": "575619af3abac4d47d00271c8edc6b6e79cf5095870532bbc2be5eb1af88168b",
+      "reference_sha256": "6e8ab3356eb1e9d9ac1f704e057814163a020c7d309bedf0f9245e0613b605a1"
+    },
+    {
       "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=64 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=0 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 -o C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_interintra_64x64.check.obu C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_interintra_64x64.input.y4m",
       "name": "inter_interintra_64x64",
       "obu_sha256": "0b02c0e48b35bf8fd1944f1dfb29ca6eb0e9132e77812cd7944256ecfcfee967",

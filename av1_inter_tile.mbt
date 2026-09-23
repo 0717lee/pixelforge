@@ -1480,11 +1480,19 @@ pub fn av1_inter_frame_supported(
   // `inter_diffwtd_64x64` pins the difference weighting sample-exact against
   // dav1d; the wedge variant's mask table is pinned against dav1d's generated
   // `WedgeMasks` by `av1_wedge_mask_wbtest.mbt`.
+  //
+  // Global motion is read for every reference of an inter frame, and a
+  // translation model is a plain block motion vector: `av1_setup_global_mv`
+  // derives it and a GLOBAL(Global)MV block takes it from the stack, so those
+  // frames decode. A rotate-zoom or affine model is different: AV1 §7.11.3.5
+  // drives the block from the warp model per pixel, which is the same warped
+  // prediction grid LOCALWARP needs and this decoder does not have, so those
+  // models still refuse the frame rather than decode it as a prefix.
   if !header.frame_is_intra && header.tile_payload.is_empty() {
     return false
   }
   for index in 0..<header.gm_type.length() {
-    if header.gm_type[index] != av1_gm_identity {
+    if header.gm_type[index] > av1_gm_translation {
       return false
     }
   }

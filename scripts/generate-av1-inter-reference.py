@@ -708,6 +708,42 @@ FIXTURES = [
         "decode_frames": 1,
     },
     {
+        # Global motion: the one rung no libaom flag can produce for these
+        # groups. `inject_global_motion` sets is_global for LAST_FRAME on
+        # inter_minimal_64x64 and writes a translation model against the default
+        # identity, which shifts the rest of the header by the inserted width.
+        # No block asks for GLOBAL(Global)MV in the base, so the picture is
+        # unchanged - which is what makes the inserted width measurable: a
+        # wrong width desynchronises the header and moves the pixels.
+        "name": "inter_globalmv_64x64",
+        "gm_inject": {
+            "base": "inter_minimal_64x64",
+            "frame": 1,
+            "gm_offset": 102,
+            "base_header_bytes": 14,
+            "allow_high_precision_mv": False,
+            "translation": (3, -5),
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 0,
+                # The transcript's own gm_params values are the raw subexp
+                # symbols, which is the encodable form of the two deltas - the
+                # frame gate and the model both come from them.
+                "gm_params[1][0]": 6,
+                "gm_params[1][1]": 9,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    {
         "name": "inter_interintra_64x64",
         "patched_encode": {
             "append_frame_copy": False,
@@ -966,6 +1002,110 @@ def frame_obus(data: bytes) -> list[tuple[int, int, int]]:
     return found
 
 
+def _bits_of(value : int, count : int) -> list[int]:
+    return [(value >> (count - 1 - i)) & 1 for i in range(count)]
+
+
+def _ns_bits(value : int, count : int) -> list[int]:
+    """The bits `decode_unsigned_max(count)` reads for `value` in [0, count)."""
+    if count <= 1:
+        return []
+    width = count.bit_length()
+    m = (1 << width) - count
+    if value < m:
+        return _bits_of(value, width - 1)
+    shifted = value + m
+    return _bits_of(shifted >> 1, width - 1) + _bits_of(shifted & 1, 1)
+
+
+def _subexp_bits(value : int, num_syms : int) -> list[int]:
+    """The bits `decode_subexp(num_syms)` reads to return `value`."""
+    out : list[int] = []
+    i = 0
+    mk = 0
+    while True:
+        b = 3 if i == 0 else 3 + i - 1
+        a = 1 << b
+        if num_syms <= mk + 3 * a:
+            return out + _ns_bits(value - mk, num_syms - mk)
+        if value < mk + a:
+            return out + [0] + _bits_of(value - mk, b)
+        out.append(1)
+        i += 1
+        mk += a
+
+
+def _recenter(r : int, x : int) -> int:
+    """The `v` that `inverse_recenter(r, v)` maps to `x`."""
+    if x > 2 * r:
+        return x
+    if x >= r:
+        return 2 * (x - r)
+    return 2 * (r - x) - 1
+
+
+def _write_signed_subexp_with_ref(delta : int, mx : int, ref : int) -> list[int]:
+    """Bits for `decode_signed_subexp_with_ref(-mx, mx + 1, ref) == delta`."""
+    num_syms = 2 * mx + 1
+    r = ref + mx
+    x = delta + mx
+    if (r << 1) <= num_syms:
+        v = _recenter(r, x)
+    else:
+        v = _recenter(num_syms - 1 - r, num_syms - 1 - x)
+    return _subexp_bits(v, num_syms)
+
+
+def inject_global_motion(spec: dict) -> bytes:
+    """Signal a translation warp model for one reference of a frame header.
+
+    libaom will not emit global motion for these tiny groups whatever the
+    encoder flags say: the neighbour-based motion predictor makes a uniform
+    translation cost less per block than the model's own ~30 bits, so every
+    `is_global` comes back zero. The rewrite takes the committed base stream,
+    sets `is_global` for LAST_FRAME, writes a TRANSLATION model against the
+    inherited default, and shifts the rest of the header by the inserted width.
+    Nothing else moves: the tile payload is byte-aligned behind the
+    uncompressed header, so it is copied through untouched and the picture it
+    decodes to is identical to the base's. That the inserted width is exactly
+    what the grammar reads is then provable in both directions - the frame
+    decodes, and dav1d's planes do not move.
+    """
+    base = os.path.join(FIXTURE_DIR, spec["base"] + ".obu")
+    data = open(base, "rb").read()
+    frames = frame_obus(data)
+    start, payload_at, size = frames[spec["frame"]]
+    bits = _split_bits(data[payload_at : payload_at + size])
+    at = spec["gm_offset"]
+    header_bits = spec["base_header_bytes"] * 8
+    assert bits[at] == 0, "%s already models reference 1" % spec["base"]
+    assert bits[at + 1 : at + 8] == [0] * 7, "%s models another reference" % spec["base"]
+    # A translation model codes only its two components, and both are coded
+    # against the default identity model because the base names PRIMARY_REF_NONE.
+    hp = 0 if spec["allow_high_precision_mv"] else 1
+    abs_bits = 9 - hp
+    mx = 1 << abs_bits
+    row, col = spec["translation"]
+    inserted : list[int] = [1, 0, 1]
+    inserted += _write_signed_subexp_with_ref(row, mx, 0)
+    inserted += _write_signed_subexp_with_ref(col, mx, 0)
+    out = bits[:at] + inserted + bits[at + 1 : header_bits]
+    while len(out) % 8:
+        out.append(0)
+    # The tile payload is byte-aligned behind the header in the *base*, so it
+    # starts at `base_header_bytes`; the new header is wider, and only the
+    # bytes after the new one are untouched header padding.
+    payload = (
+        _pack_bits(out)
+        + data[payload_at + spec["base_header_bytes"] : payload_at + size]
+    )
+    body = bytearray()
+    body.append((6 << 3) | (1 << 1))
+    body += _leb128(len(payload))
+    body += payload
+    return data[:start] + bytes(body) + data[payload_at + size :]
+
+
 def splice_loop_filter_deltas(spec: dict) -> bytes:
     """Rewrite one verified frame header's loop filter configuration.
 
@@ -1203,6 +1343,10 @@ def run(fixture: dict, check: bool) -> dict:
         command = "hand-splice of %s (see splice_loop_filter_deltas)" % fixture["splice"]["base"]
         with open(scratch, "wb") as fh:
             fh.write(splice_loop_filter_deltas(fixture["splice"]))
+    elif "gm_inject" in fixture:
+        command = "global-motion injection into %s (see inject_global_motion)" % fixture["gm_inject"]["base"]
+        with open(scratch, "wb") as fh:
+            fh.write(inject_global_motion(fixture["gm_inject"]))
     elif "patch" in fixture:
         command = "header field patch of %s (see patch_header_fields)" % fixture["patch"]["base"]
         with open(scratch, "wb") as fh:
@@ -1295,6 +1439,14 @@ def run(fixture: dict, check: bool) -> dict:
         os.remove(path)
     if len(data) != plane * nframes:
         raise SystemExit("%s: dav1d gave %d bytes, expected %d" % (name, len(data), plane * nframes))
+    if "gm_inject" in fixture:
+        # The injected model is the only header change, but the picture does
+        # move: the base reads no subpel-filter symbol for a GLOBAL(Global)MV
+        # block, and a translation model makes that block read one, so the tile
+        # symbols after it re-symbolise into a different legal decode. dav1d's
+        # planes on the patched stream are the truth for that decode, which is
+        # what the MoonBit test pins sample-exactly.
+        pass
     if check:
         if fresh_obu != committed_obu:
             raise SystemExit(
