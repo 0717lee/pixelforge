@@ -4217,3 +4217,42 @@ ROTZOOM/AFFINE 全局运动（需要 warp 网格）。阶段 D 的三帧动画�
 `--check` 可复现。仍然开着的是两个需要新能力的门：LOCALWARP 与 ROTZOOM/AFFINE
 全局运动（都要 warp 预测网格），以及 segmentation 的 `segment_id`/feature 应用
 （需要 encoder 发分段的流）。
+
+# 第六十三次推进补充（2026-09-23，LOCALWARP 的估计半边：least-squares 拟合落地）
+
+## 一、本轮做了什么
+
+新增 `av1_warp_model.mbt` + `av1_warp_model_wbtest.mbt`，把 LOCALWARP 需要的
+**估计**半边按 libdav1d `warpmv.c` 逐行移植并钉住：
+
+| 函数 | 作用 |
+| --- | --- |
+| `av1_warp_find_affine_int` | 由采样点对解出两条 affine 行的加权最小二乘（含 `div_lut` 倒数法，无除法） |
+| `av1_warp_affine_mv2d` | 把模型平移钉到"块中心恰好重现该块自己的运动矢量" |
+| `av1_warp_shear_params` | 拟合矩阵 → 预测用的四个系数 `alpha/beta/gamma/delta`，并报告"纯剪切"（不可表示） |
+| `av1_warp_div_lut` / `av1_warp_filters` | 257 项倒数表；193×8 的 1/64-pel warp 滤波表（预测半边下一轮用） |
+
+单元测试不是手算期望，而是用一个 Python 端口（同样移植自 `warpmv.c`，dv1d
+表格直接抓取）生成 12 组随机采样集合，两侧对拍；另加旋转、越界剪切、采样门限
+三个手构用例。native / js / wasm-gc 各 1260/1260。
+
+## 二、两个坑（下一轮直接避开）
+
+- **MoonBit 的 `Int` 是 32 位**：正规方程的行列式在 8 个采样点时约 3.9e11，
+  `sxx * syy` 直接溢出，解出来全被夹到 `0xE001`。整个求解（det、倒数、四个
+  `get_mult_shift_*`）以及 `get_shear_params` 里 `mat[4]*0x10000*y`、
+  `mat[3]*mat[4]*y` 都必须显式 `to_int64()` / `Int64` 字面量。
+- **`iclip(v2, 0xe001, 0x11fff)` 的两个界都是正数**（57345 / 73727），不是有
+  符号补码范围；`av1_warp_mult_shift_diag` 按原样夹。
+- **正规方程带常量偏置 `[8,4; 4,8]`**，所以矩阵恒正定，`det == 0` 的奇异分支
+  不可达——原本为它写的用例删掉了，换成覆盖"位移差 ≥ 256 的采样点在拟合前被
+  丢弃"的门限用例（后者是可观察行为）。
+
+## 三、下一轮：预测半边
+
+`mc_warp` 需要：（1）`find_matching_ref` 的 mask 采集（dav1d `decode.c`，依赖
+`intra_edge_flags` 的 `EDGE_I444_TOP_HAS_RIGHT` 位，仓库现在没记这个位，需要决定
+怎么取）；（2）`derive_warpmv` 的采样点构造与门限；（3）逐 8x8 的两遍可分离滤波
+（15 行中间缓冲 + clip），mx/my 由模型在 1/64-pel 上推导，越界时按仓库既有约定
+逐样本夹取（dav1d 用 `emu_edge` 复制边界，等价）；（4）触发流：用瓦片位补丁让某个
+块真的解出 `motion_mode = 2`（可用插桩 dav1d 的 `DEBUG_BLOCK_INFO` 找位）。

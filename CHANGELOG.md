@@ -1,7 +1,23 @@
 # Changelog
 
 ## Unreleased
-- Closed the global-motion gate for translation models, and reached one at all.
+- Ported the warped-motion **estimation** half of LOCALWARP into
+  `av1_warp_model.mbt`: `find_matching_ref`-style sample collection is not here
+  yet, but the pieces it feeds are - `dav1d_find_affine_int`'s weighted
+  least-squares solve of the two affine rows with its `div_lut` reciprocal (the
+  determinant of the normal equations exceeds 32 bits for an eight-sample fit,
+  so the solve runs in Int64 exactly as libdav1d's does), `dav1d_set_affine_mv2d`'s
+  translation pin, and `dav1d_get_shear_params`' conversion of a fitted matrix
+  into the four prediction coefficients together with its shear rejection. The
+  1/64-pel warp filter table (193 rows of eight taps) is transcribed too.
+  The fit and the conversion are pinned against a Python port of libdav1d's
+  `warpmv.c` over twelve random sample sets plus hand-built rotation, sheared
+  and sample-threshold cases, on all three targets. One finding worth
+  recording: the normal equations carry a constant bias of `[8, 4; 4, 8]`, so
+  their matrix is positive definite and the fit's singular branch is
+  unreachable rather than merely rare - the test that was meant to cover it is
+  replaced by one that covers the 256-unit sample threshold instead.
+- - Closed the global-motion gate for translation models, and reached one at all.
   libaom writes `is_global` as zero for every reference of these two-frame
   groups whatever the encoder flags say - the neighbour-based motion predictor
   makes a uniform translation cheaper per block than the model's own ~30 bits -
