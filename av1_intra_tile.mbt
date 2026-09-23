@@ -87,6 +87,24 @@ priv struct Av1IntraState {
   /// Variable-transform split rows, used only when an inter block codes a
   /// rectangular transform tree.
   vartx : Av1VarTxCdfState
+  /// The per-block `segment_id` symbol's rows, one context per above/left
+  /// agreement level, adapted tile-wide like every other table.
+  seg_id : Array[Array[Int]]
+  /// The segment id each 4x4 unit of this tile took, in decode order. It is
+  /// what `get_cur_frame_segid` predicts the next block from, so it is written
+  /// over the block's full 4x4 footprint exactly as `skips` is.
+  seg_ids : Array[Int]
+  /// The parsed `segmentation_params` of the frame being decoded; empty when
+  /// the frame disabled segmentation.
+  segmentation : Av1SegmentationParams
+  /// This block's quantizer index: the frame's base index plus the segment's
+  /// ALT_Q feature (AV1 §6.10.9). The residual's CDF rows stay at the frame's
+  /// own q_category, as libdav1d's per-tile initialisation does; this index is
+  /// the one the dequantisation reads.
+  mut seg_q_idx : Int
+  /// This block's lossless flag: the frame is lossless and this segment's
+  /// quantizer index is still zero.
+  mut seg_lossless : Bool
   /// Inter-frame block state, or None for an intra frame whose leaf reads the
   /// intra syntax directly.
   inter : Av1InterInfo?
@@ -94,6 +112,19 @@ priv struct Av1IntraState {
   /// transform reads its origin to find the luma type it inherits.
   mut current : Av1InterBlock?
   restoration_units : Array[Av1RestorationUnitRecord]
+}
+
+///|
+///|
+/// DefaultSegmentIdCdf: three rows, one per `get_cur_frame_segid` context, over
+/// `MAX_SEGMENTS - 1` symbols. libdav1d's `default_cdf.m.seg_id` in transcribed
+/// form.
+fn av1_seg_id_cdfs() -> Array[Array[Int]] {
+  [
+    [5622, 7893, 16093, 18233, 27809, 28373, 32533, 32768, 0],
+    [14274, 18230, 22557, 24935, 29980, 30851, 32344, 32768, 0],
+    [27527, 28487, 28723, 28890, 32397, 32647, 32679, 32768, 0],
+  ]
 }
 
 ///|
@@ -121,6 +152,9 @@ fn av1_intra_state(
   sub_x? : Int = 1,
   sub_y? : Int = 1,
   inter? : Av1InterInfo? = None,
+  /// The frame's parsed `segmentation_params` (AV1 §6.10.9); empty when the
+  /// frame disabled segmentation.
+  segmentation? : Av1SegmentationParams? = None,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -186,6 +220,14 @@ fn av1_intra_state(
     tx_depth: av1_tx_depth_state(),
     tx_neighbors: av1_tx_traversal_state(width, height),
     vartx: av1_vartx_cdf_state(),
+    seg_id: av1_seg_id_cdfs(),
+    seg_ids: Array::make(width / 4 * (height / 4), 0),
+    segmentation: match segmentation {
+      Some(params) => params
+      None => av1_segmentation_empty()
+    },
+    seg_q_idx: base_q_idx,
+    seg_lossless: base_q_idx == 0 && av1_quant_deltas_lossless(quant_deltas),
     inter,
     current: None,
     restoration_units: [],
@@ -270,6 +312,180 @@ fn av1_intra_has_chroma(state : Av1IntraState, block : Av1SbBlock) -> Bool {
 }
 
 ///|
+/// `get_cur_frame_segid` (AV1 §9.3.14) plus the `segment_id` symbol that
+/// follows it. The predicted id comes from the neighbours already stored for
+/// this tile, and the symbol codes the difference from it, de-interleaved
+/// against the frame's last active segment id. Returns the id, or -1 when the
+/// frame does not write the segment map at all.
+///
+/// `preskip` reads the symbol before the block's skip flag; the non-preskip
+/// form reads it after skip and keeps the prediction for a skipped block, so a
+/// skipped block codes no symbol.
+fn av1_read_segment_id(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+  mi_row : Int,
+  mi_col : Int,
+  avail_u : Bool,
+  avail_l : Bool,
+  skip : Int,
+  preskip : Bool,
+) -> Int {
+  let params = state.segmentation
+  if !params.enabled || !params.update_map {
+    return -1
+  }
+  if params.temporal_update {
+    // The temporal prediction reads the previous frame's segment map, which
+    // this decoder does not keep; such a frame is refused one level up.
+    return -1
+  }
+  // The predicted id and the context come from the same three neighbours:
+  // above, left, and above-left of this block's top-left corner.
+  let above = if avail_u && mi_row > 0 {
+    state.seg_ids[(mi_row - 1) * state.cols + mi_col]
+  } else {
+    0
+  }
+  let left = if avail_l && mi_col > 0 {
+    state.seg_ids[mi_row * state.cols + mi_col - 1]
+  } else {
+    0
+  }
+  let topleft = if avail_u && avail_l && mi_row > 0 && mi_col > 0 {
+    state.seg_ids[(mi_row - 1) * state.cols + mi_col - 1]
+  } else {
+    0
+  }
+  let seg_ctx = if avail_u && avail_l {
+    if left == above && topleft == left {
+      2
+    } else if left == above || topleft == left || above == topleft {
+      1
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+  let predicted = if avail_u && avail_l {
+    if above == topleft { above } else { left }
+  } else if avail_l {
+    left
+  } else if avail_u {
+    above
+  } else {
+    0
+  }
+  if !preskip && skip == 1 {
+    return predicted
+  }
+  let diff = decoder.symbol(state.seg_id[seg_ctx])
+  if diff < 0 {
+    return 0
+  }
+  let max = params.last_active_seg_id + 1
+  let value = av1_seg_neg_deinterleave(diff, predicted, max)
+  if value > params.last_active_seg_id || value >= av1_segments {
+    0
+  } else {
+    value
+  }
+}
+
+///|
+/// `neg_deinterleave` (AV1 §5.11.16 / libdav1d `decode.c`): undo the encoder's
+/// zig-zag folding of a segment id difference around the predicted id.
+fn av1_seg_neg_deinterleave(diff : Int, ref : Int, max : Int) -> Int {
+  if ref == 0 {
+    diff
+  } else if ref >= max - 1 {
+    max - diff - 1
+  } else if 2 * ref < max {
+    if diff <= 2 * ref {
+      if (diff & 1) != 0 {
+        ref + ((diff + 1) >> 1)
+      } else {
+        ref - (diff >> 1)
+      }
+    } else {
+      diff
+    }
+  } else {
+    if diff <= 2 * (max - ref - 1) {
+      if (diff & 1) != 0 {
+        ref + ((diff + 1) >> 1)
+      } else {
+        ref - (diff >> 1)
+      }
+    } else {
+      max - (diff + 1)
+    }
+  }
+}
+
+///|
+/// This block's quantizer index: the frame's base index plus the segment's
+/// ALT_Q feature, clamped to the 8-bit index range (AV1 §6.10.9).
+fn av1_seg_block_qindex(state : Av1IntraState, seg_id : Int) -> Int {
+  let params = state.segmentation
+  if !params.enabled || seg_id < 0 || seg_id >= av1_segments {
+    return state.base_q_idx
+  }
+  let delta = params.feature_data[seg_id][av1_seg_level_alt_q]
+  let value = state.base_q_idx + delta
+  if value < 0 {
+    0
+  } else if value > 255 {
+    255
+  } else {
+    value
+  }
+}
+
+///|
+/// Apply this block's segment: its quantizer index, its lossless flag and the
+/// record later blocks predict their segment id from. Does nothing when the
+/// frame does not write the segment map.
+fn av1_seg_apply_block(
+  state : Av1IntraState,
+  mi_row : Int,
+  mi_col : Int,
+  width4 : Int,
+  height4 : Int,
+  seg_id : Int,
+) -> Unit {
+  if seg_id < 0 {
+    state.seg_q_idx = state.base_q_idx
+    state.seg_lossless = av1_frame_lossless_flag(state)
+    return
+  }
+  state.seg_q_idx = av1_seg_block_qindex(state, seg_id)
+  state.seg_lossless = av1_frame_lossless_flag(state) && state.seg_q_idx == 0
+  if state.segmentation.enabled && state.segmentation.update_map {
+    for row in mi_row..<(mi_row + height4) {
+      if row < 0 || row >= state.rows {
+        continue
+      }
+      for col in mi_col..<(mi_col + width4) {
+        if col < 0 || col >= state.cols {
+          continue
+        }
+        state.seg_ids[row * state.cols + col] = seg_id
+      }
+    }
+  }
+}
+
+///|
+/// The frame's own lossless flag, which a segment ALT_Q feature can only keep
+/// or lose, never restore: it is the base index being zero with every
+/// quantizer delta zero (AV1 §5.9.14, §6.10.9).
+fn av1_frame_lossless_flag(state : Av1IntraState) -> Bool {
+  state.base_q_idx == 0 && av1_quant_deltas_lossless(state.quant_deltas)
+}
+
+///|
 /// Read the luma transform type after all_zero. The transform set uses the
 /// square-up dimension for its DCT-only gate, but the square-down dimension
 /// selects the CDF row (AV1 transform_type / get_tx_set).
@@ -280,7 +496,7 @@ fn av1_intra_tx_type(
   height : Int,
   mode : Int,
 ) -> Av1TxType? {
-  if state.base_q_idx == 0 || width >= 32 || height >= 32 {
+  if state.seg_lossless || width >= 32 || height >= 32 {
     return Some(Av1TxDctDct)
   }
   let direction = if state.filter_intra_mode >= 0 {
@@ -301,7 +517,7 @@ fn av1_intra_tx_type(
     },
     direction,
     state.reduced_tx_set,
-    state.base_q_idx,
+    state.seg_q_idx,
   )
 }
 
@@ -416,7 +632,7 @@ fn av1_intra_transform(
         }
         None => return false
       }
-    } else if state.base_q_idx == 0 || tx_width >= 32 || tx_height >= 32 {
+    } else if state.seg_lossless || tx_width >= 32 || tx_height >= 32 {
       Av1TxDctDct
     } else {
       match
@@ -448,7 +664,7 @@ fn av1_intra_transform(
     let coeffs = match
       av1_decode_coeffs_leaf_with_decoder(
         decoder,
-        state.base_q_idx,
+        state.seg_q_idx,
         coeff_context,
         tx_width,
         bit_depth=state.bit_depth,
@@ -456,13 +672,13 @@ fn av1_intra_transform(
         scan_class=av1_tx_scan_class(tx_type),
         dc_sign_ctx=if dc_sign < 0 { 1 } else if dc_sign > 0 { 2 } else { 0 },
         dc_q_idx=av1_plane_qindex(
-          state.base_q_idx,
+          state.seg_q_idx,
           state.quant_deltas,
           plane_index,
           true,
         ),
         ac_q_idx=av1_plane_qindex(
-          state.base_q_idx,
+          state.seg_q_idx,
           state.quant_deltas,
           plane_index,
           false,
@@ -473,7 +689,7 @@ fn av1_intra_transform(
     }
     cul_level = coeffs.cul_level
     dc_category = coeffs.dc_category
-    let decoded = if state.base_q_idx == 0 {
+    let decoded = if state.seg_lossless {
       av1_inverse_dct_2d(coeffs.coeffs, 4, 4, state.bit_depth, lossless=true)
     } else {
       av1_inverse_transform_2d(
@@ -956,7 +1172,7 @@ fn av1_intra_residuals(
         }
         let tx_width = if plane == 0 {
           luma_tx_width
-        } else if state.base_q_idx == 0 {
+        } else if state.seg_lossless {
           4
         } else if width > 32 {
           32
@@ -965,7 +1181,7 @@ fn av1_intra_residuals(
         }
         let tx_height = if plane == 0 {
           luma_tx_height
-        } else if state.base_q_idx == 0 {
+        } else if state.seg_lossless {
           4
         } else if height > 32 {
           32
@@ -1114,6 +1330,15 @@ fn av1_intra_only_block(
   if skip != 0 && skip != 1 {
     return false
   }
+  // `read_segment_id` sits between skip and the CDEF index (AV1 §5.11.13), and
+  // the segment it names decides the block's quantizer index from here on.
+  if state.segmentation.enabled && state.segmentation.seg_id_pre_skip {
+    return false
+  }
+  let seg_id = av1_read_segment_id(
+    decoder, state, y4, x4, y4 > 0, x4 > 0, skip, false,
+  )
+  av1_seg_apply_block(state, y4, x4, block.width / 4, block.height / 4, seg_id)
   if !av1_intra_cdef_index(decoder, state, block, skip) {
     return false
   }
@@ -1142,7 +1367,7 @@ fn av1_intra_only_block(
   } else {
     // is_cfl_allowed differs for lossless: only a 4x4 chroma residual block
     // may use CfL, even when the luma coding block is below 32 pixels.
-    let cfl_allowed = if state.base_q_idx == 0 {
+    let cfl_allowed = if state.seg_lossless {
       block.width <= 8 && block.height <= 8
     } else {
       block.width <= 32 && block.height <= 32
@@ -1207,7 +1432,7 @@ fn av1_intra_only_block(
     width: block.width,
     height: block.height,
   }
-  let selected = if state.base_q_idx == 0 {
+  let selected = if state.seg_lossless {
     (4, 4)
   } else if state.tx_mode_select {
     let depth = match
@@ -1291,6 +1516,9 @@ fn av1_decode_intra_tile_state(
   tile_origin_row_mi? : Int = 0,
   tile_origin_col_mi? : Int = 0,
   inter? : Av1InterInfo? = None,
+  /// The frame's parsed `segmentation_params` (AV1 §6.10.9); empty when the
+  /// frame disabled segmentation.
+  segmentation? : Av1SegmentationParams? = None,
   quant_deltas? : Av1QuantDeltas = {
     y_dc: 0,
     u_dc: 0,
@@ -1346,6 +1574,7 @@ fn av1_decode_intra_tile_state(
     sub_x~,
     sub_y~,
     inter~,
+    segmentation~,
   )
   let neighbors = match
     av1_partition_neighbor_state(

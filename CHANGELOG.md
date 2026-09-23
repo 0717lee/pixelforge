@@ -1,6 +1,31 @@
 # Changelog
 
 ## Unreleased
+- Ported the per-block `segment_id` and the `SEG_LVL_ALT_Q` feature, the last
+  piece the frame gate had been refusing, and pinned it on the repository's
+  first stream that actually writes a segment map. `--aq-mode=2` is what makes
+  libaom spend `segmentation_enabled`: the key frame carries one ALT_Q feature
+  on segments 0, 1, 2 and 4 (-28, -18, -7 and +10 over its base index of 49),
+  and the inter frame re-flags its own map update. Every block now reads the
+  `segment_id` symbol between skip and the CDEF index, with
+  `get_cur_frame_segid`'s neighbour context and `neg_deinterleave` for the coded
+  difference, and the residual takes its quantizer index - and therefore its
+  dequantisation, and its lossless flag - from the segment that symbol names.
+  The map is written over each block's full 4x4 footprint, so `skips`-style
+  neighbours predict the next block, and the symbol's three CDF rows are
+  tile-owned and snapshot with the rest of the frame context. Two real bugs fell
+  out of it: `last_active_seg_id` was initialised to 0 where libaom and
+  libdav1d use -1, and the segment read initially sat after the intra/inter
+  flag instead of before the CDEF index, which moved the whole symbol stream.
+  `inter_segmentation_64x64` pins both frames at [0, 0, 0] per plane, with the
+  inter frame's 146 msac symbols matching libdav1d's value for value and range
+  for range. What stays refused is narrow and stated: a frame that updates the
+  map without its own feature data (it would borrow features from a primary
+  reference), a temporal segment prediction (it would borrow the map), and any
+  level other than ALT_Q - the four loop-filter levels, the forced reference
+  frame, the forced skip and the forced global motion all change samples the
+  block stage produces. All 17 fixtures verify, the new one included, and all
+  three targets are green.
 - Added `inter_localwarp_64x64`, the first stream in the repository that actually
   selects LOCALWARP. The block is reached by flipping one bit of
   `inter_warped_64x64`'s inter-frame tile payload - the bit was found by brute

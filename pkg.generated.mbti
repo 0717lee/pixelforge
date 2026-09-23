@@ -156,9 +156,15 @@ pub fn av1_relative_dist(Av1SequenceInfo, Int, Int) -> Int
 
 pub fn av1_restoration_active(Av1RestorationConfig) -> Bool
 
+pub let av1_seg_level_alt_q : Int
+
 pub let av1_seg_level_ref_frame : Int
 
 pub let av1_segment_levels : Int
+
+pub fn av1_segmentation_features_supported(Av1SegmentationParams) -> Bool
+
+pub fn av1_segmentation_supported(Av1SegmentationParams) -> Bool
 
 pub let av1_segments : Int
 

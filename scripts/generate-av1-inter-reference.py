@@ -55,6 +55,29 @@ WIDTH, HEIGHT, FRAMES = 64, 64, 2
 # two frames in the anaconda build, so every fixture here is key + one inter
 # frame; the simplest possible block syntax keeps the first inter milestone
 # debuggable.
+# The adaptive-quantisation encode: the base flags with the order hint on,
+# which is what makes the inter frame's `primary_ref_frame` and reference list
+# answer the way a real playback stream does.
+AQ_FLAGS = [
+    "--error-resilient=0",
+    "--enable-dual-filter=0",
+    "--enable-order-hint=1",
+    "--enable-ref-frame-mvs=0",
+    "--enable-warped-motion=0",
+    "--enable-obmc=0",
+    "--enable-global-motion=0",
+    "--enable-masked-comp=0",
+    "--enable-dist-wtd-comp=0",
+    "--enable-diff-wtd-comp=0",
+    "--enable-interintra-comp=0",
+    "--enable-interinter-wedge=0",
+    "--enable-interintra-wedge=0",
+    "--enable-onesided-comp=0",
+    "--enable-tx64=0",
+    "--enable-intrabc=0",
+    "--enable-palette=0",
+]
+
 MINIMAL_FLAGS = [
     "--error-resilient=0",
     "--enable-dual-filter=0",
@@ -836,6 +859,52 @@ FIXTURES = [
                 "frame_type": 1,
                 "show_frame": 1,
                 "reference_select": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    # The only stream in the repository whose encoder actually writes a segment
+    # map: `--aq-mode=2` (complexity adaptive quantization) makes libaom spend
+    # `segmentation_enabled` on the key frame with one ALT_Q feature per active
+    # segment, and to re-flag the inter frame's map update on the following
+    # frame. Nothing else here reaches `segment_id`, which is exactly the piece
+    # the residual stage needed.
+    {
+        "name": "inter_segmentation_64x64",
+        "input": "ramp",
+        "flags": AQ_FLAGS + ["--aq-mode=2"],
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+                "base_q_idx": 49,
+                "segmentation_enabled": 1,
+                # ALT_Q only: the loop-filter, reference, skip and global-motion
+                # levels are what the decoder still refuses, so asserting their
+                # absence is what keeps this fixture decodable.
+                "feature_enabled[0][0]": 1,
+                "feature_enabled[1][0]": 1,
+                "feature_enabled[2][0]": 1,
+                "feature_enabled[3][0]": 0,
+                "feature_enabled[4][0]": 1,
+                "feature_enabled[5][0]": 0,
+                "feature_enabled[6][0]": 0,
+                "feature_enabled[7][0]": 0,
+                "feature_value[0][0]": -28,
+                "feature_value[1][0]": -18,
+                "feature_value[2][0]": -7,
+                "feature_value[4][0]": 10,
+                "delta_q_present": 0,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "base_q_idx": 128,
+                "segmentation_enabled": 1,
+                "feature_enabled[0][0]": 0,
+                "primary_ref_frame": 7,
+                "delta_q_present": 0,
             },
         ],
         "sequence_expectations": None,
@@ -1632,6 +1701,10 @@ def main() -> None:
             fh,
             indent=2,
             sort_keys=True,
+            # The manifest records the encoder command lines verbatim, and
+            # this workspace's path contains non-ASCII characters; escaping
+            # them would make the file unreadable to the people re-running it.
+            ensure_ascii=False,
         )
     print("generated %d fixtures; run scripts/emit-av1-inter-test.py to refresh the test" % len(built))
 

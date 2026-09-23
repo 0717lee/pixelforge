@@ -242,7 +242,7 @@ fn av1_inter_luma_tx_type(
 ) -> Av1TxType {
   let set = av1_inter_tx_set(width, height, state.reduced_tx_set)
   let sqr = av1_msac_floor_log2(if width < height { width } else { height }) - 2
-  if set == 0 || state.base_q_idx == 0 {
+  if set == 0 || state.seg_lossless {
     av1_inter_record_tx_types(info.field, x4, y4, width, height, Av1TxDctDct)
     return Av1TxDctDct
   }
@@ -422,7 +422,7 @@ fn av1_read_block_tx_size(
     block.size_index > 0 &&
     block.is_inter &&
     block.skip == 0 &&
-    state.base_q_idx != 0 {
+    !state.seg_lossless {
     let (tx_w4, tx_h4) = (max_width / 4, max_height / 4)
     let mut row = block.mi_row
     while row < block.mi_row + block.height4 {
@@ -444,7 +444,7 @@ fn av1_read_block_tx_size(
     return Some((max_width, max_height, roots))
   }
   let allow_select = !block.is_inter || block.skip == 0
-  if state.base_q_idx == 0 {
+  if state.seg_lossless {
     av1_motion_field_store_tx(
       info.field,
       block.mi_row,
@@ -1199,7 +1199,7 @@ fn av1_inter_residual(
         let (tx_width, tx_height) = av1_chroma_tx_size(
           residual_w,
           residual_h,
-          state.base_q_idx == 0,
+          state.seg_lossless,
         )
         if !av1_inter_residual_raster(
             decoder,
@@ -1293,7 +1293,7 @@ fn av1_intra_in_inter_block(
   }
   let mut uv_mode = AV1_INTRA_DC
   if has_chroma {
-    let cfl_allowed = if state.base_q_idx == 0 {
+    let cfl_allowed = if state.seg_lossless {
       block.width <= 8 && block.height <= 8
     } else {
       block.width <= 32 && block.height <= 32
@@ -1469,6 +1469,22 @@ fn av1_inter_tile_block(
     }
     current.skip = skip
   }
+  // `read_segment_id` sits between skip and the CDEF index (AV1 §5.11.13), and
+  // the segment it names decides the block's quantizer index from here on. A
+  // block that skip mode forced to skip takes the predicted id and codes no
+  // symbol, which the reader itself applies. The gate one level up refuses a
+  // frame whose features would read the symbol before skip, so the preskip
+  // form cannot reach this decoder.
+  if state.segmentation.enabled && state.segmentation.seg_id_pre_skip {
+    return false
+  }
+  let seg_id = av1_read_segment_id(
+    decoder, state, current.mi_row, current.mi_col, current.avail_u, current.avail_l,
+    current.skip, false,
+  )
+  av1_seg_apply_block(
+    state, current.mi_row, current.mi_col, current.width4, current.height4, seg_id,
+  )
   if !av1_intra_cdef_index(decoder, state, block, current.skip) {
     return false
   }

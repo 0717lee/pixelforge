@@ -4952,3 +4952,61 @@ LOCALWARP 主线已闭合，回到阶段表里剩下的唯一一项：**segmenta
 可先确认 `--enable-segmentation=1` + `--aq-mode`/`--enable-deltalf` 之类的
 aomenc 组合能否生成带 `seg_id`/feature 的 64x64 两帧流，再决定是"实现 feature"
 还是"继续拒绝并记录证据"。
+
+# 第八十二次推进补充（2026-09-23，segmentation：`segment_id` + `SEG_LVL_ALT_Q` 落地）
+
+## 一、触发流：`--aq-mode=2`（复杂度自适应量化）
+
+前几轮一直卡在"encoder 发不出带分段的流"。答案是 aomenc 的
+`--aq-mode=2`：它会把 `segmentation_enabled` 打开，**关键帧**上给段 0/1/2/4
+各一个 `SEG_LVL_ALT_Q`（-28 / -18 / -7 / +10，BaseQIdx=49），**下一帧**再把
+`segmentation_update_map` 重新置 1（帧自身不带任何 feature）。插桩 dav1d 的
+`obu.c` 打印出来的原样见上（`ZZSEG`/`ZZSEGD` 两行）。
+
+`--aq-mode=3`（cyclic refresh）在这个尺寸下根本不开分段，`--aq-mode=1`
+（variance）也只有关键帧一段。所以 `inter_segmentation_64x64` 用的是
+`--aq-mode=2`，flag = MINIMAL_FLAGS 里把 `--enable-order-hint` 改成 1
++ `--aq-mode=2`。
+
+## 二、落地的三块
+
+1. **`segment_id` 符号**（AV1 §5.11.13，dav1d `decode.c`）：
+   位置在 **skip 之后、CDEF index 之前**（我第一版放到了 intra/inter flag 之后，
+   结果整条符号流平移，debug 时先看的就是这里）。`get_cur_frame_segid` 取上/左/
+   左上三个邻块的段 id 给上下文（0/1/2）与预测值，符号用 `neg_deinterleave`
+   对 `last_active_seg_id + 1` 反折叠。skip=1 的块**不读符号**，直接用预测值。
+2. **段地图**：`state.seg_ids` 按 4x4 单位写满整个块（和 `skips` 同规则），
+   下一块据此预测。
+3. **`SEG_LVL_ALT_Q` 应用**：块的 quantizer index = `base_q_idx + delta_q`（截到
+   0..255），它喂反量化、并决定该块是否 lossless（`seg_lossless = 帧 lossless &&
+   本段 qidx==0`）。**系数 CDF 行仍是帧级 qcat**——dav1d 是
+   `dav1d_cdf_thread_init_static(cdf, quant.yac)` 每 tile 一次，不跟段走。
+   原来 7 处 `state.base_q_idx == 0` 的 lossless 判断全部改成 `state.seg_lossless`。
+
+顺手修了一个真 bug：`last_active_seg_id` 初始值写成 0，libaom/libdav1d 都是 **-1**
+（没有 feature 时 dav1d 打印 `last=-1`）。这会让 `neg_deinterleave` 的 max 变成
+1 而不是 0。
+
+## 三、验收
+
+- 三目标 **1265/1265**（本轮 +1 个测试），`--check` 17 个 fixture 全 verified
+  （新增 `inter_segmentation_64x64`，obu 与 dav1d 参考平面都进 tests/fixtures）。
+- 新 fixture **两个帧 [0,0,0]**；inter 帧 146 个 msac 符号的
+  `(n_symbols, val, r_before, r_after)` 与 libdav1d 逐字一致。
+- `moon info` / `build-web.mjs --check` / `verify-wasm.mjs` 全过。
+
+## 四、门：现在仍拒绝什么（窄且明确）
+
+`av1_segmentation_supported`（`av1_frame_header.mbt`）只在以下情况放行：
+`update_map && update_data && !temporal_update && 只有 ALT_Q`。也就是：
+
+| 拒绝 | 原因 |
+| --- | --- |
+| `!update_map` | 块不用读符号，但 feature 从 primary ref 继承，需要跨帧状态 |
+| `!update_data` | 同上（feature 来自上一帧） |
+| `temporal_update` | 段地图本身要从上一帧预测 |
+| 其它 7 个 level（loop filter 4 级 / REF_FRAME / SKIP / GLOBALMV） | 改的是块阶段的样本输出，未实现 |
+
+下一轮入口：**段级 loop filter**（`SEG_LVL_ALT_LF_Y/U/V`）——它要接到去块的
+`level_y/u/v` per-block 选择上，先看 `av1_loop_filter_*.mbt` 现在是不是已经按块
+取强度，再决定是"逐块取段"还是继续拒绝。

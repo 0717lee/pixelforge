@@ -17,6 +17,14 @@ pub let av1_segment_levels : Int = 8
 pub let av1_seg_level_ref_frame : Int = 4
 
 ///|
+/// `SEG_LVL_ALT_Q`: the one per-segment feature this decoder applies. It only
+/// shifts the block's quantizer index, so the residual reading applies it with
+/// no further plumbing. Every other level changes the loop filter, the block's
+/// reference or its prediction mode, and the block stage refuses a frame that
+/// enables one (see `av1_inter_frame_supported`).
+pub let av1_seg_level_alt_q : Int = 0
+
+///|
 /// The parsed `segmentation_params` (AV1 §6.10.9). `enabled` without a map
 /// update or an active feature changes nothing about the decode.
 pub(all) struct Av1SegmentationParams {
@@ -1792,10 +1800,16 @@ pub fn av1_parse_stage1_frame(
     Some(value) => value
     None => return None
   }
-  // A frame that actually uses the segment map or any feature needs the
-  // per-block segment id and the feature application; both are still fenced,
-  // so such a frame is refused whole rather than decoded without its segments.
-  if segmentation.enabled && (segmentation.update_map || segmentation.seg_id_pre_skip) {
+  // A frame that writes the segment map applies each feature per block. What
+  // this decoder can decode is narrow and deliberate: the map must be coded in
+  // the frame itself (no temporal prediction, no inherited feature data, so
+  // nothing has to be carried across frames), and the only feature it may
+  // enable is ALT_Q, which shifts the block's quantizer index and is applied
+  // where the residual reads it. Every other level changes the loop filter,
+  // the block's reference frame or its prediction mode, and a frame that maps
+  // no block at all still inherits per-block features - all refused whole
+  // rather than decoded with the segmentation silently dropped.
+  if segmentation.enabled && !av1_segmentation_supported(segmentation) {
     return None
   }
   if base_q_idx > 0 {
@@ -2072,7 +2086,7 @@ fn av1_parse_segmentation_params(
     }
   }
   var seg_id_pre_skip = false
-  var last_active = 0
+  var last_active = -1
   for i in 0..<av1_segments {
     for j in 0..<av1_segment_levels {
       if feature_enabled[i][j] {
@@ -2096,6 +2110,42 @@ fn av1_parse_segmentation_params(
 }
 
 ///|
+/// Whether every feature this frame enables is one the decoder applies.
+/// `SEG_LVL_ALT_Q` is; the loop-filter, reference-frame, skip and global-motion
+/// levels are not yet, so a frame enabling any of them is refused.
+pub fn av1_segmentation_features_supported(
+  segmentation : Av1SegmentationParams,
+) -> Bool {
+  for i in 0..<av1_segments {
+    for j in 0..<av1_segment_levels {
+      if segmentation.feature_enabled[i][j] && j != av1_seg_level_alt_q {
+        return false
+      }
+    }
+  }
+  true
+}
+
+///|
+/// Whether this frame's segmentation can be decoded as coded. Writing the map
+/// without the frame's own data would borrow per-block features from a primary
+/// reference, and the temporal prediction would borrow the map itself; both
+/// need cross-frame state this decoder does not keep for segments, and every
+/// feature level other than ALT_Q changes samples the block stage produces.
+pub fn av1_segmentation_supported(segmentation : Av1SegmentationParams) -> Bool {
+  if !segmentation.enabled {
+    return true
+  }
+  if !segmentation.update_map || segmentation.temporal_update {
+    return false
+  }
+  if !segmentation.update_data {
+    return false
+  }
+  av1_segmentation_features_supported(segmentation)
+}
+
+///|
 fn av1_segmentation_empty() -> Av1SegmentationParams {
   {
     enabled: false,
@@ -2105,7 +2155,7 @@ fn av1_segmentation_empty() -> Av1SegmentationParams {
     feature_enabled: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, false)),
     feature_data: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, 0)),
     seg_id_pre_skip: false,
-    last_active_seg_id: 0,
+    last_active_seg_id: -1,
   }
 }
 

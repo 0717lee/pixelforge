@@ -224,6 +224,9 @@ fn av1_decode_tile_planes(
   subsampling_x? : Bool = true,
   subsampling_y? : Bool = true,
   inter? : Av1InterFrame? = None,
+  /// The frame's parsed `segmentation_params` (AV1 §6.10.9); blocks read their
+  /// segment id from it and take their quantizer index from the segment.
+  segmentation? : Av1SegmentationParams? = None,
   /// The frame entropy context every tile starts from (AV1 §5.9). `None`
   /// seeds the normative defaults.
   cdfs? : Av1FrameCdfs? = None,
@@ -402,6 +405,7 @@ fn av1_decode_tile_planes(
         sub_x~,
         sub_y~,
         inter=tile_inter,
+        segmentation~,
         // Only the context_update_tile_id tile (0 by default) writes the
         // frame-end context; every other tile's rows are discarded.
         frame_cdfs=cdfs,
@@ -802,6 +806,7 @@ fn av1_decode_frame_planes(
       subsampling_x=seq.subsampling_x,
       subsampling_y=seq.subsampling_y,
       inter~,
+      segmentation=Some(header.segmentation),
       cdfs=inherited,
       cdfs_out=Some(cdfs_sink),
     ) {
