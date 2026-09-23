@@ -1482,12 +1482,24 @@ fn av1_inter_tile_block(
     decoder, state, current.mi_row, current.mi_col, current.avail_u, current.avail_l,
     current.skip, false,
   )
-  av1_seg_apply_block(
-    state, current.mi_row, current.mi_col, current.width4, current.height4, seg_id,
-  )
   if !av1_intra_cdef_index(decoder, state, block, current.skip) {
     return false
   }
+  // The superblock's quantizer delta follows the CDEF index (AV1 §6.10.10); a
+  // whole-superblock block that is skipped is the one case libdav1d does not
+  // read it for.
+  if av1_at_superblock_origin(state, current.mi_row, current.mi_col) &&
+    !(current.skip == 1 &&
+      av1_superblock_block_is_whole(
+        block.width, block.height, state.superblock_size,
+      )) {
+    av1_read_superblock_delta_q(decoder, state)
+  }
+  // The segment's ALT_Q builds on this superblock's index, so the block's
+  // quantizer index is settled after the delta, not before it.
+  av1_seg_apply_block(
+    state, current.mi_row, current.mi_col, current.width4, current.height4, seg_id,
+  )
   if !av1_read_is_inter(decoder, info, current) {
     return false
   }

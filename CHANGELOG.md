@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+- Ported `delta_q_params`' per-superblock quantizer delta, so a frame that
+  signals `delta_q_present` decodes instead of being refused. `--deltaq-mode=2`
+  is what makes libaom emit it: each superblock origin codes one symbol whose
+  magnitude runs through the three-value row (extended by the hi_tok tail when
+  it saturates), is signed, is scaled by `delta_q_res` and accumulates into that
+  superblock's index, clipped to 1..255 as libdav1d's `last_qidx` is. The
+  residual dequantises with that superblock's index, and a skipped
+  whole-superblock block is the one case the symbol is not read for. Nothing
+  else moves: the coefficient CDF rows stay per tile, which is where
+  libdav1d's per-tile initialisation puts them. The ordering is delicate and
+  worth recording: `read_segment_id` sits between skip and the CDEF index, the
+  delta follows the CDEF index, and the segment's ALT_Q builds on the delta -
+  so the block's quantizer index is settled after both, not between them. The
+  first implementation settled it between them, which showed up as a whole
+  frame decoded at the wrong index. `inter_deltaq_64x64` is the new fixture:
+  the key frame's single superblock moves from 49 to 33, and both frames match
+  dav1d at [0, 0, 0] per plane. The loop-filter half of the same syntax
+  (`delta_lf_present`) stays refused: it needs a per-superblock level table,
+  which is not implemented.
 - Ported the per-block `segment_id` and the `SEG_LVL_ALT_Q` feature, the last
   piece the frame gate had been refusing, and pinned it on the repository's
   first stream that actually writes a segment map. `--aq-mode=2` is what makes

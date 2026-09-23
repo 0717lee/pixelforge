@@ -87,6 +87,14 @@ pub(all) struct Av1FrameHeaderInfo {
   film_grain : Av1FilmGrainParams?
   /// Per-plane quantizer deltas from quantization_params.
   quant_deltas : Av1QuantDeltas
+  /// `delta_q_params` (AV1 §6.10.10): whether each superblock codes its own
+  /// quantizer delta, and the log2 scale those deltas carry.
+  delta_q_present : Bool
+  delta_q_res : Int
+  /// `delta_lf_params`: whether each superblock also codes loop-filter deltas.
+  /// A frame that sets it is refused, because the per-superblock loop-filter
+  /// level table is not implemented.
+  delta_lf_present : Bool
   /// Parsed segmentation_params; None is impossible once parsed (an absent
   /// segmentation is the empty struct).
   segmentation : Av1SegmentationParams
@@ -1812,24 +1820,51 @@ pub fn av1_parse_stage1_frame(
   if segmentation.enabled && !av1_segmentation_supported(segmentation) {
     return None
   }
+  // `delta_q_params` (AV1 §6.10.10). The per-superblock quantizer delta is
+  // implemented: the tile reads one symbol at each superblock origin and the
+  // residual dequantises with that superblock's index. The per-superblock
+  // loop-filter deltas are not, so a frame that signals them is refused whole
+  // after their bits are consumed - the entropy stream stays in sync for the
+  // next frame either way.
+  let mut delta_q_present = false
+  let mut delta_q_res = 0
+  let mut delta_lf_present = false
   if base_q_idx > 0 {
-    let delta_q_present = match r.take(1) {
+    delta_q_present = match r.take(1) {
       Some(v) => v == 1
       None => return None
     }
     if delta_q_present {
-      if r.take(2) is None {
-        return None
+      delta_q_res = match r.take(2) {
+        Some(v) => v
+        None => return None
       }
-      let delta_lf_present = match r.take(1) {
+      delta_lf_present = match r.take(1) {
         Some(v) => v == 1
         None => return None
       }
-      if delta_lf_present && (r.take(2) is None || r.take(1) is None) {
-        return None
+      if delta_lf_present {
+        // delta_lf_res and delta_lf_multi, then the four deltas.
+        let lf_res = match r.take(2) {
+          Some(v) => v
+          None => return None
+        }
+        let lf_multi = match r.take(1) {
+          Some(v) => v == 1
+          None => return None
+        }
+        let bits = 6 + lf_res
+        let count = if lf_multi { 4 } else { 1 }
+        for _ in 0..<count {
+          if r.signed(bits) is None {
+            return None
+          }
+        }
       }
-      return None
     }
+  }
+  if delta_lf_present {
+    return None
   }
 
   // CodedLossless also requires every quantizer delta to be zero (AV1 5.9.14),
@@ -1967,6 +2002,9 @@ pub fn av1_parse_stage1_frame(
     allow_screen_content_tools: allow_tools,
     film_grain,
     quant_deltas,
+    delta_q_present,
+    delta_q_res,
+    delta_lf_present,
     segmentation,
     frame_type: prefix.frame_type,
     frame_is_intra: prefix.frame_is_intra,

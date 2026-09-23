@@ -97,11 +97,22 @@ priv struct Av1IntraState {
   /// The parsed `segmentation_params` of the frame being decoded; empty when
   /// the frame disabled segmentation.
   segmentation : Av1SegmentationParams
-  /// This block's quantizer index: the frame's base index plus the segment's
+  /// This block's quantizer index: this superblock's index plus the segment's
   /// ALT_Q feature (AV1 §6.10.9). The residual's CDF rows stay at the frame's
   /// own q_category, as libdav1d's per-tile initialisation does; this index is
   /// the one the dequantisation reads.
   mut seg_q_idx : Int
+  /// This superblock's quantizer index: the frame's base index accumulated with
+  /// the per-superblock `delta_q` symbols (AV1 §6.10.10), clipped as libdav1d's
+  /// `last_qidx` is. Block indices build on it.
+  mut sb_q_idx : Int
+  /// `delta_q_params` of the frame this tile belongs to: whether each
+  /// superblock codes its own quantizer delta, and the scale those deltas
+  /// carry.
+  delta_q_present : Bool
+  delta_q_res : Int
+  /// The per-superblock `delta_q` symbol's row, adapted tile-wide.
+  delta_q : Array[Int]
   /// This block's lossless flag: the frame is lossless and this segment's
   /// quantizer index is still zero.
   mut seg_lossless : Bool
@@ -155,6 +166,10 @@ fn av1_intra_state(
   /// The frame's parsed `segmentation_params` (AV1 §6.10.9); empty when the
   /// frame disabled segmentation.
   segmentation? : Av1SegmentationParams? = None,
+  /// `delta_q_params` (AV1 §6.10.10): whether each superblock codes its own
+  /// quantizer delta and the log2 scale those deltas carry.
+  delta_q_present? : Bool = false,
+  delta_q_res? : Int = 0,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -227,6 +242,10 @@ fn av1_intra_state(
       None => av1_segmentation_empty()
     },
     seg_q_idx: base_q_idx,
+    sb_q_idx: base_q_idx,
+    delta_q_present: delta_q_present,
+    delta_q_res: delta_q_res,
+    delta_q: av1_delta_q_cdf(),
     seg_lossless: base_q_idx == 0 && av1_quant_deltas_lossless(quant_deltas),
     inter,
     current: None,
@@ -309,6 +328,74 @@ fn av1_intra_has_chroma(state : Av1IntraState, block : Av1SbBlock) -> Bool {
     true
   }
   x_owns && y_owns
+}
+
+///|
+/// DefaultDeltaQCdf (libdav1d `default_cdf.m.delta_q`, a CDF3 row): the
+/// per-superblock quantizer delta's symbol, read at each superblock origin when
+/// the frame signals `delta_q_present`.
+fn av1_delta_q_cdf() -> Array[Int] {
+  [28160, 32120, 32677, 32768, 0]
+}
+
+///|
+/// `read_delta_qindex` (AV1 §6.10.10, libaom `decodeframe.c`): the magnitude
+/// symbol over the three-value row, extended through the hi_tok tail when it
+/// saturates, then signed and scaled by `delta_q_res`. Accumulated into this
+/// superblock's quantizer index exactly as libdav1d's `last_qidx` is: clipped
+/// to 1..255, so a delta can never reach zero.
+fn av1_read_superblock_delta_q(
+  decoder : Av1SymbolDecoder,
+  state : Av1IntraState,
+) -> Unit {
+  if !state.delta_q_present {
+    return
+  }
+  let mut delta_q = decoder.symbol(state.delta_q)
+  if delta_q == 3 {
+    let n_bits = 1 + av1_msac_bools(decoder, 3)
+    delta_q = av1_msac_bools(decoder, n_bits) + 1 + (1 << n_bits)
+  }
+  if delta_q != 0 {
+    let negative = av1_msac_bool(decoder) == 1
+    if negative {
+      delta_q = -delta_q
+    }
+    delta_q = delta_q << state.delta_q_res
+  }
+  let accumulated = state.sb_q_idx + delta_q
+  state.sb_q_idx = if accumulated < 1 {
+    1
+  } else if accumulated > 255 {
+    255
+  } else {
+    accumulated
+  }
+}
+
+///|
+/// Whether this block is the one libdav1d reads the superblock's delta from:
+/// the first block of the superblock, which is a block the size of the whole
+/// superblock only when the superblock is not split.
+fn av1_at_superblock_origin(
+  state : Av1IntraState,
+  mi_row : Int,
+  mi_col : Int,
+) -> Bool {
+  let sb_size = state.superblock_size
+  (mi_col * 4) % sb_size == 0 && (mi_row * 4) % sb_size == 0
+}
+
+///|
+/// Whether the superblock's first block is a whole-superblock block, which
+/// suppresses the delta symbol when it is skipped (libdav1d's
+/// `bs != BS_64x64/128x128 || !b->skip`).
+fn av1_superblock_block_is_whole(
+  width : Int,
+  height : Int,
+  superblock_size : Int,
+) -> Bool {
+  width == superblock_size && height == superblock_size
 }
 
 ///|
@@ -429,11 +516,12 @@ fn av1_seg_neg_deinterleave(diff : Int, ref : Int, max : Int) -> Int {
 /// ALT_Q feature, clamped to the 8-bit index range (AV1 §6.10.9).
 fn av1_seg_block_qindex(state : Av1IntraState, seg_id : Int) -> Int {
   let params = state.segmentation
+  let base = state.sb_q_idx
   if !params.enabled || seg_id < 0 || seg_id >= av1_segments {
-    return state.base_q_idx
+    return base
   }
   let delta = params.feature_data[seg_id][av1_seg_level_alt_q]
-  let value = state.base_q_idx + delta
+  let value = base + delta
   if value < 0 {
     0
   } else if value > 255 {
@@ -456,8 +544,8 @@ fn av1_seg_apply_block(
   seg_id : Int,
 ) -> Unit {
   if seg_id < 0 {
-    state.seg_q_idx = state.base_q_idx
-    state.seg_lossless = av1_frame_lossless_flag(state)
+    state.seg_q_idx = state.sb_q_idx
+    state.seg_lossless = av1_frame_lossless_flag(state) && state.seg_q_idx == 0
     return
   }
   state.seg_q_idx = av1_seg_block_qindex(state, seg_id)
@@ -1338,10 +1426,19 @@ fn av1_intra_only_block(
   let seg_id = av1_read_segment_id(
     decoder, state, y4, x4, y4 > 0, x4 > 0, skip, false,
   )
-  av1_seg_apply_block(state, y4, x4, block.width / 4, block.height / 4, seg_id)
   if !av1_intra_cdef_index(decoder, state, block, skip) {
     return false
   }
+  // The superblock's quantizer delta follows the CDEF index (AV1 §6.10.10);
+  // a whole-superblock block that is skipped is the one case dav1d does not
+  // read it for.
+  if av1_at_superblock_origin(state, y4, x4) &&
+    !(skip == 1 && av1_superblock_block_is_whole(block.width, block.height, state.superblock_size)) {
+    av1_read_superblock_delta_q(decoder, state)
+  }
+  // The segment's ALT_Q builds on this superblock's index, so the block's
+  // quantizer index is settled after the delta, not before it.
+  av1_seg_apply_block(state, y4, x4, block.width / 4, block.height / 4, seg_id)
   let above_mode = if y4 > 0 {
     state.y_modes[(y4 - 1) * state.cols + x4]
   } else {
@@ -1519,6 +1616,10 @@ fn av1_decode_intra_tile_state(
   /// The frame's parsed `segmentation_params` (AV1 §6.10.9); empty when the
   /// frame disabled segmentation.
   segmentation? : Av1SegmentationParams? = None,
+  /// `delta_q_params` (AV1 §6.10.10): whether each superblock codes its own
+  /// quantizer delta and the log2 scale those deltas carry.
+  delta_q_present? : Bool = false,
+  delta_q_res? : Int = 0,
   quant_deltas? : Av1QuantDeltas = {
     y_dc: 0,
     u_dc: 0,
@@ -1575,6 +1676,8 @@ fn av1_decode_intra_tile_state(
     sub_y~,
     inter~,
     segmentation~,
+    delta_q_present~,
+    delta_q_res~,
   )
   let neighbors = match
     av1_partition_neighbor_state(

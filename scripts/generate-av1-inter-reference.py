@@ -864,6 +864,35 @@ FIXTURES = [
         "sequence_expectations": None,
         "decode_frames": 1,
     },
+    # The only stream whose encoder writes `delta_q_params`: `--deltaq-mode=2`
+    # makes libaom signal a per-superblock quantizer delta, so each superblock
+    # origin codes one symbol that shifts that superblock's dequantiser index
+    # (and nothing else - the coefficient CDF rows stay per tile). The
+    # loop-filter half of the same syntax is still refused, so the expectations
+    # below pin `delta_lf_present` at zero.
+    {
+        "name": "inter_deltaq_64x64",
+        "input": "ramp",
+        "flags": AQ_FLAGS + ["--deltaq-mode=2"],
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+                "base_q_idx": 49,
+                "delta_q_present": 1,
+                "delta_lf_present": 0,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "base_q_idx": 128,
+                "delta_q_present": 1,
+                "delta_lf_present": 0,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
     # The only stream in the repository whose encoder actually writes a segment
     # map: `--aq-mode=2` (complexity adaptive quantization) makes libaom spend
     # `segmentation_enabled` on the key frame with one ALT_Q feature per active

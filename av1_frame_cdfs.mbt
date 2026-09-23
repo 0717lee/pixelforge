@@ -18,7 +18,7 @@
 ///           filter_intra, filter_intra_mode_cdf, txb_skip, tx_set1, tx_set2,
 ///           luma eob, eob512, eob_small, extra, base_eob, base, br, sign,
 ///           chroma eob, eob512, eob_small, extra, base_eob, base, br, sign,
-///           vartx, tx_depth 8/16/32/64, seg_id
+///           vartx, tx_depth 8/16/32/64, seg_id, delta_q
 ///   44..65  inter mode rows: single_ref, new_mv, zero_mv, ref_mv, drl_mode,
 ///           is_inter, skip_mode, interp_filter, y_mode, tx_type_set1, set2,
 ///           set3, mv_joint, mv_sign, mv_class, mv_class0_bit, mv_class0_fr,
@@ -47,7 +47,7 @@ pub(all) struct Av1FrameCdfs {
 let av1_cdf_partition_count : Int = 5
 
 ///|
-let av1_cdf_intra_count : Int = 40
+let av1_cdf_intra_count : Int = 41
 
 ///|
 let av1_cdf_inter_count : Int = 21
@@ -299,6 +299,7 @@ fn av1_intra_cdfs_capture(state : Av1IntraState) -> Array[Array[Array[Int]]] {
   tables.push(av1_cdf_rows_copy(state.tx_depth.cdf32))
   tables.push(av1_cdf_rows_copy(state.tx_depth.cdf64))
   tables.push(av1_cdf_rows_copy(state.seg_id))
+  tables.push(av1_cdf_row_of(state.delta_q))
   tables
 }
 
@@ -391,6 +392,8 @@ fn av1_intra_cdfs_restore(
   av1_cdf_rows_into2(state.tx_depth.cdf64, tables[index])
   index = index + 1
   av1_cdf_rows_into2(state.seg_id, tables[index])
+  index = index + 1
+  av1_cdf_row_into1(state.delta_q, tables[index])
 }
 
 ///|

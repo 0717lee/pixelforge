@@ -98,6 +98,12 @@
       "reference_sha256": "1fddb620cf56a69750f65db56193ec5e2723987e32a8fd5ac4926d78a986f490"
     },
     {
+      "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=64 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=1 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 --deltaq-mode=2 -o C:\\Users\\谦友Lee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_deltaq_64x64.check.obu C:\\Users\\谦友Lee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_deltaq_64x64.input.y4m",
+      "name": "inter_deltaq_64x64",
+      "obu_sha256": "d08040ad113d04d9759c74bd612a1ea7f1484607f399a2062cb90e6574007284",
+      "reference_sha256": "ae3f57f17175db86199df10a3d8a98bd30798480b5cb42fc1647956baf783183"
+    },
+    {
       "command": "D:\\ProgramData\\anaconda3\\Library\\bin\\aomenc.EXE --codec=av1 --obu --i420 --width=64 --height=64 --bit-depth=8 --fps=1/1 --limit=2 --lag-in-frames=0 --threads=1 --cpu-used=0 --end-usage=q --cq-level=32 --tile-columns=0 --tile-rows=0 --debug --disable-warning-prompt --error-resilient=0 --enable-dual-filter=0 --enable-order-hint=1 --enable-ref-frame-mvs=0 --enable-warped-motion=0 --enable-obmc=0 --enable-global-motion=0 --enable-masked-comp=0 --enable-dist-wtd-comp=0 --enable-diff-wtd-comp=0 --enable-interintra-comp=0 --enable-interinter-wedge=0 --enable-interintra-wedge=0 --enable-onesided-comp=0 --enable-tx64=0 --enable-intrabc=0 --enable-palette=0 --aq-mode=2 -o C:\\Users\\谦友Lee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_segmentation_64x64.check.obu C:\\Users\\谦友Lee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-inter\\inter_segmentation_64x64.input.y4m",
       "name": "inter_segmentation_64x64",
       "obu_sha256": "54ff803a6a6582579d978eaca61971c620909c64b3b6ff44a1536bfa0eef2333",

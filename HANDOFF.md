@@ -5065,3 +5065,45 @@ ref/mode delta 在这个 `base` 之上再叠加（`base >= 32` 时左移一位�
 
 另：`segmentation` 的其余 7 个 level 里，`SEG_LVL_ALT_LF_*` 与第 4 步共享同一套
 管道，所以先做第 4 步（帧级段地图）对两者都有利。
+
+# 第八十四次推进补充（2026-09-23，`delta_q_params` 落地：逐 SB 的 quantizer 增量）
+
+## 一、触发流与结果
+
+`--deltaq-mode=2`（配合 `--aq-mode` 那一套 flag）就能让 aomenc 发
+`delta_q_present=1`（`delta_lf_present=0`）。新 fixture
+`inter_deltaq_64x64`：关键帧 49，**唯一一个 SB 的增量符号 = -16**（<<2 ⇒
+-64 → 32+... 实际打印 `[-16->33]`，即 49-16=33），inter 帧 128，增量 -24 → 104。
+两个帧 Y/U/V 对 dav1d 都是 [0,0,0]，三目标 1266/1266 全绿，18 个 fixture
+`--check` verified。
+
+## 二、实现要点（三条顺序，踩了一条）
+
+`av1_read_superblock_delta_q`（`av1_intra_tile.mbt`）：符号 → hi_tok 扩展 →
+符号位 → `<< delta_q_res` → 累加进 `state.sb_q_idx`（截 1..255，与 dav1d 的
+`iclip(last_qidx, 1, 255)` 一致）。残差用 `state.seg_q_idx` 反量化；**系数 CDF
+行仍是 tile 级**（`av1_tx_ent_tables(base_q_idx)` 每 tile 一次），与 dav1d 的
+`ts->cdf.coef` 一致。跳过条件是"本块就是整个超块且 skip"。
+
+符号的顺序（这是本轮踩的坑）：
+
+```
+skip → segment_id → CDEF index → delta_q → is_inter/ymode...
+```
+
+第一版把 `av1_seg_apply_block`（它计算块的 quantizer index）放在 segment_id 之
+后、delta_q 之前，于是块的 index 用的是**旧的 SB index**——整帧按 43 而不是
+33 反量化。修正：**段级 ALT_Q 叠加在 SB 增量之上**，所以块的 index 必须在
+delta 之后定。两处 leaf（intra-only 与 inter）都改了。
+
+## 三、仍拒绝的
+
+`delta_lf_present=1`：它需要"逐 SB 的去块强度表"（dav1d 的
+`calc_lf_values(..., ts->last_delta_lf)` per-SB），未实现。帧头里那几位的比特
+照读（保持熵流对齐），读完 `return None`。
+
+下一轮入口（承接上一轮的调研）：**帧级段地图**——把 `state.seg_ids` 像
+`restoration_units` 那样从 per-tile state 汇总到帧级，然后
+`av1_loop_filter_edge_level` 增加 `seg_delta` 入参（算式
+`base = clip(clip(level+lf_delta,0,63)+seg_delta,0,63)`，边的强度取自拥有这条
+边的一侧块自己的段）。这一条同时打通 `SEG_LVL_ALT_LF_*` 与 `delta_lf_present`。

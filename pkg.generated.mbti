@@ -391,6 +391,9 @@ pub(all) struct Av1FrameHeaderInfo {
   allow_screen_content_tools : Bool
   film_grain : Av1FilmGrainParams?
   quant_deltas : Av1QuantDeltas
+  delta_q_present : Bool
+  delta_q_res : Int
+  delta_lf_present : Bool
   segmentation : Av1SegmentationParams
   frame_type : Int
   frame_is_intra : Bool

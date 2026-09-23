@@ -179,6 +179,21 @@ fn Av1SymbolDecoder::bool(self : Av1SymbolDecoder) -> Int {
 /// MSAC `read_literal`: `bits` equiprobable boolean symbols, most
 /// significant bit first (AV1 spec §5.9.24). These consume arithmetic
 /// decoder capacity; they are not the raw data refill reader above.
+///|
+/// `msac_bools` (libdav1d `dav1d_msac_decode_bools`): `count` equiprobable
+/// bits, most significant first. The delta-q/lf symbols and the CDEF index use
+/// it, so it is exposed to the tile reader.
+fn av1_msac_bools(decoder : Av1SymbolDecoder, count : Int) -> Int {
+  decoder.entropy_literal(count)
+}
+
+///|
+/// `msac_decode_bool_equi`: one equiprobable bit.
+fn av1_msac_bool(decoder : Av1SymbolDecoder) -> Int {
+  decoder.bool()
+}
+
+///|
 fn Av1SymbolDecoder::entropy_literal(
   self : Av1SymbolDecoder,
   bits : Int,
