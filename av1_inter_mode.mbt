@@ -1303,16 +1303,16 @@ fn av1_read_interp_filter(
     block.interp_horizontal = info.interpolation_filter
     return
   }
+  let needs = av1_needs_interp_filter(info, block)
   let mut vertical = av1_interp_eighttap
-  if av1_needs_interp_filter(info, block) {
+  if needs {
     let ctx = av1_interp_filter_ctx(info, block, 0)
     if ctx < info.cdfs.interp_filter.length() {
       vertical = decoder.symbol(info.cdfs.interp_filter[ctx])
     }
   }
   block.interp_vertical = vertical
-  block.interp_horizontal = if info.enable_dual_filter &&
-    av1_needs_interp_filter(info, block) {
+  block.interp_horizontal = if info.enable_dual_filter && needs {
     let ctx = av1_interp_filter_ctx(info, block, 1)
     if ctx < info.cdfs.interp_filter.length() {
       decoder.symbol(info.cdfs.interp_filter[ctx])
@@ -1321,6 +1321,23 @@ fn av1_read_interp_filter(
     }
   } else {
     vertical
+  }
+  if !needs && block.motion_mode == 2 {
+    // A LOCALWARP block reads neither filter symbol, so its prediction falls
+    // back to the plain motion-compensation kernel when its warp model turns
+    // out to be identity - and the filter that kernel uses is the one the
+    // previous block decoded with, exactly as libdav1d's per-tile block struct
+    // leaves it. The block directly above is that block in raster order.
+    let field = info.field
+    let above = if block.avail_u {
+      (block.mi_row - 1) * field.cols + block.mi_col
+    } else {
+      -1
+    }
+    if above >= 0 && above < field.cols * field.rows {
+      block.interp_vertical = field.interp_v[above]
+      block.interp_horizontal = field.interp_h[above]
+    }
   }
 }
 

@@ -785,6 +785,38 @@ FIXTURES = [
         "decode_frames": 1,
     },
     {
+        # LOCALWARP. `inter_warped_64x64` is the one stream whose inter frame
+        # reads the three-symbol `motion_mode` branch - its blocks sit where
+        # `find_warp_samples` reports a candidate - and libaom codes every one
+        # of them SIMPLE, because a uniform translation costs less than a warp
+        # model. Flipping one bit of that frame's tile payload makes a block
+        # decode LOCALWARP instead, and the symbols after it re-symbolise; the
+        # bit was found by brute force with the debug dav1d build, which prints
+        # every block's decoded motion mode.
+        "name": "inter_localwarp_64x64",
+        "tile_patch_of": {
+            "base": "inter_warped_64x64",
+            "name": "inter_localwarp_64x64",
+            "offset": 67,
+            "bit": 0,
+            "expect": 1,
+        },
+        "frames": [
+            {
+                "frame_type": 0,
+                "show_frame": 1,
+            },
+            {
+                "frame_type": 1,
+                "show_frame": 1,
+                "reference_select": 0,
+                "allow_warped_motion": 1,
+            },
+        ],
+        "sequence_expectations": None,
+        "decode_frames": 1,
+    },
+    {
         "name": "inter_interintra_64x64",
         "patched_encode": {
             "append_frame_copy": False,
@@ -1182,6 +1214,32 @@ def inject_global_motion(spec: dict) -> bytes:
     return data[:start] + bytes(body) + data[payload_at + size :]
 
 
+def inject_tile_patch_of(spec: dict) -> bytes:
+    """Flip one bit of an already committed frame's tile entropy.
+
+    `inter_warped_64x64` is the one stream whose inter frame reads the
+    three-symbol `motion_mode` branch at all - its blocks sit where
+    `find_warp_samples` finds a candidate - and libaom codes every one of them
+    SIMPLE. One bit of the tile payload flipped is what makes a block decode
+    LOCALWARP instead: the symbols after it re-symbolise into a different legal
+    decode, which dav1d's planes on the patched stream are the truth for. The
+    offender is found by brute force with the instrumented dav1d, which prints
+    every block's decoded motion mode.
+    """
+    base = os.path.join(FIXTURE_DIR, spec["base"] + ".obu")
+    data = open(base, "rb").read()
+    index = spec["offset"]
+    if index >= len(data):
+        raise SystemExit("%s: tile patch %d out of range" % (spec["name"], index))
+    current = data[index]
+    bit = (current >> spec["bit"]) & 1
+    assert bit == spec["expect"], (
+        "%s: byte %d bit %d is %d, expected %d"
+        % (spec["name"], spec["offset"], spec["bit"], bit, spec["expect"])
+    )
+    return data[:index] + bytes([current ^ (1 << spec["bit"])]) + data[index + 1 :]
+
+
 def splice_loop_filter_deltas(spec: dict) -> bytes:
     """Rewrite one verified frame header's loop filter configuration.
 
@@ -1419,6 +1477,11 @@ def run(fixture: dict, check: bool) -> dict:
         command = "hand-splice of %s (see splice_loop_filter_deltas)" % fixture["splice"]["base"]
         with open(scratch, "wb") as fh:
             fh.write(splice_loop_filter_deltas(fixture["splice"]))
+    elif "tile_patch_of" in fixture:
+        spec = fixture["tile_patch_of"]
+        command = "one flipped tile bit of %s (see inject_tile_patch_of)" % spec["base"]
+        with open(scratch, "wb") as fh:
+            fh.write(inject_tile_patch_of(spec))
     elif "gm_inject" in fixture:
         command = "global-motion injection into %s (see inject_global_motion)" % fixture["gm_inject"]["base"]
         with open(scratch, "wb") as fh:

@@ -581,15 +581,17 @@ fn av1_warp_matching_masks(
   have_left : Bool,
   have_top : Bool,
   ref_name : Int,
-) -> (Int, Int) {
-  let mut top_mask = 0
-  let mut left_mask = 0
+) -> (Int64, Int64) {
+  // The corner markers live at bit 32, so both masks are Int64: a 32-bit Int
+  // would shift them away entirely.
+  let mut top_mask = 0L
+  let mut left_mask = 0L
   let mut count = 0
   let mut have_topleft = have_top && have_left
   let mut have_top_right = have_top
   if have_top {
     if av1_warp_matches(field, mi_row - 1, mi_col, ref_name) {
-      top_mask = top_mask | 1
+      top_mask = top_mask | 1L
       count = 1
     }
     let (aw4_start, _) = av1_warp_block_extent(field, mi_row - 1, mi_col)
@@ -611,7 +613,7 @@ fn av1_warp_matching_masks(
       let mut x = aw4
       while x < w4 {
         if av1_warp_matches(field, mi_row - 1, mi_col + x, ref_name) {
-          top_mask = top_mask | mask
+          top_mask = top_mask | mask.to_int64()
           count = count + 1
           if count >= 8 {
             return (top_mask, left_mask)
@@ -626,7 +628,7 @@ fn av1_warp_matching_masks(
   }
   if have_left {
     if av1_warp_matches(field, mi_row, mi_col - 1, ref_name) {
-      left_mask = left_mask | 1
+      left_mask = left_mask | 1L
       count = count + 1
       if count >= 8 {
         return (top_mask, left_mask)
@@ -643,7 +645,7 @@ fn av1_warp_matching_masks(
       let mut y = lh4
       while y < h4 {
         if av1_warp_matches(field, mi_row + y, mi_col - 1, ref_name) {
-          left_mask = left_mask | mask
+          left_mask = left_mask | mask.to_int64()
           count = count + 1
           if count >= 8 {
             return (top_mask, left_mask)
@@ -657,14 +659,14 @@ fn av1_warp_matching_masks(
     }
   }
   if have_topleft && av1_warp_matches(field, mi_row - 1, mi_col - 1, ref_name) {
-    left_mask = left_mask | (1 << 32)
+    left_mask = left_mask | (1L << 32)
     count = count + 1
     if count >= 8 {
       return (top_mask, left_mask)
     }
   }
   if have_top_right && av1_warp_matches(field, mi_row - 1, mi_col + bw4, ref_name) {
-    top_mask = top_mask | (1 << 32)
+    top_mask = top_mask | (1L << 32)
   }
   (top_mask, left_mask)
 }
@@ -699,11 +701,13 @@ fn av1_warp_derive(
   let heights : Array[Int] = Array::make(8, 0)
   let rows : Array[Int] = Array::make(8, 0)
   let cols : Array[Int] = Array::make(8, 0)
+  // The order matches libdav1d's `add_sample(dx, dy, sx, sy, rp)`: the column
+  // offset and step first, then the row ones, then the neighbour's 4x4 unit.
   let add = fn(
-    delta_row : Int,
     delta_col : Int,
-    step_row : Int,
+    delta_row : Int,
     step_col : Int,
+    step_row : Int,
     row : Int,
     col : Int,
   ) -> Unit {
@@ -731,13 +735,13 @@ fn av1_warp_derive(
     heights[count] = bh
     count = count + 1
   }
-  if top_mask == 1 && (left_mask >> 32) == 0 {
+  if top_mask == 1L && (left_mask >> 32) == 0L {
     let (aw4, _) = av1_warp_block_extent(field, mi_row - 1, mi_col)
     let off = mi_col & (aw4 - 1)
     add(-off, 0, 1, -1, mi_row - 1, mi_col)
   } else {
     let mut off = 0
-    let mut xmask = top_mask & 0xFFFFFFFF
+    let mut xmask = top_mask & 0xFFFFFFFFL
     while xmask != 0 {
       let tz = av1_warp_lowest_bit(xmask)
       off = off + tz
@@ -746,13 +750,13 @@ fn av1_warp_derive(
       xmask = xmask >> 1
     }
   }
-  if left_mask == 1 {
+  if left_mask == 1L {
     let (_, lh4) = av1_warp_block_extent(field, mi_row, mi_col - 1)
     let off = mi_row & (lh4 - 1)
     add(0, -off, -1, 1, mi_row - off, mi_col - 1)
   } else {
     let mut off = 0
-    let mut ymask = left_mask & 0xFFFFFFFF
+    let mut ymask = left_mask & 0xFFFFFFFFL
     while ymask != 0 {
       let tz = av1_warp_lowest_bit(ymask)
       off = off + tz
@@ -761,11 +765,11 @@ fn av1_warp_derive(
       ymask = ymask >> 1
     }
   }
-  if (left_mask >> 32) != 0 {
+  if (left_mask >> 32) != 0L {
     add(0, 0, -1, -1, mi_row - 1, mi_col - 1)
   }
-  if (top_mask >> 32) != 0 {
-    add(0, bw4, 1, -1, mi_row - 1, mi_col + bw4)
+  if (top_mask >> 32) != 0L {
+    add(bw4, 0, 1, -1, mi_row - 1, mi_col + bw4)
   }
   if count == 0 {
     return None
@@ -841,13 +845,13 @@ fn av1_warp_derive(
 
 ///|
 /// The index of the lowest set bit, i.e. the count of trailing zeros.
-fn av1_warp_lowest_bit(value : Int) -> Int {
-  if value == 0 {
+fn av1_warp_lowest_bit(value : Int64) -> Int {
+  if value == 0L {
     0
   } else {
     let mut out = 0
     let mut x = value
-    while (x & 1) == 0 {
+    while (x & 1L) == 0L {
       out = out + 1
       x = x >> 1
     }
@@ -922,12 +926,15 @@ fn av1_warp_affine_chunk(
       let filter = av1_warp_filter(tmx)
       let mut sum = bias
       for tap in 0..<8 {
-        let source_x = if origin_x + tap - 3 < 0 {
+        // The tap reads the reference column this output column samples at,
+        // which is the chunk's origin plus the column plus the tap offset.
+        let at = origin_x + column + tap - 3
+        let source_x = if at < 0 {
           0
-        } else if origin_x + tap - 3 > last_x {
+        } else if at > last_x {
           last_x
         } else {
-          origin_x + tap - 3
+          at
         }
         sum = sum + filter[tap] * samples[source_y * stride + source_x]
       }
@@ -1060,3 +1067,4 @@ pub fn av1_warp_from_global_motion(matrix : Array[Int]) -> Av1WarpModel? {
     Some({ matrix, coefficients })
   }
 }
+
