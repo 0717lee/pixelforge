@@ -4748,3 +4748,37 @@ left, ctx, symbol, range_before, range_after)`，与 dav1d `read_tx_tree` 的
 的 split 符号**读错。注意我方 ctx 公式（6*(4-max_tx)+smaller+above+left）与
 dav1d 的 `cat = 2*(TX_64X64 - t_dim->max) - depth` 形式不同但都已验证自洽，
 所以先假设 ctx 对，重点比对 mask 序列。
+
+# 第七十七次推进补充（2026-09-23，下半帧块根本不读 var-tx：分歧在预测，不在系数）
+
+## 一、本轮结论（否定上一轮的假设）
+
+在 `av1_read_var_tx_size` 里对 `row >= 8 && col >= 8`（下半帧）的节点打印
+ctx/symbol/bit —— **一条都没有**。即：本流下半帧的块全部
+`skip == 1`（或被 `size_index > 0`/`tx_mode_select` 之外的路径拦截），
+**一个 var-tx 符号都不读**。
+
+所以上一轮"分歧在系数读取"的推断被否定：这些块的像素 = 纯预测
+（无残差），差异只能来自**预测**本身。
+
+## 二、与本流的结构对齐
+
+- 上半帧三个 32x32：非跳过，读 var-tx + 系数 ✓ 与 dav1d 逐符号一致、像素全对
+  （其中 (0,12) 就是 LOCALWARP 块，说明"估计 + warp 预测"这条链本身是通的）。
+- 下半帧四个 16x16 叶子：全部 skip → 纯预测；其中三个含 LOCALWARP/OBMC 块，
+  正是三个坏区。
+
+⇒ 真正的分歧：**下半帧这些块的预测**。已知事实：
+  - (8,8) 8x8 块：mm=0、mv=(-4,8)、ref=7 —— 它与 LOCALWARP 无关却也坏，
+    说明先坏的很可能不是 warp 本身，而是**该块读到的参考/邻域状态**；
+  - 这些块在上半帧的 LOCALWARP 块之后解码，且上半帧的 warp 块会把 warp 模型的
+    预测结果写进参考邻域（loop filter 看得见）。
+
+## 三、下一轮入口（改成直接对预测）
+
+对 (8,8) 8x8 这种"纯预测 + 非 warp"的坏块，打印它的预测输入：
+`ref 槽位（av1_inter_reference 返回的帧）、mv、filter_v/h、block 尺寸、plane`，
+然后用**上半帧已验证一致的上一个块**做对照——如果输入完全相同而输出不同，
+就是 `av1_motion_compensate` 在该参考/MV 下的问题（与 warp 无关，是普通 MC）；
+如果输入不同（例如 ref 槽位指向了被 warp 块污染的参考图），则要看参考图的
+写入路径（warp 预测是否只写当前帧而不污染参考槽）。
