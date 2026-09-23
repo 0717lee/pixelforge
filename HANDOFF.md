@@ -4498,3 +4498,48 @@ motion_mode/滤波符号都读对了（r 值全对），而变换树在它们**�
 
 先查 2（一行），再查 1（逐点打印）。修好后 `inter_localwarp_64x64` 的围栏
 应从 376 直接掉向 0。
+
+# 第七十一次推进补充（2026-09-23，var-tx 分歧收敛到系数符号本身）
+
+## 一、本轮改动（保留）
+
+`av1_read_var_tx_size` 加了 libdav1d 的守卫：**节点自身尺寸类 ≤ 8x8 时，即使
+split 符号为 1 也不再细分**（符号照读，熵不错位；`t_dim->max > TX_8X8`）。
+spec §5.11.15 没有这条，但 libaom 编码端同样不会发，所以这是"读入但不细分"的
+防御性一致。全量 1264/1264 保持全绿，围栏未变（本流没有触发它的节点）。
+
+## 二、把 dav1d 的调试输出按块拆开之后，分歧点定位到系数符号
+
+用 `poc=`/`Post-skip`/`Post-intermode` 把 dav1d 的 inter 帧逐块还原：
+
+```
+poc=0,y=0,x=8,bl=2      ← 32x32 块在 mi(0,8)
+Post-skip[0]            ← 不跳过
+Post-intermode[0,mv=y:0,x:8]
+Post-motionmode[1]: r=60488
+Post-subpel_filter[0]: r=58946
+Post-y-cf-blk[tx=9(16x32),eob=-1]     ← 全零
+poc=?                    ← mi(0,12) 是上面那个 32x32 的 SPLIT 子块
+Post-motionmode[2]: r=48256           ← LOCALWARP
+Post-y-cf-blk[tx=9(16x32),eob=12]
+```
+
+与我方逐项对：
+- 块树一致：mi(0,8) 是 32x32、mi(0,12) 是它 SPLIT 出的 16x32 ✓
+- 变换尺寸一致：两者都读出 16x32（未再细分）✓
+- 符号流一致：该块的 skip/ref/intermode/motionmode/filter 五个符号的 r 值
+  与我方完全相同 ✓
+- **分歧只在系数符号**：dav1d 的 `txb_skip` 读出 1（eob=-1，全零），
+  我方读出 0 并继续读了 39 个系数。
+
+## 三、下一轮入口（很窄）
+
+即"系数邻域状态"类 bug：`txb_skip`/`eob`/`coeff_base` 的 CDF 行由
+`above_level/left_level/dc_sign`（上方/左方变换的 eob 级别）决定。我方在
+mi(0,8) 这一行读到的上下文与 dav1d 不同，可能来自上一块（mi(0,0) 的 32x32）
+写进 `state.y_coeff` 的 above/left 数组方式、或 16x32 这种矩形变换在
+`av1_coeff_context` 里的邻域取样（矩形块的 above 取样是 w4 列、left 是 h4 行，
+且矩形块"整块覆盖"判定 `whole` 与方块不同）。
+做法：在 `av1_coeff_context` 打印该变换的 (above_level, left_level, above_dc,
+left_dc, whole)，与 dav1d `Post-y-cf-blk` 前的上下文对比；先查 mi(0,0) 的
+above 数组是否正确覆盖了 32x32 的 8 列。

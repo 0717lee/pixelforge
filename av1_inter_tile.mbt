@@ -361,7 +361,11 @@ fn av1_read_var_tx_size(
   }
   let width4 = tx_width / 4
   let height4 = tx_height / 4
-  if split == 1 {
+  // A node whose size class is 8x8 or smaller does not subdivide even when the
+  // split symbol says otherwise: the symbol is still read, so the entropy stays
+  // in step, but the node stays a leaf (libdav1d's `t_dim->max > TX_8X8`).
+  let can_split = (if tx_width > tx_height { tx_width } else { tx_height }) > 8
+  if split == 1 && can_split {
     let (sub_width, sub_height) = av1_tx_split(tx_width, tx_height)
     for i = 0; i < height4; i = i + sub_height / 4 {
       for j = 0; j < width4; j = j + sub_width / 4 {
