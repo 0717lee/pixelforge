@@ -4573,3 +4573,46 @@ dav1d `dav1d_max_txfm_size_for_bs[BS_32x32][0] = TX_32X32`，且 TX_32X32 的
 dav1d 的第一块是 16x32（即 64x64 → 可能是 32x64/16x32 这类矩形分块）。
 修正处分：`av1_partition_children` 的 64x64 分支或 `av1_partition_leaves`
 的递归（矩形 PARTITION 是否在 64x64 层级被允许）。
+
+# 第七十三次推进补充（2026-09-23，根因确定：我方分块树在不读符号的情况下被多切了）
+
+## 一、方法（下一轮直接复用）
+
+在 `av1_inter_tile_block` 入口打印每个块的 `(mi, w4, h4, msac range)`，与 dav1d
+`poc=…,bl=…,bp=…,r=…` 的 r 值（dav1d 在**解开该块的 partition 路径之后**打印，
+所以可直接与我方块入口的 range 对拍）。
+
+## 二、逐条比对结果：符号流完全同步，树比我方期待的深
+
+| 我方块（入口 range） | dav1d 同名位置（r） |
+| --- | --- |
+| (0,0) 32x32 r=58370 | 58370 ✓ |
+| (0,8) 16x32 r=37328 | 37328 ✓ |
+| (8,0) 32x16 r=51904 | 51904 ✓ |
+| (8,8) 8x8  r=58240 | 58240 ✓ |
+| (8,12) 8x8  r=33728 | 33728 ✓ |
+| (12,8) 16x8 r=55328 | 55328 ✓ |
+
+⇒ **符号流逐字同步**（包括 (0,8) 的 OBMC 符号 r=60488 也对上）。
+⇒ 但树形不同：dav1d 的右下 32x32 → 4×16x16（叶子）；我方在同一处切到
+8x8/8x16 一级。
+
+## 三、决定性观察：多切的那几刀**没有消耗符号**
+
+我方 (8,8) 8x8 → (10,8) 8x8 → (8,10) 8x16 → (8,12) 8x8 的 range 一路
+41304 → 34764 → 33728，而 dav1d 从 (8,8) 直接到 (8,12) 的 r=33728。
+我方在多切之后**又回到了同一个 range** —— 说明我方这几刀是
+`av1_partition_leaves` 里"implied / forced"分支**凭空产生的，没有读符号**。
+
+## 四、下一轮入口（很窄）
+
+`av1_partition_leaves`（av1_partition_tree.mbt:304）的注释说
+"Implied 4x4 NONE and forced frame-edge SPLIT decisions consume no entries"。
+把这两类判定打印出来（节点 mi/尺寸 + 判定原因），对帧内每个节点核：
+1. 本流是 64x64 可见帧 + 128x128 superblock，顶层强切合法；
+2. 但 (8,8) 的 16x16 完全在帧内，`has_cols/has_rows` 应为真，不应被
+   `edge_forces_split` 命中——大概率是 `av1_partition_node_valid` 或
+   `edge_forces_split` 对该 SB 尺寸的判定把 64x64 帧的右/下边界算错了
+   （例如用了 `sb_size` 而不是 frame 尺寸，或没把 128x128 SB 的可见裁剪算对）。
+修掉后 `inter_localwarp_64x64` 的围栏应从 376 直接归零——
+(32,4)/(48,6/7)/(56,4/5/6) 三个坏区正是这些多切块。
