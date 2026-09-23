@@ -4710,3 +4710,41 @@ r 不一致，则问题在 eob/系数上下文（`av1_coeff_context` 的 above/l
 若 txb_skip 的 r 就不一致，则问题在 txb_skip 的 CDF 行
 （`txb_skip[tx_context][skip_context]`，tx_context 由
 `av1_tx_size_ctx_rect(txw,txh)` 给出，矩形 8x16/16x8 的 ctx 与方块不同）。
+
+# 第七十六次推进补充（2026-09-23，txb_skip 之后 range 就不一致 → var-tx 读取分歧）
+
+在 `av1_intra_transform` 里、读完 `all_zero`（txb_skip）后立刻打印
+`(x, y, txw, txh, az, msac range)`，只取右下四个 16x16 叶子，与 dav1d 的
+`Post-y-cf-blk` 行的 `r=`（dav1d 的 r 是 txb_skip + 全部系数读完后的状态）
+逐条对：
+
+| 我方 | az | r(txb_skip 后) | dav1d 同形状 | eob | r(系数读完) |
+| --- | --- | --- | --- | --- | --- |
+| (32,40) 8x8 | 1 | 34764 | — | — | — |
+| (40,32) 8x16 | 0 | 54414 | 8x16 | 54 | 61960 |
+| (48,32) 8x8 | 0 | 39008 | 8x8 | 51 | 49160 |
+| (56,32) 8x8 | 1 | 38633 | — | — | — |
+| (48,40) 16x8 | 0 | 40095 | 16x8 | 18 | 39176 |
+| (32,48) 16x8 | 1 | 39252 | — | — | — |
+| (32,56) 8x8 | 1 | 47016 | — | — | — |
+| (40,56) 8x8 | 0 | 51060 | 8x8 | 2 | ? |
+| (48,48) 16x8 | 0 | 61443 | 16x8 | 116 | ? |
+| (48,56) 16x8 | 0 | 44198 | — | — | — |
+
+（注：dav1d 的 r 是"系数全部读完"，我方的是"txb_skip 读完"，两者不可直接
+比大小；但**形状序列一致**这一点很关键：8x8/8x16/8x8/16x8/… 对齐。）
+
+⇒ 现在的分歧面收窄到：**四个 16x16 叶子内部的 var-tx 读取**（块入口 range
+相同 → 块级符号相同 → 分歧在叶子内的变换树符号）。这也解释了为什么上一轮加的
+"8x8 类节点不再细分"守卫没有改变围栏：它管的是另一种情形。
+
+## 下一轮入口
+
+`av1_read_var_tx_size` 的每个节点打印 `(row, col, tx_w×tx_h, depth, above,
+left, ctx, symbol, range_before, range_after)`，与 dav1d `read_tx_tree` 的
+`Post-vartxtree[%x/%x]`（两个 mask 字）对拍。dav1d 的 mask 位定义：
+`bit = y_off*4 + x_off`（x_off/y_off 是该层的子块序号，depth0 0..3、depth1
+0..7）；我方按同样方式累计 mask 后直接比两个 16 位字，就能定位到**哪一个节点
+的 split 符号**读错。注意我方 ctx 公式（6*(4-max_tx)+smaller+above+left）与
+dav1d 的 `cat = 2*(TX_64X64 - t_dim->max) - depth` 形式不同但都已验证自洽，
+所以先假设 ctx 对，重点比对 mask 序列。
