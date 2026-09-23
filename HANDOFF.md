@@ -4330,8 +4330,12 @@ precDiff=1）严格等价；而 ROTZOOM/AFFINE 的**平移项**是 precBits=6（
 - `--check`：15 样本 verified。
 - **`av1_inter_frame_supported` 里的 inter 工具门已清空**：compound（含各类混合）、
   skip mode、OBMC/warped motion 语法、屏幕内容/调色板、时间运动矢量、平移与
-  ROTZOOM/AFFINE 全局运动都有逐样本证据。仍未闭合的只有 segmentation feature
-  （需要 encoder 发分段的流）与 LOCALWARP 的样本级触发（位 hunt 未做）。
+  ROTZOOM/AFFINE 全局运动都有逐样本证据。此后两项也已闭合：LOCALWARP 由
+  `inter_localwarp_64x64`（瓦片翻一 bit）样本闭合，segmentation 的
+  `segment_id` + `SEG_LVL_ALT_Q` 由 `inter_segmentation_64x64`（`--aq-mode=2`）
+  样本闭合；剩下的 7 个 segmentation level 与"不带自身数据的地图更新"仍由
+  `av1_segmentation_supported` 明确拒绝。三目标 1265/1265 全绿，17 个 fixture
+  `--check` verified。
 
 # 第六十六次推进补充（2026-09-23，LOCALWARP 触发流到手，两个真 bug 修掉，差三个区域）
 
@@ -5010,3 +5014,54 @@ aomenc 组合能否生成带 `seg_id`/feature 的 64x64 两帧流，再决定是
 下一轮入口：**段级 loop filter**（`SEG_LVL_ALT_LF_Y/U/V`）——它要接到去块的
 `level_y/u/v` per-block 选择上，先看 `av1_loop_filter_*.mbt` 现在是不是已经按块
 取强度，再决定是"逐块取段"还是继续拒绝。
+
+# 第八十三次推进补充（2026-09-23，`delta_q_params` 的勘察：它要的是**逐 SB** 的 delta 符号）
+
+`av1_segmentation_supported` 之外还剩一块 header 语法被拒：`delta_q_present`
+（`av1_frame_header.mbt:1815`）。本轮把它勘察清楚，结论是它比"帧级 delta.lf"
+大得多，值得单独开一轮。
+
+## 一、AV1 五处 delta 的区别（别再混）
+
+| 语法 | 位置 | 谁读 | 作用 |
+| --- | --- | --- | --- |
+| `quantization_params` 的 `DeltaQY/U/VDc/Ac` | 帧头，分区图之前 | 帧头 | 四档 quantizer index 偏移（已实现：`Av1QuantDeltas`） |
+| `delta_q_params` | 帧头 | **每个超级块开头**各读一次 | `delta_q` 符号改该 SB 的 quantizer index（只改反量化，不改系数 CDF 行——那些是每 tile 一次按 `quant.yac` 定的）；`delta_lf` 符号改该 SB 的去块强度表 |
+| `segmentation` 的 `SEG_LVL_ALT_Q` | 帧头 feature + 块级 `segment_id` | 残差 | 已实现（见上） |
+| `segmentation` 的 `SEG_LVL_ALT_LF_Y/U/V` | 帧头 feature | 去块 | **未实现**，被门拒绝 |
+| `loop_filter` 的 ref/mode delta | 帧头 | 去块 | 已实现（`inter_lf_delta_64x64`） |
+
+## 二、dav1d 的现状（源码已核对）
+
+`decode.c:1184-1214`：`delta.lf.present` 时**每个 SB** 读 `n_lfs`（multi ? 4 : 2）
+个 `delta_lf` 符号（`cdf.m.delta_lf`，值 3 走 hi_tok 扩展 + 符号位 + `<< res_log2`），
+累加进 `ts->last_delta_lf[i]`（截到 ±63）；`delta_q` 同理累加进 `ts->last_qidx`。
+然后 `lf_mask.c:429 calc_lf_value` 的算式是
+
+```
+base = clip( clip( level + lf_delta, 0, 63 ) + seg_delta, 0, 63 )
+      ↑帧级/该SB级 ↑quantizer    ↑该块所属段的 ALT_LF
+```
+
+ref/mode delta 在这个 `base` 之上再叠加（`base >= 32` 时左移一位）。注意
+`calc_lf_value` 用的是 `ts->lflvl[b->seg_id][plane][ref+1][!is_globalmv]`——
+**边的强度取自拥有这条边的那一侧块自己的段**（`mask_edges_inter` 按块写）。
+
+## 三、下一轮的落地顺序（按依赖）
+
+1. **帧头**：`delta_q_params` 三档（`delta_q_res` 2bit 丢弃、`delta_lf_present`
+   1bit、`delta_lf_res` 2bit、`delta_lf_multi` 1bit、4×`su(6+delta_lf_res)`）落到
+   `Av1FrameHeaderInfo`；二值位都读完再决定放行/拒绝（现在整段 `return None`）。
+2. **逐 SB 符号**：在 `av1_inter_tile.mbt` 的超块循环开头读 `delta_q`/`delta_lf`
+   （`cdf.m.delta_q` 是 2 符号 CDF；delta_lf 是 3 符号 + hi_tok），把当前
+   quantizer index 与四档 delta.lf 存进 tile state；**fixture 需要用
+   `--delta-q`/`--enable-deltalf` 之类让 aomenc 真正发出来**，试不出来就
+   `patch_header_fields` 补位。
+3. **反量化按 SB**：`av1_decode_coeffs_leaf_with_decoder` 的 `base_q_idx` 换成本
+   SB index（系数 CDF 行不动，与 dav1d 一致）。
+4. **去块按段/SB**：`av1_loop_filter_edge_level` 增加 seg_delta 与 lf_delta 两个入
+   参，段地图要像 restoration_units 那样从 per-tile state 汇总到帧级（现在 seg_ids
+   只活在 tile state 里，去块是帧级过程）。
+
+另：`segmentation` 的其余 7 个 level 里，`SEG_LVL_ALT_LF_*` 与第 4 步共享同一套
+管道，所以先做第 4 步（帧级段地图）对两者都有利。
