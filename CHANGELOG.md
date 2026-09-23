@@ -1,7 +1,24 @@
 # Changelog
 
 ## Unreleased
-- Closed the last inter-tool gate in `av1_inter_frame_supported`: a rotate-zoom
+- Added `inter_localwarp_64x64`, the first stream in the repository that actually
+  selects LOCALWARP, and fixed the two bugs it exposed. The block is reached by
+  flipping one bit of `inter_warped_64x64`'s inter-frame tile payload - the bit
+  was found by brute force with the debug dav1d build, which prints every
+  block's decoded motion mode - because libaom itself never writes
+  `motion_mode = 2` for these groups: a uniform translation costs less per block
+  than a warp model. Two fixes came out of it, neither of them reachable before:
+  the warp masks were 32-bit where `find_matching_ref`'s corner markers live at
+  bit 32, so any block with a non-empty left mask also gained a spurious
+  top-left sample; and the horizontal pass of the two-phase warp filter
+  addressed the reference without the output column's own offset. After both,
+  three of the five LOCALWARP blocks reconstruct sample-exactly and the symbol
+  stream matches dav1d's msac ranges block for block. The frame is still wrong
+  in three regions, so the fixture pins the current per-plane counts as a fence
+  with the diagnosis trail in the fixture table; the lead is that our motion
+  field disagrees with dav1d's refmvs grid around mi(12,12) while every symbol
+  matches.
+- - Closed the last inter-tool gate in `av1_inter_frame_supported`: a rotate-zoom
   or affine global-motion model now decodes instead of being refused. The
   injector gained a `model` kind, and `inter_globalmv_rotzoom_64x64` sets
   `is_global(LAST_FRAME)` plus `is_rot_zoom` on `inter_minimal_64x64` and codes a
