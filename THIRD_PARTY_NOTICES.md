@@ -1,5 +1,10 @@
 # Third-party notices
 
+The AV1/AVIF source files named below are now maintained in the independent
+`0717lee/moonav1` package. These notices remain here because PixelForge's Web
+artifacts include that dependency. Original source history is preserved in
+PixelForge through `6f0c711c54f89d34f3e2ef97cde7a0a45458583d`.
+
 ## libaom reference algorithms
 
 The AV1 CfL prediction and probability defaults in `av1_cfl.mbt`, directional

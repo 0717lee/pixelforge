@@ -4,6 +4,7 @@
 //   node scripts/build-web.mjs          # build MoonBit targets and copy artifacts
 //   node scripts/build-web.mjs --check  # build targets and fail when web/dist is stale
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -26,9 +27,11 @@ function runMoon(args) {
 runMoon(["build", "--release", "--target", "js"]);
 runMoon(["build", "--release", "--target", "wasm"]);
 
+// A local moon.work gives each module its own namespace in the build tree.
+const modulePrefix = existsSync(path.join(root, "moon.work")) ? "0717lee/pixelforge/" : "";
 const artifacts = [
-  ["_build/js/release/build/web/web.js", "web/dist/web.js"],
-  ["_build/wasm/release/build/wasmcore/wasmcore.wasm", "web/dist/wasmcore.wasm"],
+  [`_build/js/release/build/${modulePrefix}web/web.js`, "web/dist/web.js"],
+  [`_build/wasm/release/build/${modulePrefix}wasmcore/wasmcore.wasm`, "web/dist/wasmcore.wasm"],
 ];
 
 for (const [source, destination] of artifacts) {

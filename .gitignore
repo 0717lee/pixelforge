@@ -4,6 +4,8 @@ target/
 target
 .mooncakes/
 .moonagent/
+# Local sibling-module overrides; release dependencies are in moon.mod.
+/moon.work
 _screenshots/
 # Personal / competition documents - must NEVER ship in git or mooncakes packages
 项目申报书*.md

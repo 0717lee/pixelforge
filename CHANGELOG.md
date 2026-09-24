@@ -2,10 +2,26 @@
 
 ## Unreleased
 
+### MoonAV1 extraction
+
+- Moved AV1/AVIF algorithms, 1306 decoder tests and reference-generation tools
+  to the independent `0717lee/moonav1` package, extracted from PixelForge
+  `6f0c711c54f89d34f3e2ef97cde7a0a45458583d`.
+- PixelForge retains its public codec facade and `Image` type. Image-returning
+  APIs adapt MoonAV1 buffers without copying; filters, CLI and browser callers
+  retain their existing entry points. AVIF encoding stays in PixelForge.
+- Decoder reference tests now run in MoonAV1. PixelForge keeps 240 existing
+  image-processing tests plus two facade-boundary regressions, and its actual
+  browser/Worker pixel fixtures and integration checks.
+- This is a source migration with preserved Git history. Previous decoder
+  implementation and test work below are historical baseline contributions.
+
+### Decoder baseline before extraction
+
 The pure-MoonBit AV1/AVIF mainline now covers the reconstruction, state and
 composition paths below. Native, JavaScript and wasm-gc each pass 1546 tests.
 Independent pixels, CLI and browser integration are verified; reproducible
-commands and the corresponding CI record are in [HANDOFF.md](HANDOFF.md).
+commands and CI are preserved in the [source-revision handoff](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/HANDOFF.md).
 
 ### Decoding and composition
 
