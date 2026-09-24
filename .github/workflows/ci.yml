@@ -49,6 +49,9 @@ jobs:
       - name: Test (native)
         run: moon test --target native
 
+      - name: Verify generated JavaScript numeric literal handling
+        run: node scripts/check-canonicalize-moon-js.mjs
+
       - name: Verify committed web artifacts are reproducible
         run: node scripts/build-web.mjs --check
 

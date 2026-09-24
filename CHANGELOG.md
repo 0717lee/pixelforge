@@ -61,6 +61,10 @@ commands and the corresponding CI record are in [HANDOFF.md](HANDOFF.md).
   remaining channels match zimg exactly, and native YUV comparisons stay exact.
 - Added release-binding/main/worker pixel parity checks to CI, including
   high-bit-depth premultiplied animations and malformed sequence rejection.
+- Made generated JavaScript reproducible across Windows/Linux decimal printers
+  without changing numeric values; lexical boundary tests and strict artifact
+  byte checks cover the build step. Included AVIF reference inputs previously
+  hidden by local Git excludes so clean checkouts can run pixel verification.
 - Validated AVIF presentation dimensions and essential `a1op`/`lsel` selection:
   `ispe` describes the selected presentation, not necessarily the sequence
   maximum. Complete-container references cover primary images and grid cells.

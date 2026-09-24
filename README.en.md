@@ -265,6 +265,7 @@ moon check
 moon test --target native
 moon test --target js
 moon test --target wasm-gc
+node scripts/check-canonicalize-moon-js.mjs
 node scripts/build-web.mjs --check
 node scripts/check-browser-codecs.mjs
 node verify-wasm.mjs

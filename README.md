@@ -269,7 +269,9 @@ moon check
 moon test --target js
 moon test --target wasm-gc
 moon test --target native
+node scripts/check-canonicalize-moon-js.mjs
 node scripts/build-web.mjs --check
+node scripts/check-browser-codecs.mjs
 node verify-wasm.mjs
 moon run --target native cmd/cli -- --help
 ```

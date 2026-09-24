@@ -68,6 +68,7 @@ moon test --target js
 moon test --target wasm-gc
 moon test --target native
 node scripts/build-web.mjs
+node scripts/check-canonicalize-moon-js.mjs
 node scripts/build-web.mjs --check
 node scripts/check-browser-codecs.mjs
 node verify-wasm.mjs
@@ -77,6 +78,8 @@ git diff --check
 ```
 
 先用 `moon info` 同步 [pkg.generated.mbti](pkg.generated.mbti)，只格式化修改的文件或块，再更新 Web 产物。CLI 参数以 [CLI 文档](cmd/cli/README.md) 和 `--help` 为准；浏览器/worker 仍须按实际上传、显示、处理和导出流程冒烟。不要通过更新像素快照替代外部真值。
+
+Web 生成步骤统一编译器输出中同值浮点字面量的文本表示：已验证 Windows/Linux 原始 JS 的 74 处文本差异具有相同 IEEE-754 数值，规范化后完整文件逐字节相同。字符串、整数、BigInt、注释等保留原文；无法可靠处理的词法形式明确报错。`--check` 仍严格比较最终产物字节，WASM 字节不做改写。
 
 ## 4. 本轮验证记录
 
@@ -100,6 +103,8 @@ git diff --check
 | GitHub CI | 本地等价检查已通过；提交推送后填写对应运行链接。工作流已加入发布绑定及 Worker 的独立像素检查 |
 
 `inter_cdf_inherit_64x64` 的原 OBU 与独立真值保留，断言仍为 `[0,0,0]`。它是熵尾部不合规、由 dav1d 宽容解码的历史回归；合法工具组合的证据来自第 7 节的新旧真实编码流，不能用该样本替代。
+
+透明画布对比统一使用 `willReadFrequently: true` 的 Canvas 存储约定；解码器原始 RGBA 另由发布绑定测试逐字节验证。113 个曾被本地 `*.avif` 排除规则隐藏的参考输入均已核对既有 manifest 的 SHA-256 并纳入交付，仓库忽略规则显式保留 fixture 输入。
 
 ## 5. 公开入口、接口变化与颜色约定
 

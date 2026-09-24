@@ -1712,25 +1712,25 @@ const _M0FP270717lee10pixelforge35av1__partition__symbol__from__indexN6constrS20
 const _M0FP270717lee10pixelforge35av1__partition__symbol__from__indexN6constrS20882 = 8;
 const _M0FP270717lee10pixelforge35av1__partition__symbol__from__indexN6constrS20883 = 9;
 const _M0FP270717lee10pixelforge26av1__frame__plane__divisorN5tupleS20892 = { _0: 1, _1: 1 };
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20904 = { _0: 0.21237636070506746, _1: 0.086563782369209585 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20904 = { _0: 0.21237636070506746, _1: 0.08656378236920959 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20905 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20904;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20906 = { _0: 0.21263900587151033, _1: 0.072192315360733714 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20906 = { _0: 0.21263900587151033, _1: 0.07219231536073371 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20907 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20906;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20908 = { _0: 0.29896661812478992, _1: 0.1146121717422266 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20908 = { _0: 0.2989666181247899, _1: 0.1146121717422266 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20909 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20908;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20910 = { _0: 0.22200430999823087, _1: 0.071340924076486387 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20910 = { _0: 0.22200430999823087, _1: 0.07134092407648639 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20911 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20910;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20912 = { _0: 0.25358536343373467, _1: 0.068078860869292615 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20912 = { _0: 0.25358536343373467, _1: 0.06807886086929262 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20913 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20912;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20914 = { _0: 0.262700212011267, _1: 0.059301716469861952 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20914 = { _0: 0.262700212011267, _1: 0.05930171646986195 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20915 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20914;
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20916 = { _0: 0, _1: 0 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20917 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20916;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20918 = { _0: 0.20949167791273055, _1: 0.068913067926225813 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20918 = { _0: 0.20949167791273055, _1: 0.06891306792622581 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20919 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20918;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20920 = { _0: 0.22897456406974875, _1: 0.079286914093744984 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20920 = { _0: 0.22897456406974875, _1: 0.07928691409374498 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20921 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20920;
-const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20922 = { _0: 0.23175054567210918, _1: 0.095998681523228435 };
+const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20922 = { _0: 0.23175054567210918, _1: 0.09599868152322844 };
 const _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN6constrS20923 = _M0FP270717lee10pixelforge33av1__color__derived__coefficientsN5tupleS20922;
 const _M0FP270717lee10pixelforge29av1__parse__sequence__payloadN6constrS20893 = 1;
 const _M0FP270717lee10pixelforge29av1__parse__sequence__payloadN6constrS20894 = 1;
@@ -26178,7 +26178,7 @@ function _M0FP270717lee10pixelforge18av1__color__linear(value, transfer) {
           break;
         }
         case 7: {
-          _tmp = positive < 0.09128634211778 ? positive / 4 : _M0FPC14math3pow((positive + 0.111572195921731) / 1.1115721959217311, 2.2222222222222223);
+          _tmp = positive < 0.09128634211778 ? positive / 4 : _M0FPC14math3pow((positive + 0.111572195921731) / 1.111572195921731, 2.2222222222222223);
           break;
         }
         case 8: {
@@ -26194,16 +26194,16 @@ function _M0FP270717lee10pixelforge18av1__color__linear(value, transfer) {
           break;
         }
         case 11: {
-          _tmp = value < -0.08124285829863151 ? -_M0FPC14math3pow((-value + 0.099296826809442) / 1.0992968268094421, 2.2222222222222223) : value < 0.08124285829863151 ? value / 4.5 : _M0FPC14math3pow((value + 0.099296826809442) / 1.0992968268094421, 2.2222222222222223);
+          _tmp = value < -0.08124285829863151 ? -_M0FPC14math3pow((-value + 0.099296826809442) / 1.099296826809442, 2.2222222222222223) : value < 0.08124285829863151 ? value / 4.5 : _M0FPC14math3pow((value + 0.099296826809442) / 1.099296826809442, 2.2222222222222223);
           break;
         }
         case 12: {
-          _tmp = value < -0.020310714574657877 ? -_M0FPC14math3pow((-4 * value + 0.099296826809442) / 1.0992968268094421, 2.2222222222222223) / 4 : value < 0.08124285829863151 ? value / 4.5 : _M0FPC14math3pow((value + 0.099296826809442) / 1.0992968268094421, 2.2222222222222223);
+          _tmp = value < -0.020310714574657877 ? -_M0FPC14math3pow((-4 * value + 0.099296826809442) / 1.099296826809442, 2.2222222222222223) / 4 : value < 0.08124285829863151 ? value / 4.5 : _M0FPC14math3pow((value + 0.099296826809442) / 1.099296826809442, 2.2222222222222223);
           break;
         }
         case 13: {
           const magnitude = value < 0 ? -value : value;
-          const linear = magnitude < 0.039293370676847572 ? magnitude / 12.92 : _M0FPC14math3pow((magnitude + 0.0550107189475866) / 1.0550107189475866, 2.4);
+          const linear = magnitude < 0.03929337067684757 ? magnitude / 12.92 : _M0FPC14math3pow((magnitude + 0.0550107189475866) / 1.0550107189475866, 2.4);
           _tmp = value < 0 ? -linear : linear;
           break;
         }
@@ -26214,7 +26214,7 @@ function _M0FP270717lee10pixelforge18av1__color__linear(value, transfer) {
           if (!(denominator > 0)) {
             return _M0DTPC16option6OptionGdE4None__;
           }
-          _tmp = _M0FPC14math3pow(numerator / denominator, 6.2773946360153259);
+          _tmp = _M0FPC14math3pow(numerator / denominator, 6.277394636015326);
           break;
         }
         case 17: {
@@ -26231,7 +26231,7 @@ function _M0FP270717lee10pixelforge18av1__color__linear(value, transfer) {
       }
       break _L;
     }
-    _tmp = positive < 0.08124285829863151 ? positive / 4.5 : _M0FPC14math3pow((positive + 0.099296826809442) / 1.0992968268094421, 2.2222222222222223);
+    _tmp = positive < 0.08124285829863151 ? positive / 4.5 : _M0FPC14math3pow((positive + 0.099296826809442) / 1.099296826809442, 2.2222222222222223);
   }
   return new _M0DTPC16option6OptionGdE4Some(_tmp);
 }
@@ -26262,7 +26262,7 @@ function _M0FP270717lee10pixelforge21av1__color__nonlinear(value, transfer) {
           break;
         }
         case 7: {
-          _tmp = positive < 0.022821585529445 ? 4 * positive : 1.1115721959217311 * _M0FPC14math3pow(positive, 0.45) - 0.111572195921731;
+          _tmp = positive < 0.022821585529445 ? 4 * positive : 1.111572195921731 * _M0FPC14math3pow(positive, 0.45) - 0.111572195921731;
           break;
         }
         case 8: {
@@ -26278,16 +26278,16 @@ function _M0FP270717lee10pixelforge21av1__color__nonlinear(value, transfer) {
           break;
         }
         case 11: {
-          _tmp = value < -0.018053968510807 ? -1.0992968268094421 * _M0FPC14math3pow(-value, 0.45) + 0.099296826809442 : value < 0.018053968510807 ? 4.5 * value : 1.0992968268094421 * _M0FPC14math3pow(value, 0.45) - 0.099296826809442;
+          _tmp = value < -0.018053968510807 ? -1.099296826809442 * _M0FPC14math3pow(-value, 0.45) + 0.099296826809442 : value < 0.018053968510807 ? 4.5 * value : 1.099296826809442 * _M0FPC14math3pow(value, 0.45) - 0.099296826809442;
           break;
         }
         case 12: {
-          _tmp = value < -0.00451349212770175 ? -(1.0992968268094421 * _M0FPC14math3pow(-4 * value, 0.45) - 0.099296826809442) / 4 : value < 0.018053968510807 ? 4.5 * value : 1.0992968268094421 * _M0FPC14math3pow(value, 0.45) - 0.099296826809442;
+          _tmp = value < -0.00451349212770175 ? -(1.099296826809442 * _M0FPC14math3pow(-4 * value, 0.45) - 0.099296826809442) / 4 : value < 0.018053968510807 ? 4.5 * value : 1.099296826809442 * _M0FPC14math3pow(value, 0.45) - 0.099296826809442;
           break;
         }
         case 13: {
           const magnitude = value < 0 ? -value : value;
-          const nonlinear = magnitude < 0.0030412825601275209 ? 12.92 * magnitude : 1.0550107189475866 * _M0FPC14math3pow(magnitude, 0.41666666666666669) - 0.0550107189475866;
+          const nonlinear = magnitude < 0.003041282560127521 ? 12.92 * magnitude : 1.0550107189475866 * _M0FPC14math3pow(magnitude, 0.4166666666666667) - 0.0550107189475866;
           _tmp = value < 0 ? -nonlinear : nonlinear;
           break;
         }
@@ -26297,11 +26297,11 @@ function _M0FP270717lee10pixelforge21av1__color__nonlinear(value, transfer) {
           break;
         }
         case 17: {
-          _tmp = _M0FPC14math3pow(positive * 0.91655527974030937, 0.38461538461538458);
+          _tmp = _M0FPC14math3pow(positive * 0.9165552797403094, 0.3846153846153846);
           break;
         }
         case 18: {
-          _tmp = positive <= 0.083333333333333329 ? Math.sqrt(3 * positive) : 0.17883277 * _M0FPC14math2ln(12 * positive - 0.28466892) + 0.55991073;
+          _tmp = positive <= 0.08333333333333333 ? Math.sqrt(3 * positive) : 0.17883277 * _M0FPC14math2ln(12 * positive - 0.28466892) + 0.55991073;
           break;
         }
         default: {
@@ -26310,7 +26310,7 @@ function _M0FP270717lee10pixelforge21av1__color__nonlinear(value, transfer) {
       }
       break _L;
     }
-    _tmp = positive < 0.018053968510807 ? 4.5 * positive : 1.0992968268094421 * _M0FPC14math3pow(positive, 0.45) - 0.099296826809442;
+    _tmp = positive < 0.018053968510807 ? 4.5 * positive : 1.099296826809442 * _M0FPC14math3pow(positive, 0.45) - 0.099296826809442;
   }
   return new _M0DTPC16option6OptionGdE4Some(_tmp);
 }
@@ -26401,13 +26401,13 @@ function _M0FP270717lee10pixelforge17av1__color__ictcp(intensity, ct, cp, transf
       case 16: {
         lp = intensity + 0.008609037037932761 * ct + 0.11102962500302598 * cp;
         mp = intensity - 0.008609037037932761 * ct - 0.11102962500302598 * cp;
-        sp = intensity + 0.56003133571067909 * ct - 0.3206271749873188 * cp;
+        sp = intensity + 0.5600313357106791 * ct - 0.3206271749873188 * cp;
         break _L;
       }
       case 18: {
-        lp = intensity + 0.015718580108730413 * ct + 0.20958106811640551 * cp;
-        mp = intensity - 0.015718580108730413 * ct - 0.20958106811640551 * cp;
-        sp = intensity + 1.0212710798422344 * ct - 0.60527449099243158 * cp;
+        lp = intensity + 0.015718580108730413 * ct + 0.2095810681164055 * cp;
+        mp = intensity - 0.015718580108730413 * ct - 0.2095810681164055 * cp;
+        sp = intensity + 1.0212710798422344 * ct - 0.6052744909924316 * cp;
         break _L;
       }
       default: {
@@ -26439,9 +26439,9 @@ function _M0FP270717lee10pixelforge17av1__color__ictcp(intensity, ct, cp, transf
   } else {
     return undefined;
   }
-  const r = l - 2.5064521186562705 * (m - l) + 0.069845424323191518 * (s - l);
-  const g = m - 0.79132955559892892 * (l - m) - 0.19227089619336202 * (s - m);
-  const b = s - 0.025949899690592672 * (l - s) - 0.098913714711726455 * (m - s);
+  const r = l - 2.5064521186562705 * (m - l) + 0.06984542432319152 * (s - l);
+  const g = m - 0.7913295555989289 * (l - m) - 0.19227089619336202 * (s - m);
+  const b = s - 0.025949899690592672 * (l - s) - 0.09891371471172646 * (m - s);
   return { _0: _M0MPC16option6Option6unwrapGdE(_M0FP270717lee10pixelforge21av1__color__nonlinear(r, transfer)), _1: _M0MPC16option6Option6unwrapGdE(_M0FP270717lee10pixelforge21av1__color__nonlinear(g, transfer)), _2: _M0MPC16option6Option6unwrapGdE(_M0FP270717lee10pixelforge21av1__color__nonlinear(b, transfer)) };
 }
 function _M0FP270717lee10pixelforge15av1__color__ncl(y, u, v, kr, kb) {
@@ -26557,9 +26557,9 @@ function _M0FP270717lee10pixelforge25av1__color__xyz__to__srgb(x, y, z, transfer
   } else {
     return undefined;
   }
-  const linear_r = 3.2409699419045226 * x$2 - 1.5373831775700939 * y$2 - 0.49861076029300339 * z$2;
-  const linear_g = -0.96924363628087962 * x$2 + 1.8759675015077202 * y$2 + 0.041555057407175591 * z$2;
-  const linear_b = 0.055630079696993663 * x$2 - 0.20397695888897652 * y$2 + 1.0569715142428786 * z$2;
+  const linear_r = 3.2409699419045226 * x$2 - 1.537383177570094 * y$2 - 0.4986107602930034 * z$2;
+  const linear_g = -0.9692436362808796 * x$2 + 1.8759675015077202 * y$2 + 0.04155505740717559 * z$2;
+  const linear_b = 0.05563007969699366 * x$2 - 0.20397695888897652 * y$2 + 1.0569715142428786 * z$2;
   const _bind$4 = _M0FP270717lee10pixelforge21av1__color__nonlinear(linear_r, 13);
   let r;
   if (_bind$4.$tag === 1) {
