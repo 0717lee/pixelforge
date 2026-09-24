@@ -6,7 +6,7 @@ English | [简体中文](README.md)
 
 [Developer handoff and final acceptance goal (Chinese)](HANDOFF.md)
 
-**AVIF/AV1 extraction (2026-09-24)**: the decoder core is maintained in `0717lee/moonav1`. PixelForge retains its public codec facade, `Image` type, CLI and browser integration. See the [handoff](HANDOFF.md) for provenance and ownership. This is a local migration candidate; publication and remote updates are pending.
+**AVIF/AV1 extraction (2026-09-24)**: the decoder core is maintained in the local independent `0717lee/moonav1` library, with no public repository or Mooncakes release. PixelForge preserves its history, codec facade, `Image` type, CLI and browser integration. A checked-in `moon.work` resolves the [pinned snapshot](vendor/moonav1/README.md) shipped with the source, so builds need neither a sibling MoonAV1 checkout nor an unpublished registry package. See the [handoff](HANDOFF.md) for provenance and maintenance.
 
 > An image processing library written in pure [MoonBit](https://www.moonbitlang.com/), with a browser Playground that runs it live.
 > The backend-agnostic core compiles to **JavaScript / WebAssembly (wasm-gc & linear-memory wasm) / native**.
@@ -24,8 +24,8 @@ English | [简体中文](README.md)
 ## ✨ Features
 
 - **AVIF/AV1 pixel decoding**: pure MoonBit 8/10/12-bit monochrome, 4:2:0, 4:2:2 and 4:4:4 reconstruction, with multiple tiles, intra prediction, palettes, CfL, lossless transforms and intra-block copy (`intrabc`). Quantization matrices cover levels 0–15 and all AV1 transform sizes, with per-plane selection and lossless/transform bypass rules. All eight segmentation features, inherited maps/features, temporal segment prediction, delta-Q and per-superblock delta-LF feed reconstruction and filtering. Native-depth deblocking, CDEF, horizontal super-resolution, Wiener/SGR restoration and film grain share the frame pipeline.
-- **Stateful AV1 sequences**: reference pixels and entropy contexts persist across frames. Motion prediction includes subpixel/reference scaling, temporal motion vectors, OBMC, local/global warps, inter-intra and compound blends, including wedge and dual-reference global warp. Standalone frame-header/tile-group assembly, hidden frames, show-existing, frame IDs, decoder timing and grain-parameter inheritance are integrated. Raw AV1 decoding defaults to operating point 0 and presents its highest spatial layer present in each temporal unit. [Encoder fixtures](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/av1-mainline/README.md), [segmentation references](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/av1-segmentation-tools/README.md) and [OBU fixtures](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/av1-obu-assembly/README.md) record the actual exercised paths.
-- **AVIF containers and composition**: primary images, auxiliary alpha, and 4:2:0/4:2:2/4:4:4 grids retain native samples until final color/alpha conversion. Animated color and associated alpha tracks have independent reference state and exact timestamp/duration synchronization, including differing track timescales. Item and track `nclx` metadata supplies unspecified AV1 color fields. See the [grid](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/avif-grid-sampling-color/README.md) and [animation-alpha](tests/fixtures/avif-animation-alpha/README.md) references.
+- **Stateful AV1 sequences**: reference pixels and entropy contexts persist across frames. Motion prediction includes subpixel/reference scaling, temporal motion vectors, OBMC, local/global warps, inter-intra and compound blends, including wedge and dual-reference global warp. Standalone frame-header/tile-group assembly, hidden frames, show-existing, frame IDs, decoder timing and grain-parameter inheritance are integrated. Raw AV1 decoding defaults to operating point 0 and presents its highest spatial layer present in each temporal unit. [Encoder fixtures](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/av1-mainline/README.md), [segmentation references](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/av1-segmentation-tools/README.md) and [OBU fixtures](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/av1-obu-assembly/README.md) record the actual exercised paths.
+- **AVIF containers and composition**: primary images, auxiliary alpha, and 4:2:0/4:2:2/4:4:4 grids retain native samples until final color/alpha conversion. Animated color and associated alpha tracks have independent reference state and exact timestamp/duration synchronization, including differing track timescales. Item and track `nclx` metadata supplies unspecified AV1 color fields. See the [grid](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/avif-grid-sampling-color/README.md) and [animation-alpha](tests/fixtures/avif-animation-alpha/README.md) references.
 - **AVIF alpha and Playground integration**: static-item and animation-track `prem` relationships produce straight RGBA, retaining the precision needed for high-bit-depth unpremultiplication. Playground main and worker threads decode static and animated AVIF through the MoonBit core. Transparent animation playback and PNG export are verified with browser image decoders disabled. AVIF encoding remains browser-only.
 - **A broad set of filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear/bicubic (Catmull-Rom) resize.
 - **Morphology**: 3×3 erode / dilate / open / close.
@@ -74,7 +74,7 @@ The MoonBit ecosystem already hosts several image packages with overlapping dire
 - **Statistics & tone**: per-channel min/max/mean, auto_contrast, levels
 - **Engineering transparency**: full evolution across 13 releases, bilingual docs, CI end-to-end smoke tests
 
-If you found this library on `mooncakes.io`, you can use it directly with `moon add 0717lee/pixelforge`; we also hope the codec and Playground implementations serve as useful ecosystem references.
+Existing releases on `mooncakes.io` remain available through `moon add 0717lee/pixelforge`. The source after extraction uses the repository's pinned snapshot and has not been published as a new release. The codec and Playground implementations remain available as ecosystem references.
 
 ## 📦 Project layout
 
@@ -139,8 +139,10 @@ pixelforge/
 
 Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
 
+The source includes `vendor/moonav1` and `moon.work`. Run these commands from a complete PixelForge checkout:
+
 ```bash
-moon test              # run the complete unit-test suite
+moon test -p 0717lee/pixelforge # run PixelForge unit tests
 moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
 moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
 moon run --target native cmd/cli -- --help # show the file codec CLI help
@@ -180,7 +182,7 @@ AVIF honors essential `a1op`/`lsel` properties for operating-point and spatial-l
 
 The composition contract is straight RGBA: a static item or animation track marked by `prem` is unpremultiplied before exposing the final image. Independent libavif references cover the separate RGB8 and native-precision rounding paths. Playground uses these bindings with no host AVIF decode fallback; AVIF encoding remains a separate browser-only capability.
 
-Color conversion supports AV1 CICP matrix values 0–14 except reserved value 3, with the required primaries/transfer metadata and field-wise `nclx` completion. RGBA8 preserves source primaries and the source transfer function, uses nearest-neighbor chroma replication, and clips/rounds at final conversion. XYZ primaries (CP 10) explicitly convert linear XYZ to BT.709 D65 RGB and then sRGB. No HDR tone mapping or display-gamut adaptation is applied. The [color reference contract](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/av1-color/README.md) documents exact output comparisons.
+Color conversion supports AV1 CICP matrix values 0–14 except reserved value 3, with the required primaries/transfer metadata and field-wise `nclx` completion. RGBA8 preserves source primaries and the source transfer function, uses nearest-neighbor chroma replication, and clips/rounds at final conversion. XYZ primaries (CP 10) explicitly convert linear XYZ to BT.709 D65 RGB and then sRGB. No HDR tone mapping or display-gamut adaptation is applied. The [color reference contract](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/av1-color/README.md) documents exact output comparisons.
 
 ### Image processing
 
@@ -263,6 +265,7 @@ The core library is fully backend-agnostic. Two host binding packages demonstrat
 Run from the repository root with the MoonBit toolchain and Node.js installed; native tests also require a platform C compiler:
 
 ```sh
+node scripts/vendor-moonav1.mjs --check
 moon check
 moon test --target native
 moon test --target js
@@ -274,27 +277,15 @@ node verify-wasm.mjs
 moon run --target native cmd/cli -- --help
 ```
 
-PixelForge retains its image-processing, other-codec and MoonAV1 facade tests. The 1306 decoder tests and full reference generators now belong to MoonAV1. `node scripts/check-browser-codecs.mjs` still verifies the emitted binding and actual Worker against independent pixels. See [HANDOFF](HANDOFF.md) for the migration and validation commands.
+PixelForge retains its image-processing, other-codec and MoonAV1 facade tests. The migration candidate's 1306 decoder tests are maintained in MoonAV1 and included as embedded tests in the pinned snapshot. Full fixtures and generators remain in the independent library. `node scripts/check-browser-codecs.mjs` still verifies the emitted binding and actual Worker against independent pixels. Run `node scripts/vendor-moonav1.mjs --check` to verify snapshot integrity; see [HANDOFF](HANDOFF.md) for the final validation record.
 
-Ordinary MoonBit tests use committed fixture data and need no external codec tools. Reference generators provide separate portable checks, for example:
+By default, `moon test` covers both workspace modules. The candidate counts total 1548 tests: 1306 in MoonAV1 and 242 in PixelForge. Add `-p 0717lee/pixelforge` when checking only the consumer; a second complete run is unnecessary.
 
-```sh
-python scripts/generate-avif-grid-sampling-color-reference.py --check
-python scripts/generate-avif-animation-alpha-reference.py --check
-python scripts/generate-av1-mainline-reference.py --check --trace-dav1d /path/to/debug/dav1d
-python scripts/generate-av1-color-reference.py --check --libavif /path/to/avif.dll
-```
+Ordinary MoonBit tests need no external codec tools. Reference regeneration belongs to the canonical MoonAV1 library; these generators are not part of PixelForge's snapshot. The [original fixture documentation](https://github.com/0717lee/pixelforge/tree/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures) preserves tool versions, commands and pixel contracts. Full acceptance also includes the combined-tool pixel checks, CLI/Web integration and CI evidence described in the [handoff](HANDOFF.md).
 
-The first two commands verify recorded artifacts without a codec library. The latter two regenerate references in temporary storage; their fixture READMEs list the pinned tools, tracer build and path overrides. None of these `--check` commands writes generated repository files. Full acceptance also requires the combined-tool pixel checks, CLI/Web integration and CI evidence described in the [handoff](HANDOFF.md); the commands above are the verification procedure, not a claim that this implementation round has passed them.
+## 📮 Mooncakes releases
 
-## 📮 Published on mooncakes.io
-
-> The module is `0717lee/pixelforge`. Other MoonBit projects can depend on it with `moon add 0717lee/pixelforge`.
-
-```bash
-moon login             # log in to mooncakes.io
-moon publish           # publish
-```
+The module identifier remains `0717lee/pixelforge`; `moon add 0717lee/pixelforge` retrieves a published release. The source after extraction uses the repository's pinned snapshot and has not been published as a new release. Public hosting and Mooncakes publication of MoonAV1 are separate maintainer decisions.
 
 ## 📄 License
 

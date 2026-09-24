@@ -1,9 +1,13 @@
 # Third-party notices
 
-The AV1/AVIF source files named below are now maintained in the independent
-`0717lee/moonav1` package. These notices remain here because PixelForge's Web
-artifacts include that dependency. Original source history is preserved in
-PixelForge through `6f0c711c54f89d34f3e2ef97cde7a0a45458583d`.
+The AV1/AVIF source files named below are maintained in the local independent
+`0717lee/moonav1` library and distributed here as a fixed source snapshot in
+`vendor/moonav1/`. Source filenames below are relative to that directory;
+reference generators remain in the canonical library and in the original
+PixelForge history. These notices accompany both the snapshot and PixelForge's
+Web artifacts. MoonAV1 has no public repository or Mooncakes release. Original
+source history is preserved in PixelForge through
+`6f0c711c54f89d34f3e2ef97cde7a0a45458583d`.
 
 ## libaom reference algorithms
 

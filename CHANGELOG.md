@@ -7,12 +7,22 @@
 - Moved AV1/AVIF algorithms, 1306 decoder tests and reference-generation tools
   to the independent `0717lee/moonav1` package, extracted from PixelForge
   `6f0c711c54f89d34f3e2ef97cde7a0a45458583d`.
+- MoonAV1 remains a local canonical library with no public repository or
+  Mooncakes release. PixelForge includes a generated `vendor/moonav1` snapshot
+  pinned to a committed source revision and a checked-in `moon.work`; source
+  builds require neither a sibling checkout nor an unpublished registry package.
 - PixelForge retains its public codec facade and `Image` type. Image-returning
   APIs adapt MoonAV1 buffers without copying; filters, CLI and browser callers
   retain their existing entry points. AVIF encoding stays in PixelForge.
-- Decoder reference tests now run in MoonAV1. PixelForge keeps 240 existing
-  image-processing tests plus two facade-boundary regressions, and its actual
-  browser/Worker pixel fixtures and integration checks.
+- Decoder reference tests are maintained in MoonAV1 and embedded in the source
+  snapshot. The migration candidate passed 1306 decoder tests and 242 PixelForge
+  tests per target; the latter retain 240 existing image-processing tests plus
+  two facade-boundary regressions. PixelForge also keeps its browser/Worker
+  pixel fixtures and integration checks. Final snapshot validation is recorded
+  separately in the handoff.
+- Generate snapshot updates with `node scripts/vendor-moonav1.mjs ../moonav1`;
+  `node scripts/vendor-moonav1.mjs --check` verifies the recorded contents offline.
+  Full fixtures and reference generators remain in the canonical library.
 - This is a source migration with preserved Git history. Previous decoder
   implementation and test work below are historical baseline contributions.
 

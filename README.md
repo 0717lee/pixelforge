@@ -4,7 +4,7 @@
 
 [English](README.en.md) | 简体中文
 
-**AVIF/AV1 分库（2026-09-24）**：解码核心迁至独立的 `0717lee/moonav1`；PixelForge 保留公开入口、自己的 `Image` 类型和浏览器/CLI 集成。完整来源和维护边界见 [开发交接](HANDOFF.md)。当前为本地迁移候选，新库发布及远端更新尚待确认。
+**AVIF/AV1 分库（2026-09-24）**：解码核心由本地独立库 `0717lee/moonav1` 维护，尚未创建公开仓库或发布到 Mooncakes。PixelForge 保留历史、公开入口、自己的 `Image` 类型和浏览器/CLI 集成，通过已提交的 `moon.work` 使用随源码提供的 [固定快照](vendor/moonav1/README.md)。构建无需同级 MoonAV1 目录或未发布的 registry 包。来源与维护方式见 [开发交接](HANDOFF.md)。
 
 > 一个纯 [MoonBit](https://www.moonbitlang.cn/) 实现的图像处理库，附带一个在浏览器里实时运行的 Playground。
 > 后端无关的核心库可编译到 **JavaScript / WebAssembly (wasm-gc & 线性内存 wasm) / native**。
@@ -31,7 +31,7 @@
 - **WebP Lossless**：纯 MoonBit VP8L 解码覆盖 LZ77、色彩缓存、空间变化 Huffman 分组，以及 Predictor、Cross-Color、Subtract Green 和 Color Indexing 变换。
 - **AV1 原生重建**：纯 MoonBit 支持 8/10/12-bit、单色与 4:2:0/4:2:2/4:4:4，处理方形/矩形分区、多 superblock、多 tile、完整系数与整数逆变换、方向/SMOOTH/PAETH/filter-intra/CfL/调色板预测、无损和 intrabc。量化矩阵、各项 segmentation feature 与地图继承、逐 SB delta-Q/delta-LF，以及去块、CDEF、superres、Wiener/SGR 和 film grain 已接入原生位深管线。
 - **AV1 帧间与呈现状态**：维护参考像素、运动候选、CDF 和 segment 地图，处理亚像素/缩放参考、compound、wedge、OBMC、局部与全局 warp；装配独立 frame-header/tile-group OBU，并处理隐藏参考帧、show-existing、film-grain 继承和 operating-point 层选择。状态化接口按 temporal unit 返回呈现结果。
-- **AVIF 容器与合成**：公开入口解析主图、`av1C`/`ispe`/`nclx`、数据范围和 alpha 关联，在原生位深组装网格后转换为 RGBA；支持主图与 alpha 的 av01/grid 组合。动画颜色与辅助 alpha 轨道分别保留解码状态，并按时间戳、时长和关联关系合成。具体组合与独立参考见 [验收样本矩阵](https://github.com/0717lee/moonav1/blob/main/HANDOFF.md)。
+- **AVIF 容器与合成**：公开入口解析主图、`av1C`/`ispe`/`nclx`、数据范围和 alpha 关联，在原生位深组装网格后转换为 RGBA；支持主图与 alpha 的 av01/grid 组合。动画颜色与辅助 alpha 轨道分别保留解码状态，并按时间戳、时长和关联关系合成。具体组合与独立参考见 [验收样本矩阵](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/HANDOFF.md)。
 - **AVIF 透明度与浏览器接线**：静态 item 和动画 track 的 `prem` 关系输出统一的 straight RGBA（非预乘），保留高位深反预乘所需精度。Playground 主线程和 Worker 使用纯 MoonBit 核心解码静态/动画 AVIF；透明动画预览与 PNG 导出已在禁用宿主图片解码的浏览器中验证。AVIF 编码仍为浏览器专用。
 - **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
 - **格式探测**：`detect_image_format()` 与 `image_metadata()` 可在不解码像素的情况下识别 PNG/GIF/QOI/BMP/JPEG/WebP/AVIF/TIFF，并读取常见容器的尺寸与 GIF 动画标记。
@@ -74,7 +74,7 @@
 
 颜色转换覆盖 AV1 定义的 CICP 矩阵 0–14（3 为保留值），并让 nclx 补充码流中未指定的颜色字段、保留范围标志。输出采用源 primaries、源 transfer 的非线性 RGB，色度最近邻复制，最后裁剪并舍入为 RGBA8；未指定矩阵 2 使用 BT.601 默认值。XYZ primaries 明确转换为 BT.709/sRGB，不做色适应或 HDR 色调映射。需要 primaries/transfer 的矩阵会验证必要元数据。
 
-[14 个颜色参考样本](https://github.com/0717lee/moonav1/blob/main/tests/fixtures/av1-color/README.md)保留独立原生 YUV 和 RGBA。PQ 样本有四个通道因 zimg 的 float32 运算跨过 8 位舍入边界：测试同时限定其与 zimg 相差不超过 1，并严格核对独立 80 位 H.273 金值；其余通道严格匹配 zimg，不能将该 PQ RGBA 声称为逐字节一致。
+[14 个颜色参考样本](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/tests/fixtures/av1-color/README.md)保留独立原生 YUV 和 RGBA。PQ 样本有四个通道因 zimg 的 float32 运算跨过 8 位舍入边界：测试同时限定其与 zimg 相差不超过 1，并严格核对独立 80 位 H.273 金值；其余通道严格匹配 zimg，不能将该 PQ RGBA 声称为逐字节一致。
 
 ## 🆚 与 MoonBit 生态中其他图像库的关系
 
@@ -96,7 +96,7 @@ MoonBit 生态中已经存在若干方向相近的图像处理包（如 `megemin
 - **图像统计与色调**：逐通道 min/max/mean、auto_contrast、levels 色阶
 - **工程透明度**：13 个版本的完整演进记录、双语文档、CI 端到端冒烟测试
 
-如果您的项目在 `mooncakes.io` 上看到本库，可通过 `moon add 0717lee/pixelforge` 直接使用；也希望本库的编解码器与 Playground 实现能为生态提供参考。
+`mooncakes.io` 上的既有版本可通过 `moon add 0717lee/pixelforge` 使用。本次分库后的源码通过仓库内固定快照构建，尚未作为新版本发布；编解码器与 Playground 实现仍可作为生态参考。
 
 ## 📦 项目结构
 
@@ -160,8 +160,10 @@ pixelforge/
 
 先安装 [MoonBit 工具链](https://www.moonbitlang.cn/download/)。
 
+源码已包含 `vendor/moonav1` 与 `moon.work`。以下命令可直接在完整检出的 PixelForge 根目录运行：
+
 ```bash
-moon test              # 运行完整单元测试套件
+moon test -p 0717lee/pixelforge # 运行 PixelForge 单元测试
 moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
 moon run cmd/showcase > showcase.ppm   # 综合展示：绘图+文字+滤镜+PNG 往返自检
 moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
@@ -267,6 +269,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 ## ✅ 测试
 
 ```sh
+node scripts/vendor-moonav1.mjs --check
 moon check
 moon test --target js
 moon test --target wasm-gc
@@ -278,16 +281,13 @@ node verify-wasm.mjs
 moon run --target native cmd/cli -- --help
 ```
 
-本仓库保留图像处理、其他编解码和 MoonAV1 接入边界测试；1306 项解码测试及完整参考生成器归 MoonAV1。PixelForge 的 `node scripts/check-browser-codecs.mjs` 继续验证发布绑定、主线程与实际 Worker 的独立像素和错误路径；修改后同步 Web 产物。命令和迁移状态见 [HANDOFF](HANDOFF.md)。
+本仓库保留图像处理、其他编解码和 MoonAV1 接入边界测试。迁移候选的 1306 项解码测试由 MoonAV1 维护，并作为内嵌测试随固定快照提供；完整 fixture 与生成器留在独立库。PixelForge 的 `node scripts/check-browser-codecs.mjs` 继续验证发布绑定、主线程与实际 Worker 的独立像素和错误路径；修改后同步 Web 产物。先运行 `node scripts/vendor-moonav1.mjs --check` 校验快照，最终实测记录见 [HANDOFF](HANDOFF.md)。
 
-## 📮 发布到 mooncakes.io
+默认 `moon test` 同时覆盖 workspace 的两个模块；候选测试计数合计为 1548（MoonAV1 1306 + PixelForge 242）。只检查消费者时可加 `-p 0717lee/pixelforge`，不必重复运行完整套件。
 
-> 模块名为 `0717lee/pixelforge`。其他 MoonBit 项目可通过 `moon add 0717lee/pixelforge` 添加依赖。
+## 📮 Mooncakes 版本
 
-```bash
-moon login             # 登录 mooncakes.io
-moon publish           # 发布
-```
+模块名仍为 `0717lee/pixelforge`，`moon add 0717lee/pixelforge` 获取已发布版本。本次分库后的源码依赖仓库内固定快照，尚未发布新版本。MoonAV1 的公开仓库与 Mooncakes 发布由维护者另行决定。
 
 ## 📄 许可证
 

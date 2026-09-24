@@ -7,3 +7,5 @@ tests/fixtures/**/*.rgba binary
 tests/fixtures/**/*.yuv binary
 tests/fixtures/**/*.y4m binary
 tests/fixtures/**/*.f32 binary
+# Vendored files are pinned byte-for-byte to MoonAV1's Git revision.
+vendor/moonav1/** -text
