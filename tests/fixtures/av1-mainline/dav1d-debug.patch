@@ -1,0 +1,24 @@
+--- a/src/recon.h
++++ b/src/recon.h
+@@ -34,4 +34,2 @@
+-#define DEBUG_BLOCK_INFO 0 && \
+-        f->frame_hdr->frame_offset == 2 && t->by >= 0 && t->by < 4 && \
+-        t->bx >= 8 && t->bx < 12
++#define DEBUG_BLOCK_INFO 1
+ #define DEBUG_B_PIXELS 0
+--- a/src/decode.c
++++ b/src/decode.c
+@@ -1116,6 +1116,12 @@
+             printf("Post-segid[postskip;%d]: r=%d\n",
+                    b->seg_id, ts->msac.rng);
+     }
++
++    if (DEBUG_BLOCK_INFO && f->frame_hdr->segmentation.enabled)
++        printf("Mainline-segment[poc=%d,x=%d,y=%d,id=%d,pred=%d,skip=%d,update=%d,temporal=%d]\n",
++               f->frame_hdr->frame_offset, t->bx, t->by, b->seg_id, seg_pred,
++               b->skip, f->frame_hdr->segmentation.update_map,
++               f->frame_hdr->segmentation.temporal);
+-
++
+     // cdef index
+     if (!b->skip) {

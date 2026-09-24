@@ -1,0 +1,1459 @@
+{
+  "provenance": "complete constructed q32 directional syntax, not encoder output or patched entropy",
+  "plan": {
+    "name": "constructed_two_tiles_128_chunks_256x128",
+    "width": 256,
+    "height": 128,
+    "partition": "root128",
+    "leaves": [
+      {
+        "origin": [
+          0,
+          0
+        ],
+        "dimensions": [
+          128,
+          128
+        ],
+        "y_mode": 3,
+        "uv_mode": 7,
+        "y_delta": 0,
+        "uv_delta": -1,
+        "tx": 32,
+        "seed": 0
+      }
+    ],
+    "context_target": {
+      "actual_coding_block": [
+        128,
+        128
+      ],
+      "tile_columns": 2,
+      "luma_tx_origins": [
+        [
+          32,
+          32
+        ],
+        [
+          32,
+          64
+        ]
+      ],
+      "availability": "top-right differs across64 chunks; each tile resets neighbors/CDF"
+    }
+  },
+  "bit_depth": 10,
+  "base_q_idx": 32,
+  "tx_mode": "SELECT",
+  "enable_intra_edge_filter": true,
+  "tiles": [
+    {
+      "tile_index": 0,
+      "blocks": [
+        {
+          "origin": [
+            0,
+            0
+          ],
+          "dimensions": [
+            128,
+            128
+          ],
+          "y_mode": 3,
+          "uv_mode": 7,
+          "y_delta": 0,
+          "uv_delta": -1,
+          "tx": 32,
+          "seed": 0,
+          "has_chroma": true,
+          "y_mode_context": [
+            0,
+            0
+          ],
+          "angle_syntax_present": true,
+          "tx_depth": 1,
+          "tx_depth_context": 0,
+          "transforms": [
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 1,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 10,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 10,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 12,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 12,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "entropy_symbols_checked": 223
+    },
+    {
+      "tile_index": 1,
+      "blocks": [
+        {
+          "origin": [
+            0,
+            0
+          ],
+          "dimensions": [
+            128,
+            128
+          ],
+          "y_mode": 3,
+          "uv_mode": 7,
+          "y_delta": 0,
+          "uv_delta": -1,
+          "tx": 32,
+          "seed": 0,
+          "has_chroma": true,
+          "y_mode_context": [
+            0,
+            0
+          ],
+          "angle_syntax_present": true,
+          "tx_depth": 1,
+          "tx_depth_context": 0,
+          "transforms": [
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 1,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 10,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 10,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                32,
+                0
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                32,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 11,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                64
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                64,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                96,
+                96
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 12,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                32,
+                32
+              ],
+              "size": [
+                32,
+                32
+              ],
+              "all_zero_context": 12,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  32,
+                  1
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "entropy_symbols_checked": 223
+    }
+  ]
+}

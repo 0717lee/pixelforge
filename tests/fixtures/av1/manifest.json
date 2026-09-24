@@ -1,0 +1,868 @@
+{
+  "format": "AV1 low-overhead OBU and AVIF",
+  "dimensions": [
+    64,
+    64
+  ],
+  "pixel_format": "yuv420p",
+  "bit_depth": 8,
+  "encoder": "aomenc libaom usage=allintra (tx-size-search=0)",
+  "generation_command": "python scripts/verify-av1-reference.py --out tests/fixtures/av1",
+  "external_decoder": "ffmpeg libdav1d",
+  "aom_params": "enable-cdef=0:enable-restoration=0:enable-filter-intra=0:enable-intra-edge-filter=0:enable-angle-delta=0:enable-rect-partitions=0:enable-1to4-partitions=0:enable-ab-partitions=0:enable-smooth-intra=0:enable-paeth-intra=0:enable-palette=0:enable-flip-idtx=0:enable-tx64=1:enable-tx-size-search=0:use-intra-default-tx-only=1:min-partition-size=64:max-partition-size=64",
+  "fixtures": [
+    {
+      "name": "dc_zero_q30",
+      "input_yuv": [
+        128,
+        128,
+        128
+      ],
+      "crf": 30,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 120,
+      "tx_mode": 1,
+      "obu_bytes": 18,
+      "obu_sha256": "fb87830cfb8e391ae8ea80939046a751ef6479052aba5b589f2c67dc9979f691",
+      "obu_hex": "12000a0618157ffe0008320617800000402e",
+      "avif_bytes": 305,
+      "avif_sha256": "0b3448b950c86e099d0195a5b5a848f7357478a6e9d3f3d31e7641c2eae6c695",
+      "decoded": {
+        "y": {
+          "sha256": "78aacbc3fb34efb8ffa5467b931291ec2bdf5e19564fc45fe97b5affbc893dc6",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "u": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "v": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "y_row": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ],
+        "rgba_sha256": "eaad129d6c3eacc354a609e26599fabbb5b31ab005b30ae6530e4820e4823eb8",
+        "rgba_first64_hex": "828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff828282ff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "dc_y_low_q10",
+      "input_yuv": [
+        64,
+        128,
+        128
+      ],
+      "crf": 10,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 40,
+      "tx_mode": 1,
+      "obu_bytes": 22,
+      "obu_sha256": "2cc75f8b39c1083a85a5d0bfeeeab5d8ba9c1a220a098c3a56b77ea3337d6a93",
+      "obu_hex": "12000a0618157ffe0008320a128000004000ebc8e240",
+      "avif_bytes": 309,
+      "avif_sha256": "2284cefc1de6a25bcf90e5f9c00f79ad05853b47ed96719e776ccb7776ef44cc",
+      "decoded": {
+        "y": {
+          "sha256": "e5bdd48d0118bad7f82397c719214633757480391bd2d638e86dcce22723ab0b",
+          "unique": [
+            64
+          ],
+          "first64_hex": "40404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040"
+        },
+        "u": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "v": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "y_row": [
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64
+        ],
+        "rgba_sha256": "3b85797717f19b519ee47d98fe1b8b8348e38e1d56d007216e5fe523b5484273",
+        "rgba_first64_hex": "373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff373737ff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "dc_y_high_q50",
+      "input_yuv": [
+        192,
+        128,
+        128
+      ],
+      "crf": 50,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 200,
+      "tx_mode": 1,
+      "obu_bytes": 21,
+      "obu_sha256": "2c847347c46d8d6be2dad71638ad7cb7baa6cac564f6a948856b1fa793772555",
+      "obu_hex": "12000a0618157ffe000832091c800000400a019988",
+      "avif_bytes": 308,
+      "avif_sha256": "cd6fadf3f87b2f35b962bd8bd72f30de31e60efcdcbfe81877c63ab432dac765",
+      "decoded": {
+        "y": {
+          "sha256": "3ca40172c7e053637f174a27e3b78e90e885a8e2e48f1e28ecb3757b0d99999b",
+          "unique": [
+            192
+          ],
+          "first64_hex": "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+        },
+        "u": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "v": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "y_row": [
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192,
+          192
+        ],
+        "rgba_sha256": "b145682b71b51f4fd0bd0fb5a92c0eb0656af164fa9a57c8400ff662f84f6dc5",
+        "rgba_first64_hex": "ccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccffccccccff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "dc_u_low_q10",
+      "input_yuv": [
+        128,
+        64,
+        128
+      ],
+      "crf": 10,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 40,
+      "tx_mode": 1,
+      "obu_bytes": 22,
+      "obu_sha256": "0d1abd8cac942bb7e8b94937ade7d7398199b6a07b0c0f5e688136f27a168085",
+      "obu_hex": "12000a0618157ffe0008320a12800000402902ea1578",
+      "avif_bytes": 309,
+      "avif_sha256": "d6c275ad96c9779567f67ee88486a94a27b0d7038bf0c2fe3a36cd9770154a19",
+      "decoded": {
+        "y": {
+          "sha256": "78aacbc3fb34efb8ffa5467b931291ec2bdf5e19564fc45fe97b5affbc893dc6",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "u": {
+          "sha256": "3e7844d06a85d26d638db4389cc7fb2fcfa6f0e79b0eaf1decf1a58ca7f89d2b",
+          "unique": [
+            64
+          ],
+          "first64_hex": "40404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040"
+        },
+        "v": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "y_row": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ],
+        "rgba_sha256": "52e8e7671833183a10ff8f61376e5d6821c962689fce81a5e4268605d263e149",
+        "rgba_first64_hex": "829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff829b00ff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "dc_v_high_q30",
+      "input_yuv": [
+        128,
+        128,
+        192
+      ],
+      "crf": 30,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 120,
+      "tx_mode": 1,
+      "obu_bytes": 22,
+      "obu_sha256": "9717918c399c61c357a946f6b5ef38e85018d55121934fff1b17ca108cb14247",
+      "obu_hex": "12000a0618157ffe0008320a17800000402d2c0674c0",
+      "avif_bytes": 309,
+      "avif_sha256": "f95a54d99547bed25f7b3b3612d79f6bf39f5af7ac80c25950b7f37a4708cb18",
+      "decoded": {
+        "y": {
+          "sha256": "78aacbc3fb34efb8ffa5467b931291ec2bdf5e19564fc45fe97b5affbc893dc6",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "u": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "v": {
+          "sha256": "0b7fa45df1eb698006c488019e0f8b4d61f3579749fd3874e643feac049b3c11",
+          "unique": [
+            192
+          ],
+          "first64_hex": "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+        },
+        "y_row": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ],
+        "rgba_sha256": "14f98704cf48e52904b5943951062556a9dcaf709dcec3de8c59615eb7596c7f",
+        "rgba_first64_hex": "e84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ffe84d82ff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "dc_yuv_mixed_q50",
+      "input_yuv": [
+        96,
+        160,
+        64
+      ],
+      "crf": 50,
+      "input_pattern": null,
+      "encoder_extra_options": [],
+      "qidx": 200,
+      "tx_mode": 1,
+      "obu_bytes": 26,
+      "obu_sha256": "c122b32a9ef71cc794a43bc8e85ee2c907af28ca7e29cb417b2a922db62b1541",
+      "obu_hex": "12000a0618157ffe0008320e1c800000400a05ae32eab404dd60",
+      "avif_bytes": 313,
+      "avif_sha256": "634a2bce9cfef16cf3af3ba231e704e85953be152ead5d0c31575497ff3f132a",
+      "decoded": {
+        "y": {
+          "sha256": "bcabdc32fcfaca3fe4b8ecf0cc1ce54f43fc0fc2dd61477d1e09de34d4085298",
+          "unique": [
+            96
+          ],
+          "first64_hex": "60606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060"
+        },
+        "u": {
+          "sha256": "2b1e591826ab75708d32a6ef5edf7fb6ff6222e9e94866d8ca428fa2e47526e4",
+          "unique": [
+            160
+          ],
+          "first64_hex": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+        },
+        "v": {
+          "sha256": "3e7844d06a85d26d638db4389cc7fb2fcfa6f0e79b0eaf1decf1a58ca7f89d2b",
+          "unique": [
+            64
+          ],
+          "first64_hex": "40404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040"
+        },
+        "y_row": [
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96,
+          96
+        ],
+        "rgba_sha256": "b6f992373cd193eb3f16b2e2c25ed9feedae9e7dd0637a8d3a1c9b2f13da995d",
+        "rgba_first64_hex": "00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff00849dff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "ac_y_cosine_q30",
+      "input_yuv": null,
+      "crf": 30,
+      "input_pattern": "round(128 + 10 * cos(pi * (x + 0.5) / 64)); U=V=128",
+      "encoder_extra_options": [
+        "enable-directional-intra=0",
+        "enable-cfl-intra=0",
+        "loopfilter-control=0"
+      ],
+      "qidx": 120,
+      "tx_mode": 1,
+      "obu_bytes": 22,
+      "obu_sha256": "39176d5087d0938e742479152d606ea4d11d7e300ccfe3af78d599793e994f51",
+      "obu_hex": "12000a0618157ffe0008320a45e00000100539a37b80",
+      "avif_bytes": 309,
+      "avif_sha256": "bd82c10060750856eb0b68753bf61c1bdd25212fe64320675623d3fdd6de9ce2",
+      "decoded": {
+        "y": {
+          "sha256": "4028c486ba8734ac3c21c3ea988feffe9ab1ad80cae05ec71a60e3b871667753",
+          "unique": [
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138
+          ],
+          "first64_hex": "8a8a8a8a8a8a8a89898989898888888787878686858585848483838282818180807f7f7e7e7d7d7c7c7c7b7b7a7a797979787878787777777776767676767676"
+        },
+        "u": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "v": {
+          "sha256": "f991acb1e5897fe61be2decbf1d1b41b165ec8c2317284f8e3d8322c4d052e21",
+          "unique": [
+            128
+          ],
+          "first64_hex": "80808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080808080"
+        },
+        "y_row": [
+          138,
+          138,
+          138,
+          138,
+          138,
+          138,
+          138,
+          137,
+          137,
+          137,
+          137,
+          137,
+          136,
+          136,
+          136,
+          135,
+          135,
+          135,
+          134,
+          134,
+          133,
+          133,
+          133,
+          132,
+          132,
+          131,
+          131,
+          130,
+          130,
+          129,
+          129,
+          128,
+          128,
+          127,
+          127,
+          126,
+          126,
+          125,
+          125,
+          124,
+          124,
+          124,
+          123,
+          123,
+          122,
+          122,
+          121,
+          121,
+          121,
+          120,
+          120,
+          120,
+          120,
+          119,
+          119,
+          119,
+          119,
+          118,
+          118,
+          118,
+          118,
+          118,
+          118,
+          118
+        ],
+        "rgba_sha256": "ab3f1b61d73810e913827f4f43df2101cb052655b61f0a467d542e6db971c971",
+        "rgba_first64_hex": "8e8e8eff8e8e8eff8e8e8eff8e8e8eff8e8e8eff8e8e8eff8e8e8eff8c8c8cff8c8c8cff8c8c8cff8c8c8cff8c8c8cff8b8b8bff8b8b8bff8b8b8bff8a8a8aff"
+      },
+      "trace_flags": {
+        "enable_cdef": 0,
+        "enable_restoration": 0,
+        "enable_filter_intra": 0,
+        "enable_intra_edge_filter": 0
+      },
+      "loop_filter_levels": [
+        0,
+        0
+      ]
+    }
+  ]
+}

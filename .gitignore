@@ -9,3 +9,7 @@ _screenshots/
 项目申报书*.md
 申报*.md
 *.pdf
+__pycache__/
+# Decoder reference inputs must also be included when a local exclude hides AVIF.
+!tests/fixtures/**/*.avif
+!tests/fixtures/**/*.avif.yuv

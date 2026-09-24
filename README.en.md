@@ -4,10 +4,14 @@
 
 English | [简体中文](README.md)
 
+[Developer handoff and final acceptance goal (Chinese)](HANDOFF.md)
+
+**AVIF/AV1 status (2026-09-24)**: the complete pure MoonBit decoding mainline is implemented. All 1546 tests pass on native, JavaScript and wasm-gc; independent pixel comparisons, native CLI, Playground main/worker paths and generated artifacts pass local verification. See the [handoff](HANDOFF.md) for scope, color conventions, reproduction commands and the CI record for the corresponding revision.
+
 > An image processing library written in pure [MoonBit](https://www.moonbitlang.com/), with a browser Playground that runs it live.
 > The backend-agnostic core compiles to **JavaScript / WebAssembly (wasm-gc & linear-memory wasm) / native**.
 >
-> **Stable API milestone**: GitHub keeps `v1.0.0` as the stable-release marker; the current MoonBit package is `0.14.0` because mooncakes.io requires a `0.x` major version. Compatibility expectations and breaking changes are documented in the changelog.
+> **Stable API milestone**: GitHub keeps `v1.0.0` as the stable-release marker; the source package version is `0.18.0`, as declared in `moon.mod`. Common decode calls retain their existing forms. `Av1SequenceInfo`, `Av1FrameHeaderInfo` and reference-state records have expanded; code that constructs public records directly must supply the fields in the current [generated interface](pkg.generated.mbti). See the [changelog](CHANGELOG.md) for compatibility changes.
 
 ![PixelForge browser Playground](assets/playground-original.png)
 
@@ -19,6 +23,10 @@ English | [简体中文](README.md)
 
 ## ✨ Features
 
+- **AVIF/AV1 pixel decoding**: pure MoonBit 8/10/12-bit monochrome, 4:2:0, 4:2:2 and 4:4:4 reconstruction, with multiple tiles, intra prediction, palettes, CfL, lossless transforms and intra-block copy (`intrabc`). Quantization matrices cover levels 0–15 and all AV1 transform sizes, with per-plane selection and lossless/transform bypass rules. All eight segmentation features, inherited maps/features, temporal segment prediction, delta-Q and per-superblock delta-LF feed reconstruction and filtering. Native-depth deblocking, CDEF, horizontal super-resolution, Wiener/SGR restoration and film grain share the frame pipeline.
+- **Stateful AV1 sequences**: reference pixels and entropy contexts persist across frames. Motion prediction includes subpixel/reference scaling, temporal motion vectors, OBMC, local/global warps, inter-intra and compound blends, including wedge and dual-reference global warp. Standalone frame-header/tile-group assembly, hidden frames, show-existing, frame IDs, decoder timing and grain-parameter inheritance are integrated. Raw AV1 decoding defaults to operating point 0 and presents its highest spatial layer present in each temporal unit. [Encoder fixtures](tests/fixtures/av1-mainline/README.md), [segmentation references](tests/fixtures/av1-segmentation-tools/README.md) and [OBU fixtures](tests/fixtures/av1-obu-assembly/README.md) record the actual exercised paths.
+- **AVIF containers and composition**: primary images, auxiliary alpha, and 4:2:0/4:2:2/4:4:4 grids retain native samples until final color/alpha conversion. Animated color and associated alpha tracks have independent reference state and exact timestamp/duration synchronization, including differing track timescales. Item and track `nclx` metadata supplies unspecified AV1 color fields. See the [grid](tests/fixtures/avif-grid-sampling-color/README.md) and [animation-alpha](tests/fixtures/avif-animation-alpha/README.md) references.
+- **AVIF alpha and Playground integration**: static-item and animation-track `prem` relationships produce straight RGBA, retaining the precision needed for high-bit-depth unpremultiplication. Playground main and worker threads decode static and animated AVIF through the MoonBit core. Transparent animation playback and PNG export are verified with browser image decoders disabled. AVIF encoding remains browser-only.
 - **A broad set of filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear/bicubic (Catmull-Rom) resize.
 - **Morphology**: 3×3 erode / dilate / open / close.
 - **Image codecs**: PNG (8-bit grayscale, grayscale+alpha, palette, RGB/RGBA and `tRNS`; self-implemented full DEFLATE inflate, adaptive row filters and fixed-Huffman encoding with CRC-32/Adler-32 verification), GIF decoding (variable-width LZW, interlacing, transparency), QOI (complete spec, lossless round trip) and BMP (uncompressed 24/32-bit) — all in pure MoonBit.
@@ -162,6 +170,18 @@ node scripts/build-web.mjs --check   # only verify committed artifacts are curre
 
 ## 🧑‍💻 Library usage
 
+### AV1 and AVIF entry points
+
+Use `av1_decode` for an AV1 image, `avif_decode` for the AVIF primary image, and `avif_decode_rgba` to include auxiliary alpha. `avif_decode_grid_auto` selects the primary grid and its ordered `dimg` cells. For sequences, create an `av1_video_decoder` and pass temporal units to `av1_video_decode_temporal_unit`; it returns one selected presentation per unit, including show-existing, or an empty array for hidden-only input. `av1_video_decode_frame` returns the first presentation while processing all reference updates. `avif_decode_animation` returns all composed frames with their timestamps, durations and timescale; `avif_decode_animation_frame` selects the image at a track timestamp.
+
+AVIF honors essential `a1op`/`lsel` properties for operating-point and spatial-layer selection, and validates `ispe` against the selected presentation dimensions. Primary images, alpha items and grid cells share this selection path; sequence maximum dimensions may exceed the selected image dimensions.
+
+The composition contract is straight RGBA: a static item or animation track marked by `prem` is unpremultiplied before exposing the final image. Independent libavif references cover the separate RGB8 and native-precision rounding paths. Playground uses these bindings with no host AVIF decode fallback; AVIF encoding remains a separate browser-only capability.
+
+Color conversion supports AV1 CICP matrix values 0–14 except reserved value 3, with the required primaries/transfer metadata and field-wise `nclx` completion. RGBA8 preserves source primaries and the source transfer function, uses nearest-neighbor chroma replication, and clips/rounds at final conversion. XYZ primaries (CP 10) explicitly convert linear XYZ to BT.709 D65 RGB and then sRGB. No HDR tone mapping or display-gamut adaptation is applied. The [color reference contract](tests/fixtures/av1-color/README.md) documents exact output comparisons.
+
+### Image processing
+
 ```moonbit
 // Build an image from an RGBA byte buffer (w*h*4)
 let img = @pixelforge.Image::from_bytes(width, height, rgba_bytes)
@@ -238,12 +258,32 @@ The core library is fully backend-agnostic. Two host binding packages demonstrat
 
 ## ✅ Tests
 
-```bash
-moon test                 # default backend (wasm-gc)
-moon test --target js     # js backend
+Run from the repository root with the MoonBit toolchain and Node.js installed; native tests also require a platform C compiler:
+
+```sh
+moon check
+moon test --target native
+moon test --target js
+moon test --target wasm-gc
+node scripts/check-canonicalize-moon-js.mjs
+node scripts/build-web.mjs --check
+node scripts/check-browser-codecs.mjs
+node verify-wasm.mjs
+moon run --target native cmd/cli -- --help
 ```
 
-Tests cover every filter, transform, drawing primitive, blend mode, the font, the analysis algorithms and all four codecs, including malformed inputs and dimension boundaries. Every expected value is derived by hand — impulse responses, flat-field invariance, known edges, histogram remapping, exact encoded byte lengths, lossless round trips, canonical CRC-32/Adler-32 check vectors and hand-assembled DEFLATE and GIF LZW bitstreams — and passes on the wasm-gc, js, and native backends, with GitHub Actions CI.
+Tests cover filters, geometry, drawing, analysis and codecs, including malformed inputs and dimension boundaries. AV1/AVIF fixtures retain independent dav1d/libavif native pixels; native YUV and alpha comparisons require exact equality. The 14 color fixtures also strictly check RGBA against their declared conversion convention. Four PQ channels cross an 8-bit rounding boundary in the float32 zimg reference: those channels must equal the independent 80-digit H.273 result recorded in the [manifest](tests/fixtures/av1-color/manifest.json), and every other channel must match its reference exactly.
+
+Ordinary MoonBit tests use committed fixture data and need no external codec tools. Reference generators provide separate portable checks, for example:
+
+```sh
+python scripts/generate-avif-grid-sampling-color-reference.py --check
+python scripts/generate-avif-animation-alpha-reference.py --check
+python scripts/generate-av1-mainline-reference.py --check --trace-dav1d /path/to/debug/dav1d
+python scripts/generate-av1-color-reference.py --check --libavif /path/to/avif.dll
+```
+
+The first two commands verify recorded artifacts without a codec library. The latter two regenerate references in temporary storage; their fixture READMEs list the pinned tools, tracer build and path overrides. None of these `--check` commands writes generated repository files. Full acceptance also requires the combined-tool pixel checks, CLI/Web integration and CI evidence described in the [handoff](HANDOFF.md); the commands above are the verification procedure, not a claim that this implementation round has passed them.
 
 ## 📮 Published on mooncakes.io
 

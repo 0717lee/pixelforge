@@ -1,0 +1,436 @@
+{
+  "provenance": "complete constructed q32 directional syntax, not encoder output or patched entropy",
+  "plan": {
+    "name": "constructed_top_right_vert_a_16x16",
+    "width": 16,
+    "height": 16,
+    "partition": "vert_a",
+    "leaves": [
+      {
+        "origin": [
+          0,
+          0
+        ],
+        "dimensions": [
+          8,
+          8
+        ],
+        "y_mode": 0,
+        "uv_mode": 0,
+        "y_delta": 0,
+        "uv_delta": 0,
+        "tx": 8,
+        "seed": 0
+      },
+      {
+        "origin": [
+          0,
+          8
+        ],
+        "dimensions": [
+          8,
+          8
+        ],
+        "y_mode": 3,
+        "uv_mode": 3,
+        "y_delta": 0,
+        "uv_delta": 0,
+        "tx": 8,
+        "seed": 2
+      },
+      {
+        "origin": [
+          8,
+          0
+        ],
+        "dimensions": [
+          8,
+          16
+        ],
+        "y_mode": 0,
+        "uv_mode": 0,
+        "y_delta": 0,
+        "uv_delta": 0,
+        "tx": 8,
+        "seed": 1
+      }
+    ],
+    "context_target": {
+      "origin": [
+        0,
+        8
+      ],
+      "availability": "top_right"
+    }
+  },
+  "bit_depth": 10,
+  "base_q_idx": 32,
+  "tx_mode": "SELECT",
+  "enable_intra_edge_filter": true,
+  "tiles": [
+    {
+      "tile_index": 0,
+      "blocks": [
+        {
+          "origin": [
+            0,
+            0
+          ],
+          "dimensions": [
+            8,
+            8
+          ],
+          "y_mode": 0,
+          "uv_mode": 0,
+          "y_delta": 0,
+          "uv_delta": 0,
+          "tx": 8,
+          "seed": 0,
+          "has_chroma": true,
+          "y_mode_context": [
+            0,
+            0
+          ],
+          "angle_syntax_present": true,
+          "tx_depth": 0,
+          "tx_depth_context": 0,
+          "transforms": [
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                8,
+                8
+              ],
+              "all_zero_context": 0,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                4,
+                4
+              ],
+              "all_zero_context": 7,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                0
+              ],
+              "size": [
+                4,
+                4
+              ],
+              "all_zero_context": 7,
+              "dc_sign_context": 0,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  2
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "origin": [
+            0,
+            8
+          ],
+          "dimensions": [
+            8,
+            8
+          ],
+          "y_mode": 3,
+          "uv_mode": 3,
+          "y_delta": 0,
+          "uv_delta": 0,
+          "tx": 8,
+          "seed": 2,
+          "has_chroma": true,
+          "y_mode_context": [
+            0,
+            0
+          ],
+          "angle_syntax_present": true,
+          "tx_depth": 0,
+          "tx_depth_context": 1,
+          "transforms": [
+            {
+              "plane": 0,
+              "origin": [
+                0,
+                8
+              ],
+              "size": [
+                8,
+                8
+              ],
+              "all_zero_context": 0,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  8,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                0,
+                4
+              ],
+              "size": [
+                4,
+                4
+              ],
+              "all_zero_context": 8,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                0,
+                4
+              ],
+              "size": [
+                4,
+                4
+              ],
+              "all_zero_context": 8,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  1
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "origin": [
+            8,
+            0
+          ],
+          "dimensions": [
+            8,
+            16
+          ],
+          "y_mode": 0,
+          "uv_mode": 0,
+          "y_delta": 0,
+          "uv_delta": 0,
+          "tx": 8,
+          "seed": 1,
+          "has_chroma": true,
+          "y_mode_context": [
+            0,
+            0
+          ],
+          "angle_syntax_present": true,
+          "tx_depth": 1,
+          "tx_depth_context": 0,
+          "transforms": [
+            {
+              "plane": 0,
+              "origin": [
+                8,
+                0
+              ],
+              "size": [
+                8,
+                8
+              ],
+              "all_zero_context": 3,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 0,
+              "origin": [
+                8,
+                8
+              ],
+              "size": [
+                8,
+                8
+              ],
+              "all_zero_context": 6,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ]
+              ]
+            },
+            {
+              "plane": 1,
+              "origin": [
+                4,
+                0
+              ],
+              "size": [
+                4,
+                8
+              ],
+              "all_zero_context": 8,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  2
+                ]
+              ]
+            },
+            {
+              "plane": 2,
+              "origin": [
+                4,
+                0
+              ],
+              "size": [
+                4,
+                8
+              ],
+              "all_zero_context": 8,
+              "dc_sign_context": 2,
+              "eob": 3,
+              "positive_quantized_levels": [
+                [
+                  0,
+                  2
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  4,
+                  2
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "entropy_symbols_checked": 109
+    }
+  ]
+}

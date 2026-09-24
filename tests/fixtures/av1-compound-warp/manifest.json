@@ -1,0 +1,33 @@
+{
+  "reference": {
+    "project": "dav1d",
+    "version": "1.2.1",
+    "license": "BSD-2-Clause",
+    "upstream": "https://code.videolan.org/videolan/dav1d/-/tree/1.2.1",
+    "source_sha256": {
+      "src/mc_tmpl.c": "1df9baada94c97028d8c802d0bbd7082d02d3ab221c65259f0d32742c4036197",
+      "src/tables.c": "a602f9d8c59da436ccdeec6afc279a72248d4840d97e5ab42d9ab6170a8374c5",
+      "src/warpmv.c": "db7eab1ea1dc6836ed9a29693ec64d581f8330ccf36eed00d6f6bffd0f4be2d4",
+      "src/wedge.c": "3b694cda4f944ea74db26551bd7f7a1c24ea5c1c06ab27caebf934bd6777de7e"
+    },
+    "function_sha256": {
+      "warp_affine_8x8t_c": "2c64f6fdcb73884b32c4bec54e6996147cb28e02a3eec521ad0b40a410f41271",
+      "avg_c": "e862e6d24a2c56973ef4337738128c59d335c2c5114fff92bb28f55742af2bf2",
+      "w_avg_c": "10cf748363121a2d24dfdd25edf384d78326b54de22198e4539a928f36315880",
+      "mask_c": "609f5db73e298d4895de7171b91a59acf6ac6ce0393d4158c458a379e41f9e15",
+      "w_mask_c": "d2eff9f27864e3cd49dae93bd0436efcf54c773c8d6512e086b108dee921c617",
+      "init_chroma": "77e4c31f60589b5ae0342dc14f5306b2e31271ed41c4bf061ae044fc7b60fe0e"
+    },
+    "notes": "Scalar function bodies are unmodified; the standalone harness supplies typedefs, edge replication, model/plane geometry and output serialization. pixel uses uint16_t for every depth; arithmetic and PREP_BIAS match the 8/10/12-bit kernels."
+  },
+  "artifacts": {
+    "reference.c": "4a8fa06d71274704b740ec2fe9c9fe235d5294d30902f1fc01cce28862329361",
+    "oracle.txt": "7ae7e07f95d8801b1ab8718cf283424cfcd7640a4173ab513c56260e98b585a0",
+    "LICENSE": "f367777fa5c2d6b0672ba08a7f3f98372d9c2c99dd824f145581c0ac1f37c955"
+  },
+  "groups": 216,
+  "sample_count": 39936,
+  "serialization": "oracle.txt decimal row-major samples; test CRC covers signed int32 little endian",
+  "prediction_groups_with_fraction": 54,
+  "prediction_groups_with_overshoot": 54
+}

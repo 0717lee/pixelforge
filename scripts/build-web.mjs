@@ -3,10 +3,11 @@
 // Usage:
 //   node scripts/build-web.mjs          # build MoonBit targets and copy artifacts
 //   node scripts/build-web.mjs --check  # build targets and fail when web/dist is stale
-import { cp, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { canonicalizeMoonJs } from "./canonicalize-moon-js.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const checkOnly = process.argv.includes("--check");
@@ -33,7 +34,12 @@ const artifacts = [
 for (const [source, destination] of artifacts) {
   const sourcePath = path.join(root, source);
   const destinationPath = path.join(root, destination);
-  const sourceBytes = await readFile(sourcePath);
+  const generatedBytes = await readFile(sourcePath);
+  // Moon's Windows/Linux printers use different decimal spellings for the
+  // same IEEE-754 value. Emit one lossless spelling before strict comparison.
+  const sourceBytes = source.endsWith(".js")
+    ? Buffer.from(canonicalizeMoonJs(generatedBytes.toString("utf8")), "utf8")
+    : generatedBytes;
   let destinationBytes;
   try {
     destinationBytes = await readFile(destinationPath);
@@ -48,7 +54,7 @@ for (const [source, destination] of artifacts) {
     console.log(`OK ${destination}`);
   } else {
     await mkdir(path.dirname(destinationPath), { recursive: true });
-    await cp(sourcePath, destinationPath);
-    console.log(`COPIED ${source} -> ${destination}`);
+    await writeFile(destinationPath, sourceBytes);
+    console.log(`WROTE ${source} -> ${destination}`);
   }
 }

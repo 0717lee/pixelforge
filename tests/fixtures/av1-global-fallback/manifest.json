@@ -1,0 +1,94 @@
+{
+  "base": "tests/fixtures/av1-inter/inter_screen_content_64x64.obu",
+  "base_sha256": "68a5baffbb7fa32e65ea8cda22d9c66bc36c64537dcea6c9abf67ead358dbc32",
+  "construction": "controlled uncompressed-header rewrite plus one recorded tile byte change; independently decoded, not original encoder output",
+  "specification": "https://aomediacodec.github.io/av1-spec/#inter-prediction-process",
+  "reference_source": "dav1d 1.2.1 decode.c gmv_warp_allowed and recon_tmpl.c warp_affine/mc selection",
+  "ffmpeg_version": "ffmpeg version 9.0.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+  "dav1d_binary_sha256": "6bca8f72232d7b34d12cd10d101582ed7bad28da676f32e1435b29390a498fd2",
+  "cases": [
+    {
+      "name": "integer_rotzoom_global_residual",
+      "integer": true,
+      "shear_valid": true,
+      "matrix": [
+        0,
+        0,
+        66048,
+        256,
+        -256,
+        66048
+      ],
+      "tile_byte": 0,
+      "value": 47,
+      "plane_crc32": [
+        2638901244,
+        739639731,
+        2875620424,
+        3658946854,
+        739639731,
+        2875620424
+      ]
+    },
+    {
+      "name": "integer_rotzoom_global_skip",
+      "integer": true,
+      "shear_valid": true,
+      "matrix": [
+        0,
+        0,
+        66048,
+        256,
+        -256,
+        66048
+      ],
+      "tile_byte": 0,
+      "value": 156,
+      "plane_crc32": [
+        2638901244,
+        739639731,
+        2875620424,
+        2638901244,
+        739639731,
+        2875620424
+      ]
+    },
+    {
+      "name": "invalid_shear_global_skip",
+      "integer": false,
+      "shear_valid": false,
+      "matrix": [
+        0,
+        0,
+        73726,
+        8190,
+        -8190,
+        73726
+      ],
+      "tile_byte": 2,
+      "xor": 2,
+      "plane_crc32": [
+        2638901244,
+        739639731,
+        2875620424,
+        2005235837,
+        1656587476,
+        3453120315
+      ]
+    }
+  ],
+  "artifacts": {
+    "integer_rotzoom_global_residual.obu": "191fd508118112f238344786c22b6a5045c916ab1cad63303168957549ba09fc",
+    "integer_rotzoom_global_residual.reference.yuv": "09a5985ec38ba804cab627490c88df32973199a98e4ab99c4da0403553923214",
+    "integer_rotzoom_global_residual.blocks.txt": "672e75994a0e527aa40f37072560b0d4b935a3d296de543a6a2ce1e378593d93",
+    "integer_rotzoom_global_residual.headers.txt": "fbaf2398979b8863cc9e7a450e0d851caa96288814d98ff685ecea6f53127935",
+    "integer_rotzoom_global_skip.obu": "096e9c702b5a2dd4ca8142988a5ac67f9c9b22d46c631787d48a0883ee642eaa",
+    "integer_rotzoom_global_skip.reference.yuv": "972b1701ce8d4860dfa6088c53221097634f5cb8b9df70ce688ce275fd05b75d",
+    "integer_rotzoom_global_skip.blocks.txt": "6279b1ef0a28f90808a601fe77961bc64f6aad9e714bef17bf77791481f4ecc2",
+    "integer_rotzoom_global_skip.headers.txt": "fbaf2398979b8863cc9e7a450e0d851caa96288814d98ff685ecea6f53127935",
+    "invalid_shear_global_skip.obu": "143ed6ebae26a26c73260e9cb24f7e182d48f0f2321ac483e43b4d4d2e81d78c",
+    "invalid_shear_global_skip.reference.yuv": "9b22d7449b6db519b66337dcd28810805a839b08d05f4b72727653804651d5fa",
+    "invalid_shear_global_skip.blocks.txt": "1ea4d64beadbb9338acc5dc75abd57914ac7345e5e3bf6ee4ada5563c6cc52a6",
+    "invalid_shear_global_skip.headers.txt": "d3e8b959c999810bc5e957b8d11d5bd4a0a4bbff5843e370fa8a9a80ae53bd94"
+  }
+}

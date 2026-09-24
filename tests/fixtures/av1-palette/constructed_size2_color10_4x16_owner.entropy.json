@@ -1,0 +1,844 @@
+{
+  "scope": "independent MSAC partition/mode/palette/map prefix; only all-zero residual transforms are consumed",
+  "complete": true,
+  "stop": null,
+  "frame_header_bytes": 5,
+  "tile_entropy_sha256": "7b7a5dde17844249d7db7e1dfce9aaafd303f139a4d811cf63cea9be0fdf31d4",
+  "blocks": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 4,
+      "height": 16,
+      "skip": 1,
+      "has_chroma": false,
+      "palette_bsize_context": 0,
+      "y_mode_context": 0,
+      "uv_mode_context": 1,
+      "colors": [
+        [
+          96,
+          897
+        ],
+        [],
+        []
+      ],
+      "y_color_syntax": {
+        "cache": [],
+        "cache_flags": [],
+        "cached_colors": [],
+        "fresh_colors": [
+          96,
+          897
+        ],
+        "delta_bit_widths": [
+          10
+        ]
+      },
+      "u_color_syntax": {},
+      "v_color_syntax": {},
+      "maps": [
+        [
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ]
+        ],
+        []
+      ],
+      "map_syntax": [
+        {
+          "first_index": 0,
+          "context_counts": [
+            18,
+            0,
+            7,
+            38,
+            0
+          ],
+          "rank_counts": [
+            7,
+            56
+          ],
+          "entropy_dimensions": [
+            4,
+            16
+          ],
+          "padded_dimensions": [
+            4,
+            16
+          ]
+        },
+        {}
+      ],
+      "txb_all_zero": [],
+      "residual_complete": true
+    },
+    {
+      "x": 4,
+      "y": 0,
+      "width": 4,
+      "height": 16,
+      "skip": 1,
+      "has_chroma": true,
+      "palette_bsize_context": 0,
+      "y_mode_context": 1,
+      "uv_mode_context": 1,
+      "colors": [
+        [
+          96,
+          897
+        ],
+        [
+          128,
+          849
+        ],
+        [
+          897,
+          96
+        ]
+      ],
+      "y_color_syntax": {
+        "cache": [
+          96,
+          897
+        ],
+        "cache_flags": [
+          1,
+          1
+        ],
+        "cached_colors": [
+          96,
+          897
+        ],
+        "fresh_colors": [],
+        "delta_bit_widths": []
+      },
+      "u_color_syntax": {
+        "cache": [],
+        "cache_flags": [],
+        "cached_colors": [],
+        "fresh_colors": [
+          128,
+          849
+        ],
+        "delta_bit_widths": [
+          10
+        ]
+      },
+      "v_color_syntax": {
+        "delta_mode": false
+      },
+      "maps": [
+        [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ]
+      ],
+      "map_syntax": [
+        {
+          "first_index": 1,
+          "context_counts": [
+            18,
+            0,
+            7,
+            38,
+            0
+          ],
+          "rank_counts": [
+            7,
+            56
+          ],
+          "entropy_dimensions": [
+            4,
+            16
+          ],
+          "padded_dimensions": [
+            4,
+            16
+          ]
+        },
+        {
+          "first_index": 1,
+          "context_counts": [
+            10,
+            0,
+            3,
+            18,
+            0
+          ],
+          "rank_counts": [
+            3,
+            28
+          ],
+          "entropy_dimensions": [
+            4,
+            8
+          ],
+          "padded_dimensions": [
+            4,
+            8
+          ]
+        }
+      ],
+      "txb_all_zero": [],
+      "residual_complete": true
+    },
+    {
+      "x": 8,
+      "y": 0,
+      "width": 4,
+      "height": 16,
+      "skip": 1,
+      "has_chroma": false,
+      "palette_bsize_context": 0,
+      "y_mode_context": 1,
+      "uv_mode_context": 1,
+      "colors": [
+        [
+          96,
+          897
+        ],
+        [],
+        []
+      ],
+      "y_color_syntax": {
+        "cache": [
+          96,
+          897
+        ],
+        "cache_flags": [
+          1,
+          1
+        ],
+        "cached_colors": [
+          96,
+          897
+        ],
+        "fresh_colors": [],
+        "delta_bit_widths": []
+      },
+      "u_color_syntax": {},
+      "v_color_syntax": {},
+      "maps": [
+        [
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ]
+        ],
+        []
+      ],
+      "map_syntax": [
+        {
+          "first_index": 0,
+          "context_counts": [
+            18,
+            0,
+            7,
+            38,
+            0
+          ],
+          "rank_counts": [
+            7,
+            56
+          ],
+          "entropy_dimensions": [
+            4,
+            16
+          ],
+          "padded_dimensions": [
+            4,
+            16
+          ]
+        },
+        {}
+      ],
+      "txb_all_zero": [],
+      "residual_complete": true
+    },
+    {
+      "x": 12,
+      "y": 0,
+      "width": 4,
+      "height": 16,
+      "skip": 1,
+      "has_chroma": true,
+      "palette_bsize_context": 0,
+      "y_mode_context": 1,
+      "uv_mode_context": 1,
+      "colors": [
+        [
+          96,
+          897
+        ],
+        [
+          128,
+          849
+        ],
+        [
+          897,
+          96
+        ]
+      ],
+      "y_color_syntax": {
+        "cache": [
+          96,
+          897
+        ],
+        "cache_flags": [
+          1,
+          1
+        ],
+        "cached_colors": [
+          96,
+          897
+        ],
+        "fresh_colors": [],
+        "delta_bit_widths": []
+      },
+      "u_color_syntax": {
+        "cache": [],
+        "cache_flags": [],
+        "cached_colors": [],
+        "fresh_colors": [
+          128,
+          849
+        ],
+        "delta_bit_widths": [
+          10
+        ]
+      },
+      "v_color_syntax": {
+        "delta_mode": false
+      },
+      "maps": [
+        [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ]
+      ],
+      "map_syntax": [
+        {
+          "first_index": 1,
+          "context_counts": [
+            18,
+            0,
+            7,
+            38,
+            0
+          ],
+          "rank_counts": [
+            7,
+            56
+          ],
+          "entropy_dimensions": [
+            4,
+            16
+          ],
+          "padded_dimensions": [
+            4,
+            16
+          ]
+        },
+        {
+          "first_index": 1,
+          "context_counts": [
+            10,
+            0,
+            3,
+            18,
+            0
+          ],
+          "rank_counts": [
+            3,
+            28
+          ],
+          "entropy_dimensions": [
+            4,
+            8
+          ],
+          "padded_dimensions": [
+            4,
+            8
+          ]
+        }
+      ],
+      "txb_all_zero": [],
+      "residual_complete": true
+    }
+  ],
+  "independent_palette_map_samples_checked_against_native": 384
+}

@@ -1,5 +1,84 @@
 # Changelog
 
+## Unreleased
+
+The pure-MoonBit AV1/AVIF mainline now covers the reconstruction, state and
+composition paths below. Native, JavaScript and wasm-gc each pass 1546 tests.
+Independent pixels, CLI and browser integration are verified; reproducible
+commands and the corresponding CI record are in [HANDOFF.md](HANDOFF.md).
+
+### Decoding and composition
+
+- Added native 8/10/12-bit monochrome, 4:2:0, 4:2:2 and 4:4:4 reconstruction,
+  complete intra/residual transforms and prediction, multi-tile decoding,
+  palette/CfL/intrabc, lossless coding, per-plane quantization and qmatrix.
+- Integrated all segmentation features, map/feature inheritance and temporal
+  prediction, per-superblock delta-Q/delta-LF, deblocking, CDEF, superres,
+  Wiener/SGR restoration and film grain, preserving native plane precision.
+- Integrated inter references, CDF persistence, temporal motion candidates,
+  compound/wedge/skip/interintra, OBMC, scaled references and local/global warp.
+- Added standalone frame-header/tile-group assembly, hidden-frame and
+  show-existing presentation, operating-point layer selection, decoder-model
+  timing syntax and film-grain reference inheritance.
+- Added AVIF primary/alpha grids, independent color and alpha animation-track
+  state, association and timing validation, and item/sample-entry nclx handling.
+- Integrated static-item and animation-track `prem` relationships into straight
+  RGBA output, including native-precision identity/YCgCo rounding and source-XYZ
+  unpremultiplication before color conversion.
+- Routed Playground static/animated AVIF decoding through pure MoonBit core
+  bindings on main and worker threads. Playwright verifies uploads, animated
+  alpha, filters and PNG export with host decoding disabled. AVIF encoding
+  remains browser-only.
+- Added AV1 CICP matrix conversion through ICtCp, with source-primary nonlinear
+  RGB output, nearest chroma replication and explicit XYZ-to-BT.709/sRGB
+  conversion. No display tone mapping or chromatic adaptation is implied.
+
+### Correctness and interfaces
+
+- Corrected frame-context/tile persistence, segment lossless and transform-type
+  decisions, coefficient scans, compound entropy consumption, reference/MV
+  derivation, warp eligibility and chroma geometry. Preserved existing external
+  pixel goldens and the documented nonconforming CDF-inheritance regression.
+- Corrected 24-bit dequantization masking and transform-area scaling, 4:2:2 CDEF
+  direction mapping, superres chroma axes, and signed-overflow traps in SGR
+  statistics. New default-tool combination streams exercise these paths.
+- Added `av1_video_decode_temporal_unit`, returning selected presentations while
+  preserving hidden-frame reference updates. Existing single-image convenience
+  calls return the first presentation.
+- Extended public sequence/frame/reference records and optional color metadata
+  parameters; manual record constructors must follow `pkg.generated.mbti`.
+  `Av1QuantMatrix` exposes independent Y/U/V levels. Existing common image
+  decoding call forms remain available.
+
+### Reference evidence and validation
+
+- Added untouched encoder streams and separately labelled constructed streams,
+  with independent native-plane truth, header/symbol traces and portable
+  regeneration commands. Matrix, transform, motion and filter kernels also have
+  pinned original-C or normative high-precision references.
+- Color fixtures record four PQ float32-zimg rounding-boundary differences.
+  Those channels are asserted against independent 80-digit H.273 results; all
+  remaining channels match zimg exactly, and native YUV comparisons stay exact.
+- Added release-binding/main/worker pixel parity checks to CI, including
+  high-bit-depth premultiplied animations and malformed sequence rejection.
+- Made generated JavaScript reproducible across Windows/Linux decimal printers
+  without changing numeric values; lexical boundary tests and strict artifact
+  byte checks cover the build step. Included AVIF reference inputs previously
+  hidden by local Git excludes so clean checkouts can run pixel verification.
+- Validated AVIF presentation dimensions and essential `a1op`/`lsel` selection:
+  `ispe` describes the selected presentation, not necessarily the sequence
+  maximum. Complete-container references cover primary images and grid cells.
+
+## 0.18.0 (2026-09-09)
+
+- Added a bounded AVIF ISO BMFF primary-item parser with `ftyp`/`meta`,
+  `pitm`, `iinf`/`infe`, `iloc`, `iprp`/`ipco`/`ipma`, `ispe`, `av1C`, `nclx`,
+  and `mdat`/`idat` validation.
+- Added pure MoonBit AV1 OBU framing, reduced-still sequence-header parsing,
+  frame-envelope checks, and a bounded MSAC boolean foundation.
+- The 0.18.0 release stopped before AV1 tile entropy decoding; the unreleased
+  follow-up now covers only the bounded single-tile DC path.
+
 ## 0.17.7 (2026-09-09)
 
 - Added complete pure MoonBit VP8L transform decoding for Predictor,

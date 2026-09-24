@@ -5,7 +5,7 @@
 //   * "wasm" — MoonBit compiled to a linear-memory WebAssembly module; pixels
 //              are bulk-copied into the exported memory via a Uint8Array view.
 import { apply_filter, encode_png, luma_histogram } from "./dist/web.js";
-import { browserCodecKind, decodeBrowserImage } from "./codecs.js";
+import { browserCodecKind, decodeBrowserImage, decodeAVIF } from "./codecs.js";
 
 // Load the genuine-WASM module (no imports required). Fall back to JS if it
 // cannot be loaded for any reason.
@@ -28,6 +28,7 @@ let workerReady = false;
 let workerSeq = 0;
 let renderGeneration = 0;
 let sourceLoadToken = 0;
+const avifJobs = new Map();
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_PIXELS = 16_000_000;
 const MAX_DIMENSION = 8192;
@@ -49,6 +50,8 @@ function disableWorker(message) {
   workerReady = false;
   if (worker) worker.terminate();
   worker = null;
+  for (const job of avifJobs.values()) job.reject(new Error(message));
+  avifJobs.clear();
   if (typeof threadsEl !== "undefined") {
     const workerChip = threadsEl.querySelector('[data-thread="worker"]');
     if (workerChip) workerChip.disabled = true;
@@ -66,6 +69,14 @@ try {
   worker.addEventListener("message", (e) => {
     const payload = e.data || {};
     if (payload.ready) { workerReady = true; return; }
+    if (payload.type === "decode-avif") {
+      const job = avifJobs.get(payload.token);
+      if (!job) return;
+      avifJobs.delete(payload.token);
+      if (payload.error) job.reject(new Error(payload.error));
+      else job.resolve(payload.image);
+      return;
+    }
     const { seq, generation, buffer, ms, w, h, error } = payload;
     if (seq !== workerSeq || generation !== renderGeneration || w !== imgW || h !== imgH) return;
     if (error) {
@@ -108,6 +119,12 @@ let imgW = 0;
 let imgH = 0;
 let animationUrl = null;
 let animationPreviewActive = false;
+let avifAnimation = null;
+let animationRequest = 0;
+let animationStarted = 0;
+let animationIndex = -1;
+const avifFrameCanvas = document.createElement("canvas");
+const avifFrameContext = avifFrameCanvas.getContext("2d");
 // Ordered non-destructive operation stack. Each operation is { id, amount }.
 let activeFilters = [];
 let undoStack = [];
@@ -168,11 +185,49 @@ function pipelineOps() {
 }
 
 function syncAnimationPreview() {
-  if (!animationPreview) return;
-  animationPreview.hidden = !(animationPreviewActive && activeFilters.length === 0);
+  if (animationPreview) animationPreview.hidden = !(animationPreviewActive && activeFilters.length === 0);
+  if (avifAnimation && activeFilters.length === 0) {
+    if (!animationRequest) {
+      animationStarted = performance.now();
+      animationIndex = -1;
+      playAvifFrame(animationStarted);
+    }
+  } else {
+    cancelAnimationFrame(animationRequest);
+    animationRequest = 0;
+  }
+}
+
+function paintAvifFrame(frame) {
+  const pixels = new ImageData(asClamped(frame.data), frame.width, frame.height);
+  if (frame.width === imgW && frame.height === imgH) {
+    ctx.putImageData(pixels, 0, 0);
+  } else {
+    avifFrameCanvas.width = frame.width;
+    avifFrameCanvas.height = frame.height;
+    avifFrameContext.putImageData(pixels, 0, 0);
+    ctx.clearRect(0, 0, imgW, imgH);
+    ctx.drawImage(avifFrameCanvas, 0, 0, imgW, imgH);
+  }
+}
+
+function playAvifFrame(now) {
+  if (!avifAnimation || activeFilters.length) { animationRequest = 0; return; }
+  const frames = avifAnimation.frames;
+  const last = frames[frames.length - 1];
+  const timestamp = ((now - animationStarted) * avifAnimation.timescale / 1000) % (last.timestamp + last.duration);
+  const index = frames.findIndex((frame) => timestamp >= frame.timestamp && timestamp < frame.timestamp + frame.duration);
+  if (index >= 0 && index !== animationIndex) {
+    paintAvifFrame(frames[index]);
+    animationIndex = index;
+  }
+  animationRequest = requestAnimationFrame(playAvifFrame);
 }
 
 function revokeAnimationUrl() {
+  cancelAnimationFrame(animationRequest);
+  animationRequest = 0;
+  avifAnimation = null;
   if (animationUrl) URL.revokeObjectURL(animationUrl);
   animationUrl = null;
   animationPreviewActive = false;
@@ -221,6 +276,11 @@ function drawHistogram() {
 
 function render() {
   if (!originalData) return;
+  if (avifAnimation && activeFilters.length === 0) {
+    syncAnimationPreview();
+    updateStats(0);
+    return;
+  }
   if (threading === "worker" && workerReady) {
     // Copy the source (we still need it) and hand the copy to the worker.
     const copy = new Uint8ClampedArray(originalData.data);
@@ -350,7 +410,7 @@ function renderPipelineList() {
   updateHistoryButtons();
 }
 
-function useImageSource(source) {
+function useImageSource(source, pixels = null) {
   const sw = source.naturalWidth || source.width;
   const sh = source.naturalHeight || source.height;
   if (!sw || !sh || sw > MAX_DIMENSION || sh > MAX_DIMENSION || sw * sh > MAX_PIXELS) {
@@ -362,14 +422,49 @@ function useImageSource(source) {
   imgH = Math.max(1, Math.round(sh * scale));
   canvas.width = imgW;
   canvas.height = imgH;
-  ctx.drawImage(source, 0, 0, imgW, imgH);
-  originalData = ctx.getImageData(0, 0, imgW, imgH);
+  if (pixels && scale === 1) {
+    originalData = new ImageData(asClamped(pixels), imgW, imgH);
+    ctx.putImageData(originalData, 0, 0);
+  } else {
+    ctx.drawImage(source, 0, 0, imgW, imgH);
+    originalData = ctx.getImageData(0, 0, imgW, imgH);
+  }
   dropHint.classList.add("hidden");
   resetControls();
   invalidateWorkerResults();
   setStatus(scale < 1 ? `图片已缩放到 ${imgW} × ${imgH} 用于预览。` : "图片已载入。", scale < 1 ? "info" : "success");
   render();
   return true;
+}
+
+async function decodeAvifFile(file, token) {
+  const declared = String(file.type || "").toLowerCase();
+  if (declared && declared !== "image/avif") throw new TypeError(`expected image/avif, received ${declared}`);
+  if (threading !== "worker" || !workerReady) return decodeAVIF(file);
+  const buffer = await file.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    avifJobs.set(token, { resolve, reject });
+    try {
+      worker.postMessage({ type: "decode-avif", token, buffer }, [buffer]);
+    } catch (error) {
+      avifJobs.delete(token);
+      reject(error);
+    }
+  });
+}
+
+function useAvifPixels(decoded) {
+  for (const frame of decoded.frames) {
+    if (frame.width > MAX_DIMENSION || frame.height > MAX_DIMENSION || frame.width * frame.height > MAX_PIXELS) {
+      throw new Error("图片尺寸超出预览限制");
+    }
+  }
+  const first = decoded.frames[0];
+  avifFrameCanvas.width = first.width;
+  avifFrameCanvas.height = first.height;
+  avifFrameContext.putImageData(new ImageData(asClamped(first.data), first.width, first.height), 0, 0);
+  avifAnimation = decoded.animated ? decoded : null;
+  if (!useImageSource(avifFrameCanvas, first.data)) revokeAnimationUrl();
 }
 
 function loadFile(file) {
@@ -385,6 +480,15 @@ function loadFile(file) {
     return;
   }
   revokeAnimationUrl();
+  if (browserCodec === "avif") {
+    setStatus("AVIF 正在解码…", "info");
+    decodeAvifFile(file, token).then((decoded) => {
+      if (token === sourceLoadToken) useAvifPixels(decoded);
+    }).catch((error) => {
+      if (token === sourceLoadToken) setStatus(`AVIF 无法解码：${error.message || error}`, "error");
+    });
+    return;
+  }
   if (browserCodec) {
     setStatus(`${browserCodec.toUpperCase()} 正在由浏览器原生解码…`, "info");
     decodeBrowserImage(file, browserCodec).then((decoded) => {

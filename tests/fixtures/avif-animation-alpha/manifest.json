@@ -1,0 +1,220 @@
+{
+  "libavif_version": "0.11.1",
+  "codec_versions": "dav1d [dec]:1.2.1, aom [enc/dec]:v3.6.0",
+  "encoder": {
+    "codec": "aom",
+    "threads": 1,
+    "speed": 8,
+    "quantizers": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "timescale": 1000,
+    "durations": [
+      100,
+      200,
+      300
+    ]
+  },
+  "references": [
+    "https://aomediacodec.github.io/av1-avif/#auxiliary-images",
+    "https://aomediacodec.github.io/av1-isobmff/"
+  ],
+  "fixtures": [
+    {
+      "name": "alpha_sequence_8bit",
+      "file": "alpha_sequence_8bit.avif",
+      "depth": 8,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_8bit_swapped_tracks",
+      "file": "alpha_sequence_8bit_swapped_tracks.avif",
+      "depth": 8,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_8bit_alpha_timescale_2000",
+      "file": "alpha_sequence_8bit_alpha_timescale_2000.avif",
+      "depth": 8,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "unassociated_alpha",
+      "file": "unassociated_alpha.avif",
+      "depth": 8,
+      "result": "opaque",
+      "oracle": "actual libavif selects primary color and reports no associated alpha"
+    },
+    {
+      "name": "zero_master_id",
+      "file": "zero_master_id.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "misaligned_alpha_time",
+      "file": "misaligned_alpha_time.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "zero_alpha_duration",
+      "file": "zero_alpha_duration.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "alpha_depth_mismatch",
+      "file": "alpha_depth_mismatch.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "alpha_geometry_mismatch",
+      "file": "alpha_geometry_mismatch.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "truncated_alpha_samples",
+      "file": "truncated_alpha_samples.avif",
+      "depth": 8,
+      "result": "reject",
+      "oracle": "controlled metadata corruption of independently verified sequence; expected rejection is a normative PixelForge contract, not a claim of libavif rejection parity"
+    },
+    {
+      "name": "alpha_sequence_10bit",
+      "file": "alpha_sequence_10bit.avif",
+      "depth": 10,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_10bit_swapped_tracks",
+      "file": "alpha_sequence_10bit_swapped_tracks.avif",
+      "depth": 10,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_10bit_alpha_timescale_2000",
+      "file": "alpha_sequence_10bit_alpha_timescale_2000.avif",
+      "depth": 10,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_12bit",
+      "file": "alpha_sequence_12bit.avif",
+      "depth": 12,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_12bit_swapped_tracks",
+      "file": "alpha_sequence_12bit_swapped_tracks.avif",
+      "depth": 12,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "alpha_sequence_12bit_alpha_timescale_2000",
+      "file": "alpha_sequence_12bit_alpha_timescale_2000.avif",
+      "depth": 12,
+      "result": "rgba",
+      "oracle": "actual libavif 0.11.1 track decoding and scalar RGBA; native alpha exactly equals lossless input"
+    },
+    {
+      "name": "nclx709_color444_alpha_8bit",
+      "file": "nclx709_color444_alpha_8bit.avif",
+      "depth": 8,
+      "result": "rgba",
+      "rgba_prefix": "nclx709_color444_alpha_8bit",
+      "oracle": "actual libavif complete-track scalar RGBA; only sample-entry nclx changed from unspecified to BT709, original AV1 payloads remain untouched"
+    },
+    {
+      "name": "nclx709_color444_alpha_10bit",
+      "file": "nclx709_color444_alpha_10bit.avif",
+      "depth": 10,
+      "result": "rgba",
+      "rgba_prefix": "nclx709_color444_alpha_10bit",
+      "oracle": "actual libavif complete-track scalar RGBA; only sample-entry nclx changed from unspecified to BT709, original AV1 payloads remain untouched"
+    },
+    {
+      "name": "nclx709_color444_alpha_12bit",
+      "file": "nclx709_color444_alpha_12bit.avif",
+      "depth": 12,
+      "result": "rgba",
+      "rgba_prefix": "nclx709_color444_alpha_12bit",
+      "oracle": "actual libavif complete-track scalar RGBA; only sample-entry nclx changed from unspecified to BT709, original AV1 payloads remain untouched"
+    }
+  ],
+  "artifacts": {
+    "alpha_sequence_8bit_frame0.rgba": "edfe4682a329065ff5f50be080cbaa24f42453eec2397079c39d0c298c23bdb0",
+    "alpha_sequence_8bit_frame0.alpha.bin": "5d0bcfb407a23c455cb2a9f268b6d62f34845d802f0619c1af685a7f983459b4",
+    "alpha_sequence_8bit_frame1.rgba": "994de435d27cfd6deb6315d5d3be89ed04df8be593652dbe81e0d5d67334a875",
+    "alpha_sequence_8bit_frame1.alpha.bin": "26f0cc34bd1d396e409ddeb147b30ff0886d92a9d4a9bc61b296d8fd6924950d",
+    "alpha_sequence_8bit_frame2.rgba": "c698bb17b82892024fe2e84bb2fe3f0c0f23b4ad7b8fd0a4572e77b12d0a0242",
+    "alpha_sequence_8bit_frame2.alpha.bin": "2003c335501daf3cc00d1f425f88e5e151bf6315edab578c60440083b6871d29",
+    "alpha_sequence_8bit.avif": "a1bd62311a7502be1ddf8cf5454368b2cc15acdf55b419e0b18c7a57a2885f33",
+    "alpha_sequence_8bit_swapped_tracks.avif": "d8471ddc87edf5534708e7f176fad96f20e9c2aacb65517cab6a4a018f240714",
+    "alpha_sequence_8bit_alpha_timescale_2000.avif": "b702d3e9cfe0325e89379d92d7c02741973c25fa9597ad4e739944d3bd061ee3",
+    "unassociated_alpha.avif": "1bf59b500f1c96f23f996280813428ba0fa48b556d7d5c61b55f1fd1da5af110",
+    "zero_master_id.avif": "7b3fc8f47fdfe308ea5f96f9e9438b1e1fe87bd8740e22a6e7a094d16281222d",
+    "misaligned_alpha_time.avif": "bace5301af38895a92230de6877a8a71081beb8aa1a65b3cf29b75c33588b03e",
+    "zero_alpha_duration.avif": "d7304f49563e26634e5d9d3464d41faa446e5183889f9bf02148a0a94ab7a547",
+    "alpha_depth_mismatch.avif": "fd2693bc5791982c3c7169dd8577f6b2392e80a1a650e19f6c0b15a7ea44efc2",
+    "alpha_geometry_mismatch.avif": "c7c2989d0ac910681f6027444b9ebf062249f57628862c9aabe40260fd4d3131",
+    "truncated_alpha_samples.avif": "e976fbd3761c25e7ce2fe8d2f97aaf9b23a2f9ffba85914254201dacd1125d40",
+    "alpha_sequence_10bit_frame0.rgba": "76b30db5dec73cf7772d7f92e0ec45c8212938524602a4e61b4950c6b8981c74",
+    "alpha_sequence_10bit_frame0.alpha.bin": "76703af98290ffe9e70269252f2e52152bbb5e23c55095dd20510708627d4452",
+    "alpha_sequence_10bit_frame1.rgba": "fea27a21b1f4ed0576818a4f1ba8f7954a3c78be2b456059071d867acec250f3",
+    "alpha_sequence_10bit_frame1.alpha.bin": "590587fedff88e13072af4ac75d5df5ae5848e0b1a6d16d1caf43932190e52a4",
+    "alpha_sequence_10bit_frame2.rgba": "a7c690fd682b5c8224bf8ad61fb749634cb2dc0692ca52a3ff7035bc0cb86bf2",
+    "alpha_sequence_10bit_frame2.alpha.bin": "8478526b8a121da7fd4a14fa727a05b766b99b7a6f6f9e6ec82bf076cba87f76",
+    "alpha_sequence_10bit.avif": "86402b72aeeea9602b9d308c682e0f9584ba98cd7abaf0ee534a55500d3763cc",
+    "alpha_sequence_10bit_swapped_tracks.avif": "407e64a9a5bf257d303b45624e5b0e3eb26764c22a6eb21a3898e2f294ba5996",
+    "alpha_sequence_10bit_alpha_timescale_2000.avif": "a5aa39313db610f23e59a9a02b29617881142b4ca62ce86690fac7659f0f76e4",
+    "alpha_sequence_12bit_frame0.rgba": "4edf6a27023015d76d006bb8192d9078d1dd12d5a478a2806e82f5ca36b260ac",
+    "alpha_sequence_12bit_frame0.alpha.bin": "28977a74461c85d18bb9bb0f41947c232bca2d3b88ab9aa379394d73a599692e",
+    "alpha_sequence_12bit_frame1.rgba": "dc832442e527bf431794c3455b59110f0e0e63406eb5260e68f7fc87bf224ddd",
+    "alpha_sequence_12bit_frame1.alpha.bin": "b7c50b6e2e52a9c9c8669b4b70588ff5e1aa7c33bdf849999d7289c7f8d375ad",
+    "alpha_sequence_12bit_frame2.rgba": "fc9b8945d47568004655ef934e5840076315eb83a18a06f19ee35d174c8aec9b",
+    "alpha_sequence_12bit_frame2.alpha.bin": "02735fb740fca4c9a95350ca3ef9c94b006eac3647a6931c3a3bb0cbca38f4ce",
+    "alpha_sequence_12bit.avif": "2ef5fbcbec24d20963bc87726e5f8ae2c2f94095c9ab4c8114073daf9d1e52ff",
+    "alpha_sequence_12bit_swapped_tracks.avif": "26e0bdba6a6348b9ba4488291bfd85a719e1bfd5c976d7436440c73cb6d3e195",
+    "alpha_sequence_12bit_alpha_timescale_2000.avif": "343773bf5101c31132e2287a4873a71fd0b056108c6e3d0c307e9446c952d663",
+    "nclx709_color444_alpha_8bit.avif": "6df8677b0a973f1fbde647caea10bf2ac7ac03d2536c925db053615c5deb00d8",
+    "nclx709_color444_alpha_8bit_frame0.rgba": "5390d84247f1c661ffd2a0acda06e95340fe9f086bf0eee1435bb068eca8dc77",
+    "nclx709_color444_alpha_8bit_frame0.alpha.bin": "5d0bcfb407a23c455cb2a9f268b6d62f34845d802f0619c1af685a7f983459b4",
+    "nclx709_color444_alpha_8bit_frame1.rgba": "7eda5ce456e4da7be15960aa41c051b7ada5321446f02df68d4d6a438a5de3c3",
+    "nclx709_color444_alpha_8bit_frame1.alpha.bin": "26f0cc34bd1d396e409ddeb147b30ff0886d92a9d4a9bc61b296d8fd6924950d",
+    "nclx709_color444_alpha_8bit_frame2.rgba": "291461df4110ccfe7f3573c9a725ff52e7572e7138f52921267ba92540c7bc55",
+    "nclx709_color444_alpha_8bit_frame2.alpha.bin": "2003c335501daf3cc00d1f425f88e5e151bf6315edab578c60440083b6871d29",
+    "nclx709_color444_alpha_10bit.avif": "011c10aa266c6337667fae42fe25240329e61bd56c728deec2f7ac896369474a",
+    "nclx709_color444_alpha_10bit_frame0.rgba": "9f973275a6feb25fd595dfdb894ec92624751010384cfaa53256d43f3b3eb919",
+    "nclx709_color444_alpha_10bit_frame0.alpha.bin": "76703af98290ffe9e70269252f2e52152bbb5e23c55095dd20510708627d4452",
+    "nclx709_color444_alpha_10bit_frame1.rgba": "f5a8aa9b40072fb9ff9611433b146b0980dcc3b491cae4d1db3bed7dd2d482fe",
+    "nclx709_color444_alpha_10bit_frame1.alpha.bin": "590587fedff88e13072af4ac75d5df5ae5848e0b1a6d16d1caf43932190e52a4",
+    "nclx709_color444_alpha_10bit_frame2.rgba": "35d9a5f50897be7dca020b06cf4f8d5262707a48c550338203b4310e11f869ed",
+    "nclx709_color444_alpha_10bit_frame2.alpha.bin": "8478526b8a121da7fd4a14fa727a05b766b99b7a6f6f9e6ec82bf076cba87f76",
+    "nclx709_color444_alpha_12bit.avif": "8efb0fc58ebd4d2dec5623b4fb2048e226464a605f21a78b727aa52033b1d015",
+    "nclx709_color444_alpha_12bit_frame0.rgba": "39e7e901bbc6fd73b26e890d4d649177d940f57354322d2cfdd8284ccadd1783",
+    "nclx709_color444_alpha_12bit_frame0.alpha.bin": "28977a74461c85d18bb9bb0f41947c232bca2d3b88ab9aa379394d73a599692e",
+    "nclx709_color444_alpha_12bit_frame1.rgba": "6cf179bc92133b7a21c7a7c9edbc146400c9c7978c0a5cdd7284dcd14ece65b0",
+    "nclx709_color444_alpha_12bit_frame1.alpha.bin": "b7c50b6e2e52a9c9c8669b4b70588ff5e1aa7c33bdf849999d7289c7f8d375ad",
+    "nclx709_color444_alpha_12bit_frame2.rgba": "fd3f9ed6e41beb45ab6d31b0a31894c16d10076919b4d09952deeee098dfdceb",
+    "nclx709_color444_alpha_12bit_frame2.alpha.bin": "02735fb740fca4c9a95350ca3ef9c94b006eac3647a6931c3a3bb0cbca38f4ce"
+  }
+}

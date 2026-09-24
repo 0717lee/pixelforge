@@ -1,0 +1,17 @@
+poc=0,y=0,x=0,bl=1,ctx=0,bp=0: r=40248
+Post-skip[0]: r=38910
+Post-cdef_idx[0]: r=38910
+Post-ymode[12]: r=42336
+Post-uvmode[12]: r=41588
+Post-tx[3]: r=57704
+Post-y-cf-blk[tx=3,txtp=0,eob=15]: r=35848
+Post-y-cf-blk[tx=3,txtp=0,eob=15]: r=48904
+Post-y-cf-blk[tx=3,txtp=0,eob=-1]: r=38780
+Post-y-cf-blk[tx=3,txtp=0,eob=-1]: r=33530
+Post-uv-cf-blk[pl=0,tx=3,txtp=0,eob=119]: r=58888
+Post-uv-cf-blk[pl=1,tx=3,txtp=0,eob=190]: r=53512
+poc=0,y=0,x=0,bl=1,ctx=0,bp=0: r=40248
+Post-skip[1]: r=42816
+Post-intra[0]: r=41670
+Post-ref[6]: r=38758
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=0]: r=45504

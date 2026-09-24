@@ -1,0 +1,6 @@
+poc=1,y=0,x=0,bl=1,ctx=0,bp=0: r=40248
+Post-segid[preskip;0]: r=55488
+Post-skip[1]: r=58880
+Post-ymode[0]: r=36177
+Post-uvmode[0]: r=49980
+Post-tx[4]: r=49980
