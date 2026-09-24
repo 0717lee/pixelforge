@@ -1,4 +1,4 @@
-/// Browser-native AVIF encoder. Decoding runs in the shared MoonBit core.
+/// Browser-native AVIF encoder. The core does not provide AVIF pixel decoding.
 
 ///|
 /// Encodes an RGBA8 image as AVIF using the browser's native encoder.

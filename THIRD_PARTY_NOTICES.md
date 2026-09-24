@@ -1,126 +1,172 @@
 # Third-party notices
 
-## libaom reference algorithms
+PixelForge uses the following dependencies in its retained image-processing,
+codec-adapter and native CLI paths. Their Apache-2.0 license text is available
+in [LICENSE](LICENSE); additional upstream notices are retained below.
 
-The AV1 CfL prediction and probability defaults in `av1_cfl.mbt`, directional
-prediction in `av1_directional_predict.mbt`, and reference-availability tables
-and rules in `av1_intra_edges.mbt`, and the deblocking kernels and traversal in
-`av1_loop_filter.mbt` and `av1_loop_filter_frame.mbt`, and filter-intra prediction
-in `av1_filter_intra.mbt`, and palette syntax and probability tables in
-`av1_palette.mbt` and `av1_palette_index.mbt`, and the horizontal
-super-resolution filter table and scalar convolution in `av1_superres.mbt`,
-and the loop-restoration unit-count rule, configuration validation and grid
-layout in `av1_restoration_config.mbt`
-are transcribed from libaom at revision
-`8e7b6a567df174d795479b92b4ac766d271add73`. The original source is available
-at <https://aomedia.googlesource.com/aom/>. It uses the following BSD 2-Clause
-License and the [Alliance for Open Media Patent License 1.0](https://www.aomedia.org/license/patent).
+| Dependency | Version | Use and upstream source |
+| --- | --- | --- |
+| `mizchi/image` | 0.4.3 | JPEG decode/encode, WebP encode and browser AVIF encoding adapter; [image-mbt](https://github.com/mizchi/image-mbt) |
+| `mizchi/zlib` | 0.4.8 | PNG compression used by the image adapter; [zlib.mbt](https://github.com/mizchi/zlib.mbt) |
+| `moonbitlang/x` | 0.5.1 | Native CLI filesystem access; [moonbitlang/x](https://github.com/moonbitlang/x) |
+| `moonbitlang/core` | 0.10.11+6ff76a5f9 | Standard-library types and image-processing mathematics; [moonbitlang/core](https://github.com/moonbitlang/core) |
 
-Copyright (c) 2016, Alliance for Open Media. All rights reserved.
+The resolved dependency metadata declares Apache-2.0 for each package.
+`moonbitlang/x` filesystem sources retain:
+
+> Copyright 2025 International Digital Economy Academy
+
+The browser AVIF adapter uses host encoding facilities. PixelForge does not
+bundle a native codec binary through that adapter.
+
+## MoonBit core upstream NOTICE
+
+The following is the complete NOTICE distributed with the pinned MoonBit core
+version. It preserves the standard library's attribution and additional math
+licenses alongside generated PixelForge artifacts.
+
+This product includes software developed at
+International Digital Economy Academy (https://www.idea.edu.cn/).
+
+File double/exp.mbt, double/pow_nonjs.mbt is adapted from v8 (https://v8.dev), which is adapted from fdlibm (http://www.netlib.org/fdlibm).
+
+License from fdlibm:
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+Developed at SunSoft, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+
+License from v8:
+The original source code covered by the above license above has been
+modified significantly by Google Inc.
+Copyright 2016, the V8 project authors. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of Google Inc. nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+File random/random.mbt is adapted from Golang's [`math/rand/v2`](https://pkg.go.dev/math/rand/v2) package.
+
+Files `internal/strconv/strconv_eisel_lemire.mbt` and
+`internal/strconv/strconv_eisel_lemire_table.mbt` are adapted from Go 1.26.2's
+`internal/strconv/atofeisel.go` and generated `internal/strconv/pow10tab.go`.
+
+License from Golang:
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+File `float/exp.mbt`, `float/log.mbt`, `double/mod_nonjs.mbt` and `double/scalbn.mbt` is adapted from
+[musl](https://www.musl-libc.org/). Specifically:
+
+- `float/log.mbt` is adapted from `src/math/logf.c`, `src/math/logf_data.h`,
+  and `src/math/logf_data.c`.
+- `float/exp.mbt` is adapted from `src/math/expf.c`, `src/math/exp2f_data.h`,
+  and `src/math/exp2f_data.c`.
+- `double/mod_nonjs.mbt` is adapted from `src/math/fmod.c`.
+- `double/scalbn.mbt` is adapted from `src/math/scalbn.c`.
+- `math/hyperbolic.mbt` is adapted from `src/math/sinh.c`, `src/math/cosh.c`,
+`src/math/tanh.c`, `src/math/asinh.c`, `src/math/acosh.c`, and `src/math/atanh.c`.
+
+`float/log.mbt` and `float/exp.mbt` files are Copyright (c) 2017-2018 Arm Limited and licensed under the MIT
+license.
+
+Here is a copy of MIT license:
+
+Copyright (c) 2017-2018 Arm Limited.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+`double/mod_nonjs.mbt`, `double/scalbn.mbt`, `math/algebraic.mbt`,
+`math/log.mbt` and `math/pow.mbt` are licensed under the following license:
+
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunPro, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+
+Copyright (c) 1992-2026 The FreeBSD Project.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
 are met:
-
 1. Redistributions of source code must retain the above copyright
    notice, this list of conditions and the following disclaimer.
 2. Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in
-   the documentation and/or other materials provided with the
-   distribution.
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-
-## go-av1 reference tables
-
-The AV1 default CDF and quantizer tables in the `av1_*tables.mbt` files,
-including the intra-mode tables and the `Subpel_Filters` interpolation kernels
-in `av1_interp_tables.mbt`, were transcribed from corresponding tables in the
-`github.com/mgvs/go-av1` project. The general sequence and frame-header grammar
-(`av1_parse_sequence_payload`, `av1_parse_frame_prefix`, the reference-list
-derivation and the global-motion sub-exponential coders) and the eight-tap
-subpel motion-compensation kernel in `av1_mc.mbt` follow the same project's
-`header/`, `decode/intermode.go` and `decode/mc.go` algorithms, and its
-`decode/subpel_gen.go` source hash is pinned in the generated table header.
-Correctness is settled against the AV1 specification and dav1d output rather
-than against that implementation, and where the two disagree the specification
-wins. It is distributed under the BSD 2-Clause License:
-
-Copyright (c) 2026, Oleksandr Zhabotynskyi
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice,
-   this list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-
-## dav1d inverse quantization matrices
-
-The AV1 inverse quantization matrix data in `av1_qmatrix_tables.mbt` is
-transcribed from dav1d 1.2.1 `src/qm.c`. Matrix selection and coefficient
-dequantization in `av1_qmatrix.mbt` and `av1_coeff_decode.mbt` follow AV1
-sections 5.9.14 and 7.12.3 and are checked against dav1d's native C code.
-`scripts/generate-av1-qmatrix.py` compiles the original matrix initialization
-functions and the DC quantization-matrix branch from `src/recon_tmpl.c` to
-generate the reference tests. It pins the SHA-256 of all reference sources;
-the generated source retains the original copyright and license notice.
-The SGR arithmetic checks in `av1_sgr_unsigned_reference_wbtest.mbt` are
-generated by `scripts/generate-av1-sgr-reference.py`, compiling the original
-`boxsum3`, `boxsum5`, and `selfguided_filter` routines from
-`src/looprestoration_tmpl.c` and its `src/tables.c` lookup table. Both source
-hashes are pinned; this verifies the unsigned statistics reproduced with
-wide integer products in `av1_restoration_filter.mbt`.
-The original sources are available at
-<https://code.videolan.org/videolan/dav1d/-/tree/1.2.1/src> and
-<https://github.com/videolan/dav1d/tree/1.2.1/src> under the BSD 2-Clause License:
-
-Copyright © 2018, VideoLAN and dav1d authors
-Copyright © 2018-2021, VideoLAN and dav1d authors
-Copyright © 2018, Two Orioles, LLC
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.

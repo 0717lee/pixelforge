@@ -1,4 +1,4 @@
-/// AVIF encoding uses browser codecs; decoding runs in the shared MoonBit core.
+/// AVIF encoding requires browser codecs; the core does not decode AVIF pixels.
 
 ///|
 /// AVIF encoding is unavailable on native and wasm-gc targets.

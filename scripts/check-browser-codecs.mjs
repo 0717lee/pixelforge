@@ -1,153 +1,157 @@
 #!/usr/bin/env node
-// Runtime check against independent libavif RGBA fixtures. No DOM decoder is
-// available: AVIF must use the generated MoonBit binding in both entry points.
+// Check browser API routing and resource ownership with mock native decoders.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { once } from "node:events";
-import { Worker } from "node:worker_threads";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { browserCodecKind, decodeBrowserImage, decodeWebP, decodeAVIF } from "../web/codecs.js";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const binding = await import(pathToFileURL(path.join(root, "web", "dist", "web.js")));
-for (const name of ["decode_avif_rgba", "decode_avif_animation"]) {
-  assert.equal(typeof binding[name], "function", `${name} missing; run node scripts/build-web.mjs first`);
-}
-const codecs = await import(pathToFileURL(path.join(root, "web", "codecs.js")));
-const fixture = (...parts) => readFile(path.join(root, "tests", "fixtures", ...parts));
-const nativeHooks = {
-  createImageBitmap: globalThis.createImageBitmap,
-  Image: globalThis.Image,
-  createObjectURL: URL.createObjectURL,
-};
-let hostCalls = 0;
-const forbidHostDecode = () => { hostCalls++; throw new Error("host AVIF decoder must not be used"); };
-globalThis.createImageBitmap = forbidHostDecode;
-globalThis.Image = forbidHostDecode;
-URL.createObjectURL = forbidHostDecode;
+const nativeHooks = [
+  [globalThis, "createImageBitmap"],
+  [globalThis, "Image"],
+  [URL, "createObjectURL"],
+  [URL, "revokeObjectURL"],
+].map(([host, name]) => ({ host, name, descriptor: Object.getOwnPropertyDescriptor(host, name) }));
 
-const workerModule = pathToFileURL(path.join(root, "web", "worker.js")).href;
-const bootstrap = `
-  import { parentPort } from "node:worker_threads";
-  globalThis.self = { postMessage: (data, transfer) => parentPort.postMessage(data, transfer) };
-  const forbidden = () => { throw new Error("host worker AVIF decode must not be used"); };
-  globalThis.createImageBitmap = forbidden;
-  globalThis.Image = forbidden;
-  URL.createObjectURL = forbidden;
-  parentPort.on("message", data => self.onmessage({ data }));
-  await import(${JSON.stringify(workerModule)});
-`;
-const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(bootstrap)}`), { type: "module" });
-let nextToken = 0;
-async function workerDecode(bytes) {
-  const input = Uint8Array.from(bytes);
-  const token = ++nextToken;
-  const pending = once(worker, "message");
-  worker.postMessage({ type: "decode-avif", token, buffer: input.buffer }, [input.buffer]);
-  const [response] = await pending;
-  assert.equal(response.type, "decode-avif");
-  assert.equal(response.token, token);
-  return response;
+function setHook(host, name, value) {
+  Object.defineProperty(host, name, { configurable: true, writable: true, value });
 }
-function checkPixels(frame, width, height, expected, label) {
-  assert.equal(frame.width, width, `${label} width`);
-  assert.equal(frame.height, height, `${label} height`);
-  assert.deepEqual(Buffer.from(frame.data), expected, `${label} independent RGBA pixels`);
+
+function checkImage(image, kind, source, width, height) {
+  assert.deepEqual(Object.keys(image).sort(), ["close", "height", "kind", "mime", "source", "width"]);
+  assert.equal(image.kind, kind);
+  assert.equal(image.mime, `image/${kind}`);
+  assert.equal(image.source, source);
+  assert.equal(image.width, width);
+  assert.equal(image.height, height);
+  assert.equal(typeof image.close, "function");
+}
+
+function mockImageHost(blob, width, height, fails = false) {
+  const created = [];
+  const revoked = [];
+  const images = [];
+  setHook(globalThis, "createImageBitmap", undefined);
+  setHook(URL, "createObjectURL", (input) => {
+    assert.equal(input, blob);
+    const url = `blob:codec-check/${created.length}`;
+    created.push(url);
+    return url;
+  });
+  setHook(URL, "revokeObjectURL", (url) => revoked.push(url));
+  setHook(globalThis, "Image", class {
+    constructor() {
+      this.naturalWidth = width;
+      this.naturalHeight = height;
+      this.width = 1;
+      this.height = 1;
+      images.push(this);
+    }
+    set src(url) {
+      this.loadedURL = url;
+      queueMicrotask(() => fails ? this.onerror() : this.onload());
+    }
+  });
+  return { created, revoked, images };
 }
 
 try {
-  const [ready] = await once(worker, "message");
-  assert.equal(ready.ready, true);
-  const grids = JSON.parse(await fixture("avif-grid", "manifest.json"));
-  for (const depth of [8, 10, 12]) {
-    const record = grids.fixtures.find((item) => item.name === `mono_1x2_${depth}bit`);
-    assert.ok(record, `missing ${depth}-bit grid fixture`);
-    const bytes = await fixture("avif-grid", record.file);
-    const expected = await fixture("avif-grid", record.scalar_rgba_file);
-    const [width, height] = record.dimensions;
-    checkPixels(binding.decode_avif_rgba(bytes), width, height, expected, `${depth}-bit direct binding`);
-    const main = await codecs.decodeBrowserImage(new Blob([bytes], { type: "image/avif" }), "avif");
-    assert.equal(main.animated, false);
-    assert.equal(main.frames.length, 1);
-    checkPixels(main.frames[0], width, height, expected, `${depth}-bit main adapter`);
-    const response = await workerDecode(bytes);
-    assert.equal(response.error, undefined);
-    checkPixels(response.image.frames[0], width, height, expected, `${depth}-bit worker adapter`);
-  }
+  for (const [kind, decode] of [["webp", decodeWebP], ["avif", decodeAVIF]]) {
+    const mime = `image/${kind}`;
+    const blob = new Blob([Uint8Array.of(0)], { type: mime });
+    const otherKind = kind === "webp" ? "avif" : "webp";
+    assert.equal(browserCodecKind({ type: mime }), kind);
+    assert.equal(browserCodecKind({ type: mime.toUpperCase() }), kind);
+    assert.equal(browserCodecKind({ name: `picture.${kind}` }), kind);
+    assert.equal(browserCodecKind({ name: `PICTURE.${kind.toUpperCase()}` }), kind);
+    assert.equal(browserCodecKind({ name: `picture.${kind}.png` }), null);
 
-  for (const depth of [8, 10, 12]) {
-    const name = `alpha_sequence_${depth}bit`;
-    const bytes = await fixture("avif-animation-alpha", `${name}.avif`);
-    const direct = binding.decode_avif_animation(bytes);
-    const main = await codecs.decodeAVIF(new Blob([bytes], { type: "image/avif" }));
-    const response = await workerDecode(bytes);
-    assert.equal(response.error, undefined);
-    assert.equal(main.animated, true);
-    for (const [label, animation] of [["binding", direct], ["main", main], ["worker", response.image]]) {
-      assert.equal(animation.timescale, 1000, `${depth}-bit ${label} timescale`);
-      assert.equal(animation.frames.length, 3);
-      for (let index = 0; index < 3; index++) {
-        const frame = animation.frames[index];
-        assert.equal(frame.timestamp, [0, 100, 300][index]);
-        assert.equal(frame.duration, [100, 200, 300][index]);
-        const expected = await fixture("avif-animation-alpha", `${name}_frame${index}.rgba`);
-        checkPixels(frame.image || frame, 16, 16, expected, `${depth}-bit ${label} frame ${index}`);
-      }
+    let bitmapCalls = 0;
+    let imageCalls = 0;
+    let urlCalls = 0;
+    let closed = 0;
+    const bitmap = { width: 7, height: 3, close() { closed++; } };
+    setHook(globalThis, "createImageBitmap", async (input) => {
+      bitmapCalls++;
+      assert.equal(input, blob);
+      return bitmap;
+    });
+    setHook(globalThis, "Image", function () { imageCalls++; throw new Error("unexpected Image fallback"); });
+    setHook(URL, "createObjectURL", () => { urlCalls++; throw new Error("unexpected object URL"); });
+
+    // Reject declared MIME conflicts before invoking either host decoder.
+    await assert.rejects(decode(new Blob([], { type: "image/png" })), new RegExp(`expected image/${kind}`));
+    await assert.rejects(decode(new Blob([], { type: `image/${otherKind}` })), new RegExp(`expected image/${kind}`));
+    const conflict = new Blob([], { type: "image/png" });
+    Object.defineProperty(conflict, "name", { value: `picture.${kind}` });
+    await assert.rejects(decodeBrowserImage(conflict), new RegExp(`expected image/${kind}`));
+    assert.equal(bitmapCalls, 0);
+
+    for (const decodeInput of [decode, decodeBrowserImage]) {
+      const image = await decodeInput(blob);
+      checkImage(image, kind, bitmap, 7, 3);
+      assert.equal(closed, bitmapCalls - 1, "bitmap stays open until close()");
+      image.close();
+      assert.equal(closed, bitmapCalls);
     }
-  }
+    const namedBlob = new Blob([Uint8Array.of(0)]);
+    Object.defineProperty(namedBlob, "name", { value: `picture.${kind}` });
+    setHook(globalThis, "createImageBitmap", async (input) => {
+      assert.equal(input, namedBlob);
+      return bitmap;
+    });
+    const namedImage = await decodeBrowserImage(namedBlob);
+    checkImage(namedImage, kind, bitmap, 7, 3);
+    namedImage.close();
 
-  // These independent references distinguish native-depth unpremultiplication
-  // from unpremultiplying already quantized RGBA8, including Float rounding.
-  const premultiplied = JSON.parse(await fixture("avif-premultiplied-alpha", "manifest.json"));
-  for (const name of ["static_matrix0_12bit", "animation_matrix0_12bit", "static_matrix8_10bit", "animation_matrix8_10bit"]) {
-    const record = premultiplied.cases.find((item) => item.name === name);
-    assert.ok(record?.premultiplied, `missing premultiplied fixture ${name}`);
-    assert.ok(record.frames.some((frame) => frame.post8_mismatches > 0), `${name} must distinguish native-depth rounding`);
-    const bytes = await fixture("avif-premultiplied-alpha", record.file);
-    const direct = record.animated ? binding.decode_avif_animation(bytes) : { frames: [binding.decode_avif_rgba(bytes)] };
-    const main = await codecs.decodeAVIF(new Blob([bytes], { type: "image/avif" }));
-    const response = await workerDecode(bytes);
-    assert.equal(response.error, undefined, `${name} worker decode`);
-    assert.equal(main.animated, record.animated);
-    assert.equal(response.image.animated, record.animated);
-    for (const [label, decoded] of [["binding", direct], ["main", main], ["worker", response.image]]) {
-      assert.equal(decoded.frames.length, record.frames.length, `${name} ${label} frame count`);
-      for (const timing of record.frames) {
-        const frame = decoded.frames[timing.index];
-        if (record.animated) {
-          assert.equal(decoded.timescale, timing.timescale, `${name} ${label} timescale`);
-          assert.equal(frame.timestamp, timing.timestamp, `${name} ${label} timestamp`);
-          assert.equal(frame.duration, timing.duration, `${name} ${label} duration`);
-        }
-        const expected = await fixture("avif-premultiplied-alpha", `${record.reference}_frame${timing.index}.rgba`);
-        checkPixels(frame.image || frame, premultiplied.width, premultiplied.height, expected, `${name} ${label} frame ${timing.index}`);
-      }
+    for (const [width, height] of [[0, 3], [7, 0]]) {
+      let emptyClosed = 0;
+      setHook(globalThis, "createImageBitmap", async () => ({ width, height, close() { emptyClosed++; } }));
+      await assert.rejects(decode(blob), /decoder returned an empty image/);
+      assert.equal(emptyClosed, 1, "empty bitmap is released");
     }
+    const failure = new Error(`${kind} host decode failure`);
+    setHook(globalThis, "createImageBitmap", async () => { throw failure; });
+    await assert.rejects(decode(blob), (error) => error === failure);
+    assert.equal(imageCalls, 0, "bitmap failure must not invoke Image");
+    assert.equal(urlCalls, 0, "bitmap path must not create object URLs");
+
+    const success = mockImageHost(blob, 7, 3);
+    const image = await decode(blob);
+    assert.equal(success.images.length, 1);
+    checkImage(image, kind, success.images[0], 7, 3);
+    assert.deepEqual(success.created, ["blob:codec-check/0"]);
+    assert.equal(success.images[0].loadedURL, success.created[0]);
+    assert.deepEqual(success.revoked, [], "object URL stays alive until close()");
+    image.close();
+    assert.deepEqual(success.revoked, success.created);
+
+    for (const [width, height] of [[0, 3], [7, 0]]) {
+      const empty = mockImageHost(blob, width, height);
+      await assert.rejects(decode(blob), /decoder returned an empty image/);
+      assert.equal(empty.created.length, 1);
+      assert.deepEqual(empty.revoked, empty.created, "empty Image releases its object URL");
+    }
+    const rejected = mockImageHost(blob, 7, 3, true);
+    await assert.rejects(decode(blob), /decoder rejected the image/);
+    assert.equal(rejected.created.length, 1);
+    assert.deepEqual(rejected.revoked, rejected.created, "failed Image releases its object URL");
+
+    setHook(globalThis, "Image", undefined);
+    await assert.rejects(decode(blob), /decoding is unavailable in this browser/);
+    assert.equal(rejected.created.length, 1, "unavailable decoder must not create a URL");
+    setHook(globalThis, "Image", function () { throw new Error("unexpected Image construction"); });
+    setHook(URL, "createObjectURL", undefined);
+    await assert.rejects(decode(blob), /decoding is unavailable in this browser/);
   }
 
-  for (const name of ["misaligned_alpha_time", "alpha_depth_mismatch", "truncated_alpha_samples"]) {
-    const bytes = await fixture("avif-animation-alpha", `${name}.avif`);
-    assert.throws(() => codecs.decodeAVIFBytes(bytes), /invalid|unsupported/);
-    const response = await workerDecode(bytes);
-    assert.match(response.error, /invalid|unsupported/);
-    assert.equal(response.image, undefined);
+  for (const value of [null, undefined, {}, { type: "image/png", name: "picture.png" }]) {
+    assert.equal(browserCodecKind(value), null);
   }
-  assert.throws(() => codecs.decodeAVIFBytes(Uint8Array.of(0, 1, 2)), /invalid|unsupported/);
-  await assert.rejects(codecs.decodeAVIF(new Blob([], { type: "image/png" })), /expected image\/avif/);
-  assert.equal(hostCalls, 0, "AVIF used a browser decoder");
-
-  // Preserve the existing WebP bitmap ownership contract.
-  let closed = false;
-  const bitmap = { width: 2, height: 1, close() { closed = true; } };
-  globalThis.createImageBitmap = async () => bitmap;
-  const webp = await codecs.decodeWebP(new Blob([Uint8Array.of(0)], { type: "image/webp" }));
-  assert.equal(webp.source, bitmap);
-  webp.close();
-  assert.equal(closed, true);
-  console.log("OK pure MoonBit AVIF: 8/10/12-bit grids and alpha animations, high-depth premultiplied identity/YCgCo, binding/main/worker pixel parity, invalid sequences rejected; WebP lifecycle preserved");
+  await assert.rejects(decodeBrowserImage(null), /expects a Blob/);
+  await assert.rejects(decodeBrowserImage(new Blob([], { type: "image/png" })), /only accepts WebP or AVIF/);
+  await assert.rejects(decodeBrowserImage(new Blob(), "png"), /only accepts WebP or AVIF/);
+  console.log("OK browser WebP/AVIF: MIME and extension routing, declaration conflicts, bitmap ownership and rejection, Image URL lifecycle, unavailable decoder errors");
 } finally {
-  await worker.terminate();
-  globalThis.createImageBitmap = nativeHooks.createImageBitmap;
-  globalThis.Image = nativeHooks.Image;
-  URL.createObjectURL = nativeHooks.createObjectURL;
+  for (const { host, name, descriptor } of nativeHooks) {
+    if (descriptor) Object.defineProperty(host, name, descriptor);
+    else delete host[name];
+  }
 }

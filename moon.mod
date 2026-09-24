@@ -19,7 +19,7 @@ keywords = [
 
 preferred_target = "wasm-gc"
 
-description = "Pure MoonBit image processing library with filters, morphology, bilateral and color-space operations, affine transforms, drawing primitives with a bitmap font, layer compositing with blend modes, PNG/GIF/QOI/BMP codecs, baseline TIFF decoding, JPEG/WebP adapters, and AV1/AVIF decoding. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
+description = "Pure MoonBit image processing library with filters, morphology, color-space operations, affine transforms, drawing, compositing, PNG/GIF/QOI/BMP codecs, TIFF and lossless WebP decoding, and JPEG/WebP encoding adapters. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
 
 import {
   "moonbitlang/x@0.5.1",

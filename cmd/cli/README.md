@@ -1,16 +1,22 @@
 # PixelForge CLI
 
-`cmd/cli` is a native codec utility. It supports `info` and `convert` for PNG,
-QOI, BMP, GIF, JPEG, WebP, AVIF, and TIFF signatures. JPEG/WebP outputs and
-lossless WebP/TIFF input are available on native. AVIF input uses the pure
-MoonBit decoder, including supported 8/10/12-bit intra images, auxiliary alpha
-and grids. TIFF output is unavailable. `convert` can apply an ordered filter
-pipeline before encoding.
+`cmd/cli` is a native codec utility. It supports pixel decoding for PNG, QOI,
+BMP, GIF, JPEG, WebP, and TIFF. JPEG/WebP outputs and lossless WebP/TIFF input
+are available on native. TIFF output is unavailable. `convert` can apply an
+ordered filter pipeline before encoding.
+
+For AVIF input, `info` reads container metadata without decoding pixels and
+prints `metadata_only=true` alongside the format, dimensions and input size.
+The probe reads the primary item's associated `ispe` dimensions; track-only
+sequences without primary-item dimensions remain unsupported.
+`convert` rejects AVIF input and output. Browser-only AVIF encoding does not
+make it a supported native output format.
 
 The native executable reads and writes files directly:
 
 ```text
 moon run --target native cmd/cli -- info --input input.png
+moon run --target native cmd/cli -- info --input input.avif
 moon run --target native cmd/cli -- convert --from png --to qoi --input input.png --output output.qoi
 moon run --target native cmd/cli -- convert --from png --to png --pipeline grayscale,contrast:1.2 --input input.png --output filtered.png
 ```

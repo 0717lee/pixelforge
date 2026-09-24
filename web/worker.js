@@ -4,7 +4,6 @@
 // buffers travel in and out as transferables, so large images never block
 // the UI and never get structured-clone copied.
 import { apply_filter } from "./dist/web.js";
-import { decodeAVIFBytes } from "./codecs.js";
 
 let wasmInstance = null;
 const MAX_PIXELS = 16_000_000;
@@ -44,20 +43,6 @@ function applyOne(data, w, h, id, amount, engine) {
 // { seq, generation, buffer, w, h, ops: [{ id, amount }], engine } ->
 // { seq, generation, w, h, buffer, ms } (buffer transferred back), or error.
 self.onmessage = (e) => {
-  if (e.data?.type === "decode-avif") {
-    const { token, buffer } = e.data;
-    try {
-      if (!(buffer instanceof ArrayBuffer) || buffer.byteLength > 20 * 1024 * 1024) {
-        throw new Error("AVIF 文件大小无效");
-      }
-      const image = decodeAVIFBytes(new Uint8Array(buffer));
-      const transfers = [...new Set(image.frames.map((frame) => frame.data.buffer))];
-      self.postMessage({ type: "decode-avif", token, image }, transfers);
-    } catch (err) {
-      self.postMessage({ type: "decode-avif", token, error: err?.message || String(err) });
-    }
-    return;
-  }
   const { seq, generation, buffer, w, h, ops, engine } = e.data || {};
   try {
     if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w * h > MAX_PIXELS) {

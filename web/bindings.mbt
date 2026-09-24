@@ -46,17 +46,3 @@ pub fn luma_histogram(
 ) -> FixedArray[Int] {
   @pixelforge.Image::from_bytes(width, height, data).histogram_luma()
 }
-
-///|
-/// Decode the primary image, including auxiliary alpha, through the core.
-pub fn decode_avif_rgba(data : FixedArray[Byte]) -> @pixelforge.Image? {
-  @pixelforge.avif_decode_rgba(Array::makei(data.length(), i => data[i]))
-}
-
-///|
-/// Preserve the core's integer timeline and per-frame RGBA images.
-pub fn decode_avif_animation(
-  data : FixedArray[Byte],
-) -> @pixelforge.AvifAnimationPixels? {
-  @pixelforge.avif_decode_animation(Array::makei(data.length(), i => data[i]))
-}

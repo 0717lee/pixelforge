@@ -34,19 +34,40 @@ fn print_help() -> Unit {
   println("")
   println("Usage:")
   println("  pixelforge info --input PATH")
-  println("  pixelforge convert --from FORMAT --to FORMAT [--pipeline OPS] --input PATH --output PATH")
+  println(
+    "  pixelforge convert --from FORMAT --to FORMAT [--pipeline OPS] --input PATH --output PATH",
+  )
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
   println("")
-  println("Formats: png, qoi, bmp, gif, jpeg, webp, avif, tiff")
-  println("Pipeline ops: grayscale,invert,brightness:N,contrast:N,blur,sharpen,emboss,edges,sobel,sepia,threshold:N,pixelate:N,median,histogram-equalize,flip-horizontal,flip-vertical,posterize:N,gamma:N,vignette:N,scharr,canny:N,otsu,dither-mono")
-  println("File mode writes converted bytes to --output; hex mode prints bytes as hexadecimal.")
+  println("Input pixel formats: png, qoi, bmp, gif, jpeg, webp, tiff")
+  println("Output pixel formats: png, qoi, bmp, gif, jpeg, webp")
+  println(
+    "AVIF is supported by info for metadata only; AVIF pixel conversion is unavailable.",
+  )
+  println(
+    "Pipeline ops: grayscale,invert,brightness:N,contrast:N,blur,sharpen,emboss,edges,sobel,sepia,threshold:N,pixelate:N,median,histogram-equalize,flip-horizontal,flip-vertical,posterize:N,gamma:N,vignette:N,scharr,canny:N,otsu,dither-mono",
+  )
+  println(
+    "File mode writes converted bytes to --output; hex mode prints bytes as hexadecimal.",
+  )
 }
 
 ///|
 fn info(args : Array[String], start : Int) -> Unit {
   let bytes = input_bytes(args, start)
   let format = detect_format(bytes)
+  if format == "avif" {
+    let metadata = @pixelforge.image_metadata(bytes).unwrap_or_else(() => {
+      abort("pixelforge: AVIF container metadata is invalid or unsupported")
+    })
+    println("format=\{format}")
+    println("width=\{metadata.width}")
+    println("height=\{metadata.height}")
+    println("metadata_only=true")
+    println("bytes=\{bytes.length()}")
+    return
+  }
   let image = decode_image(format, bytes)
   println("format=\{format}")
   println("width=\{image.width}")
@@ -85,6 +106,7 @@ fn convert(args : Array[String], start : Int) -> Unit {
   }
 }
 
+///|
 /// Apply the optional comma-separated pipeline. Each operation may include a
 /// numeric argument after `:` (for example `brightness:20,gamma:1.2`).
 fn apply_pipeline_option(
@@ -121,71 +143,109 @@ fn apply_pipeline_option(
   image.apply_pipeline(pipeline)
 }
 
+///|
 fn pipeline_filter(
   name : String,
-  value : Option[String],
+  value : String?,
   token : String,
 ) -> @pixelforge.Filter {
   match name {
-    "grayscale" => no_pipeline_value(name, value, token, @pixelforge.Filter::Grayscale)
-    "invert" => no_pipeline_value(name, value, token, @pixelforge.Filter::Invert)
-    "brightness" => @pixelforge.Filter::Brightness(parse_pipeline_int(value, name, token))
-    "contrast" => @pixelforge.Filter::Contrast(parse_pipeline_double(value, name, token))
+    "grayscale" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Grayscale)
+    "invert" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Invert)
+    "brightness" =>
+      @pixelforge.Filter::Brightness(parse_pipeline_int(value, name, token))
+    "contrast" =>
+      @pixelforge.Filter::Contrast(parse_pipeline_double(value, name, token))
     "blur" => no_pipeline_value(name, value, token, @pixelforge.Filter::Blur)
-    "sharpen" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sharpen)
-    "emboss" => no_pipeline_value(name, value, token, @pixelforge.Filter::Emboss)
+    "sharpen" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Sharpen)
+    "emboss" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Emboss)
     "edges" => no_pipeline_value(name, value, token, @pixelforge.Filter::Edges)
     "sobel" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sobel)
     "sepia" => no_pipeline_value(name, value, token, @pixelforge.Filter::Sepia)
-    "threshold" => @pixelforge.Filter::Threshold(parse_pipeline_int(value, name, token))
-    "pixelate" => @pixelforge.Filter::Pixelate(parse_pipeline_int(value, name, token))
-    "median" => no_pipeline_value(name, value, token, @pixelforge.Filter::Median)
-    "histogram-equalize" => no_pipeline_value(name, value, token, @pixelforge.Filter::HistogramEqualize)
-    "flip-horizontal" => no_pipeline_value(name, value, token, @pixelforge.Filter::FlipHorizontal)
-    "flip-vertical" => no_pipeline_value(name, value, token, @pixelforge.Filter::FlipVertical)
-    "posterize" => @pixelforge.Filter::Posterize(parse_pipeline_int(value, name, token))
-    "gamma" => @pixelforge.Filter::Gamma(parse_pipeline_double(value, name, token))
-    "vignette" => @pixelforge.Filter::Vignette(parse_pipeline_double(value, name, token))
-    "scharr" => no_pipeline_value(name, value, token, @pixelforge.Filter::Scharr)
+    "threshold" =>
+      @pixelforge.Filter::Threshold(parse_pipeline_int(value, name, token))
+    "pixelate" =>
+      @pixelforge.Filter::Pixelate(parse_pipeline_int(value, name, token))
+    "median" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Median)
+    "histogram-equalize" =>
+      no_pipeline_value(
+        name,
+        value,
+        token,
+        @pixelforge.Filter::HistogramEqualize,
+      )
+    "flip-horizontal" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::FlipHorizontal)
+    "flip-vertical" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::FlipVertical)
+    "posterize" =>
+      @pixelforge.Filter::Posterize(parse_pipeline_int(value, name, token))
+    "gamma" =>
+      @pixelforge.Filter::Gamma(parse_pipeline_double(value, name, token))
+    "vignette" =>
+      @pixelforge.Filter::Vignette(parse_pipeline_double(value, name, token))
+    "scharr" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::Scharr)
     "canny" => @pixelforge.Filter::Canny(parse_pipeline_int(value, name, token))
     "otsu" => no_pipeline_value(name, value, token, @pixelforge.Filter::Otsu)
-    "dither-mono" => no_pipeline_value(name, value, token, @pixelforge.Filter::DitherMono)
+    "dither-mono" =>
+      no_pipeline_value(name, value, token, @pixelforge.Filter::DitherMono)
     _ => abort("pixelforge: unknown pipeline operation '\{name}' in '\{token}'")
   }
 }
 
+///|
 fn no_pipeline_value(
   name : String,
-  value : Option[String],
+  value : String?,
   token : String,
   filter : @pixelforge.Filter,
 ) -> @pixelforge.Filter {
   match value {
-    Some(_) => abort("pixelforge: operation '\{name}' does not accept a value in '\{token}'")
+    Some(_) =>
+      abort(
+        "pixelforge: operation '\{name}' does not accept a value in '\{token}'",
+      )
     None => filter
   }
 }
 
-fn parse_pipeline_int(value : Option[String], _name : String, _token : String) -> Int {
+///|
+fn parse_pipeline_int(value : String?, _name : String, _token : String) -> Int {
   let text = match value {
     Some(v) if v != "" => v
-    _ => abort("pixelforge: operation '\{_name}' requires an integer value in '\{_token}'")
+    _ =>
+      abort(
+        "pixelforge: operation '\{_name}' requires an integer value in '\{_token}'",
+      )
   }
-  try @string.parse_int(text) catch {
+  @string.parse_int(text) catch {
     _ => abort("pixelforge: invalid integer in pipeline operation '\{_token}'")
   }
 }
 
-fn parse_pipeline_double(value : Option[String], _name : String, _token : String) -> Double {
+///|
+fn parse_pipeline_double(
+  value : String?,
+  _name : String,
+  _token : String,
+) -> Double {
   let text = match value {
     Some(v) if v != "" => v
-    _ => abort("pixelforge: operation '\{_name}' requires a number in '\{_token}'")
+    _ =>
+      abort("pixelforge: operation '\{_name}' requires a number in '\{_token}'")
   }
-  try @string.parse_double(text) catch {
+  @string.parse_double(text) catch {
     _ => abort("pixelforge: invalid number in pipeline operation '\{_token}'")
   }
 }
 
+///|
 /// Read either a native file path or portable hexadecimal bytes.
 fn input_bytes(args : Array[String], start : Int) -> Array[Byte] {
   if has_option(args, start, "--input") {
@@ -198,6 +258,7 @@ fn input_bytes(args : Array[String], start : Int) -> Array[Byte] {
   }
 }
 
+///|
 fn has_option(args : Array[String], start : Int, name : String) -> Bool {
   let mut i = start
   while i < args.length() {
@@ -209,15 +270,21 @@ fn has_option(args : Array[String], start : Int, name : String) -> Bool {
   false
 }
 
+///|
 fn read_file(path : String) -> Array[Byte] {
-  Bytes::to_array(@fs.read_file_to_bytes(path) catch {
-    @fs.IOError(message) => abort("pixelforge: cannot read '\{path}': \{message}")
-  })
+  Bytes::to_array(
+    @fs.read_file_to_bytes(path) catch {
+      @fs.IOError(message) =>
+        abort("pixelforge: cannot read '\{path}': \{message}")
+    },
+  )
 }
 
+///|
 fn write_file(path : String, bytes : Array[Byte]) -> Unit {
   @fs.write_bytes_to_file(path, Bytes::from_array(bytes)) catch {
-    @fs.IOError(message) => abort("pixelforge: cannot write '\{path}': \{message}")
+    @fs.IOError(message) =>
+      abort("pixelforge: cannot write '\{path}': \{message}")
   }
 }
 
@@ -305,14 +372,33 @@ fn detect_format(bytes : Array[Byte]) -> String {
     "gif"
   } else if bytes.length() >= 2 && bytes[0] == b'\xFF' && bytes[1] == b'\xD8' {
     "jpeg"
-  } else if bytes.length() >= 12 && bytes[0] == b'R' && bytes[1] == b'I' && bytes[2] == b'F' && bytes[3] == b'F' &&
-    bytes[8] == b'W' && bytes[9] == b'E' && bytes[10] == b'B' && bytes[11] == b'P' {
+  } else if bytes.length() >= 12 &&
+    bytes[0] == b'R' &&
+    bytes[1] == b'I' &&
+    bytes[2] == b'F' &&
+    bytes[3] == b'F' &&
+    bytes[8] == b'W' &&
+    bytes[9] == b'E' &&
+    bytes[10] == b'B' &&
+    bytes[11] == b'P' {
     "webp"
-  } else if bytes.length() >= 8 && bytes[4] == b'f' && bytes[5] == b't' && bytes[6] == b'y' && bytes[7] == b'p' {
+  } else if @pixelforge.detect_image_format(bytes) is Some(@pixelforge.Avif) {
     "avif"
   } else if bytes.length() >= 4 &&
-    ((bytes[0] == b'I' && bytes[1] == b'I' && bytes[2] == b'*' && bytes[3] == b'\x00') ||
-      (bytes[0] == b'M' && bytes[1] == b'M' && bytes[2] == b'\x00' && bytes[3] == b'*')) {
+    (
+      (
+        bytes[0] == b'I' &&
+        bytes[1] == b'I' &&
+        bytes[2] == b'*' &&
+        bytes[3] == b'\x00'
+      ) ||
+      (
+        bytes[0] == b'M' &&
+        bytes[1] == b'M' &&
+        bytes[2] == b'\x00' &&
+        bytes[3] == b'*'
+      )
+    ) {
     "tiff"
   } else {
     abort("pixelforge: unknown image signature")
@@ -348,12 +434,14 @@ fn decode_image(format : String, bytes : Array[Byte]) -> @pixelforge.Image {
       })
     "webp" =>
       @pixelforge.webp_decode(bytes).unwrap_or_else(() => {
-        abort("pixelforge: WebP lossless decode failed or uses unsupported transforms")
+        abort(
+          "pixelforge: WebP lossless decode failed or uses unsupported transforms",
+        )
       })
     "avif" =>
-      @pixelforge.avif_decode_rgba(bytes).unwrap_or_else(() => {
-        abort("pixelforge: AVIF decode failed or uses unsupported AV1 features")
-      })
+      abort(
+        "pixelforge: AVIF pixel decoding is not available; use info for container metadata",
+      )
     _ => abort("pixelforge: unsupported input format \{format}")
   }
 }
@@ -367,7 +455,10 @@ fn encode_image(format : String, image : @pixelforge.Image) -> Array[Byte] {
     "gif" => @pixelforge.gif_encode(image)
     "jpeg" => @pixelforge.jpeg_encode(image, 90)
     "webp" => @pixelforge.webp_encode(image)
-    "avif" => @pixelforge.avif_encode(image)
+    "avif" =>
+      abort(
+        "pixelforge: AVIF encoding requires a browser and is unavailable in the CLI",
+      )
     "tiff" => abort("pixelforge: TIFF encoding is not supported")
     _ => abort("pixelforge: unsupported output format {format}")
   }

@@ -55,7 +55,7 @@ jobs:
       - name: Verify committed web artifacts are reproducible
         run: node scripts/build-web.mjs --check
 
-      - name: Verify AVIF browser and worker bindings against independent pixels
+      - name: Verify browser codec adapters
         run: node scripts/check-browser-codecs.mjs
 
       - name: Verify linear-memory WebAssembly integration
