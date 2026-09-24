@@ -22,7 +22,6 @@ preferred_target = "wasm-gc"
 description = "Pure MoonBit image processing library with filters, morphology, bilateral and color-space operations, affine transforms, drawing primitives with a bitmap font, layer compositing with blend modes, PNG/GIF/QOI/BMP codecs, baseline TIFF decoding, JPEG/WebP adapters, and AV1/AVIF decoding. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
 
 import {
-  "0717lee/moonav1@0.1.0",
   "moonbitlang/x@0.5.1",
   "mizchi/image@0.4.3",
 }

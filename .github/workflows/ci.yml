@@ -37,9 +37,6 @@ jobs:
       - name: Resolve registry dependencies
         run: moon update
 
-      - name: Verify pinned MoonAV1 dependency
-        run: node scripts/vendor-moonav1.mjs --check
-
       - name: Type check
         run: moon check
 

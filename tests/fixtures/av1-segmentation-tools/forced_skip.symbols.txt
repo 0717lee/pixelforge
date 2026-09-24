@@ -1,0 +1,4 @@
+poc=1,y=0,x=0,bl=1,ctx=0,bp=0: r=40248
+Post-segid[preskip;0]: r=55488
+Post-intra[0]: r=53896
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=0]: r=53896

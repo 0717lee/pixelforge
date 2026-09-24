@@ -1,0 +1,234 @@
+{
+  "provenance": "complete constructed q32 filter-intra syntax, not encoder output or patched entropy",
+  "plan": {
+    "name": "constructed_filter3_d157_block32_tx16",
+    "mode": 3,
+    "size": 32,
+    "shape": [
+      32,
+      32
+    ],
+    "partition": "none32",
+    "select": true
+  },
+  "bit_depth": 10,
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "dimensions": [
+        32,
+        32
+      ],
+      "block_enum": 9,
+      "skip": false,
+      "has_chroma": true,
+      "y_mode": 0,
+      "uv_mode": 0,
+      "use_filter_intra": true,
+      "filter_mode": 3,
+      "luma_tx_cdf_direction": 6,
+      "tx_depth": 1,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 1
+        },
+        {
+          "plane": 0,
+          "origin": [
+            16,
+            0
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 3
+        },
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            16
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 3
+        },
+        {
+          "plane": 0,
+          "origin": [
+            16,
+            16
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": true,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": true,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 2,
+          "all_zero_context": 6
+        },
+        {
+          "plane": 1,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 7
+        },
+        {
+          "plane": 2,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "filter_intra_applied": false,
+          "tx_type": "DCT_DCT",
+          "tx_type_signaled": false,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              16,
+              2
+            ]
+          ],
+          "dc_sign_context": 0,
+          "all_zero_context": 7
+        }
+      ]
+    }
+  ],
+  "entropy_symbols_checked": 65,
+  "raw_y_mode_remains_dc": true,
+  "transform_cdf_filter_mode_mapping": [
+    0,
+    1,
+    2,
+    6,
+    0
+  ],
+  "uv_filter_intra_syntax": false
+}

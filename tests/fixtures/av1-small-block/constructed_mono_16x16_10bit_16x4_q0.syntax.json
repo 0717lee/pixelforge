@@ -1,0 +1,547 @@
+{
+  "provenance": "complete constructed AV1 syntax, not libaom encoder output",
+  "partition_symbol": 8,
+  "partition_name": "HORZ_4",
+  "target_coding_dimensions": [
+    16,
+    4
+  ],
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            0
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 1,
+          "dc_sign_context": 0,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            4,
+            0
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            0
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            12,
+            0
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        4
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            4
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            4,
+            4
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            4
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            12,
+            4
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        8
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            8
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            4,
+            8
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            8
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            12,
+            8
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        12
+      ],
+      "dimensions": [
+        16,
+        4
+      ],
+      "has_chroma": false,
+      "skip": 0,
+      "y_mode": 0,
+      "uv_mode": null,
+      "cfl_allowed": null,
+      "transforms": [
+        {
+          "plane": 0,
+          "origin": [
+            0,
+            12
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 3,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            4,
+            12
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            8,
+            12
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        },
+        {
+          "plane": 0,
+          "origin": [
+            12,
+            12
+          ],
+          "size": [
+            4,
+            4
+          ],
+          "inverse_transform": "WHT",
+          "all_zero_context": 6,
+          "dc_sign_context": 2,
+          "eob": 3,
+          "positive_quantized_levels": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              2
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "entropy_symbol_count": 153,
+  "entropy_roundtrip": "all emitted symbols checked with MsacDecoder; external dav1d validates syntax semantics",
+  "frame_header_bytes": 2,
+  "tile_payload_bytes": 25
+}

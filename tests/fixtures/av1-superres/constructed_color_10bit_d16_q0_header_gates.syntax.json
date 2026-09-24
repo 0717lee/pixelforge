@@ -1,0 +1,26 @@
+{
+  "provenance": "complete constructed superres/q0 header with unchanged stock libaom tile entropy",
+  "source_obu": "C:\\Users\\\u8c26\u53cbLee\\Desktop\\Project\\mb\\pixelforge\\tests\\fixtures\\av1-small-block\\color_16x16_10bit_fixed4_q0.obu",
+  "source_obu_sha256": "e0d840014928afc419e793356b60190337d048499a3a5fa053fd0b896f66ac1d",
+  "source_tile_sha256": "953251ea87ebd0ba0276ffbafc625e5a30f4ebbf79378485615c3fb95a5586aa",
+  "source_coded_dimensions": [
+    16,
+    16
+  ],
+  "output_dimensions": [
+    32,
+    16
+  ],
+  "superres_denom": 16,
+  "base_q_idx": 0,
+  "allow_screen_content_tools": true,
+  "allow_intrabc_bit_present": false,
+  "coded_lossless": true,
+  "all_lossless": false,
+  "restoration_types": [
+    0,
+    0,
+    0
+  ],
+  "unchanged_entropy_boundary": "only header/sequence synthesized; no entropy bytes modified; independent decoders validate complete result"
+}

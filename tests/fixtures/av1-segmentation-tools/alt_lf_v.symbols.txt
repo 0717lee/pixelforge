@@ -1,0 +1,17 @@
+poc=1,y=0,x=0,bl=1,ctx=0,bp=3: r=51744
+poc=1,y=0,x=0,bl=2,ctx=0,bp=0: r=58370
+Post-segid[preskip;0]: r=40024
+Post-skip[1]: r=42560
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=0]: r=42560
+poc=1,y=0,x=8,bl=2,ctx=0,bp=0: r=49192
+Post-segid[preskip;0]: r=39216
+Post-skip[1]: r=38716
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=1]: r=38716
+poc=1,y=8,x=0,bl=2,ctx=0,bp=0: r=45802
+Post-segid[preskip;0]: r=41408
+Post-skip[1]: r=43478
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=1]: r=43478
+poc=1,y=8,x=8,bl=2,ctx=0,bp=0: r=52578
+Post-segid[preskip;0]: r=44248
+Post-skip[1]: r=37844
+Post-intermode[2,drl=0,mv=y:0,x:0,n_mvs=1]: r=37844

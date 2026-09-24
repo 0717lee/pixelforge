@@ -1,0 +1,625 @@
+{
+  "scope": "complete independent partition/mode/filter/coeff entropy trace",
+  "headers": {
+    "base_q_idx": 120,
+    "tx_mode": 1,
+    "reduced_tx_set": 0,
+    "disable_cdf_update": 0,
+    "mono_chrome": 0,
+    "enable_filter_intra": 1,
+    "enable_cdef": 0,
+    "enable_restoration": 0,
+    "allow_screen_content_tools": 0,
+    "segmentation_enabled": 0,
+    "delta_q_present": 0,
+    "max_frame_width_minus_1": 31,
+    "max_frame_height_minus_1": 31,
+    "tile_cols_log2": 0,
+    "tile_rows_log2": 0
+  },
+  "frame_header_bytes": 5,
+  "partitions": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "size": 32,
+      "context": 0,
+      "symbol": 3
+    },
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        16,
+        0
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        0,
+        16
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        16,
+        16
+      ],
+      "size": 16,
+      "context": 0,
+      "symbol": 3
+    },
+    {
+      "origin": [
+        16,
+        16
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        24,
+        16
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        16,
+        24
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    },
+    {
+      "origin": [
+        24,
+        24
+      ],
+      "size": 8,
+      "context": 0,
+      "symbol": 0
+    }
+  ],
+  "blocks": [
+    {
+      "origin": [
+        0,
+        0
+      ],
+      "coding_dimensions": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 1,
+      "luma_tx_cdf_direction": 1,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 19,
+          "eob_pt": 6,
+          "dc_sign_context": 0,
+          "dc_category": 1,
+          "level_context": 63,
+          "coeff_br_symbols": 13,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 7,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 0,
+          "dc_category": 1,
+          "level_context": 40,
+          "coeff_br_symbols": 6,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 7,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 0,
+          "dc_category": 1,
+          "level_context": 42,
+          "coeff_br_symbols": 7,
+          "golomb_coefficients": 1
+        }
+      ]
+    },
+    {
+      "origin": [
+        16,
+        0
+      ],
+      "coding_dimensions": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 3,
+      "luma_tx_cdf_direction": 6,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 19,
+          "eob_pt": 6,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 63,
+          "coeff_br_symbols": 13,
+          "golomb_coefficients": 2
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 36,
+          "coeff_br_symbols": 8,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 33,
+          "coeff_br_symbols": 7,
+          "golomb_coefficients": 1
+        }
+      ]
+    },
+    {
+      "origin": [
+        0,
+        16
+      ],
+      "coding_dimensions": [
+        16,
+        16
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 0,
+      "luma_tx_cdf_direction": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            16,
+            16
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 19,
+          "eob_pt": 6,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 63,
+          "coeff_br_symbols": 13,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 1,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 32,
+          "coeff_br_symbols": 8,
+          "golomb_coefficients": 1
+        },
+        {
+          "plane": 2,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 8,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 1,
+          "dc_category": 2,
+          "level_context": 30,
+          "coeff_br_symbols": 7,
+          "golomb_coefficients": 1
+        }
+      ]
+    },
+    {
+      "origin": [
+        16,
+        16
+      ],
+      "coding_dimensions": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 0,
+      "luma_tx_cdf_direction": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 8,
+          "eob_pt": 4,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 8,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 2,
+          "eob_pt": 2,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 5,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 2,
+          "eob_pt": 2,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 4,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        24,
+        16
+      ],
+      "coding_dimensions": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 0,
+      "luma_tx_cdf_direction": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 18,
+          "coeff_br_symbols": 4,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 1,
+          "eob_pt": 1,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 1,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 2,
+          "eob_pt": 2,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 2,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        16,
+        24
+      ],
+      "coding_dimensions": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 1,
+      "luma_tx_cdf_direction": 1,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 5,
+          "eob_pt": 4,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 16,
+          "coeff_br_symbols": 4,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 2,
+          "eob_pt": 2,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 3,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 2,
+          "eob_pt": 2,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 3,
+          "coeff_br_symbols": 0,
+          "golomb_coefficients": 0
+        }
+      ]
+    },
+    {
+      "origin": [
+        24,
+        24
+      ],
+      "coding_dimensions": [
+        8,
+        8
+      ],
+      "has_chroma": true,
+      "skip": 0,
+      "y_mode": 0,
+      "y_delta": 0,
+      "uv_mode": 0,
+      "uv_delta": 0,
+      "use_filter_intra": true,
+      "filter_mode": 4,
+      "luma_tx_cdf_direction": 0,
+      "transforms": [
+        {
+          "plane": 0,
+          "size": [
+            8,
+            8
+          ],
+          "all_zero_context": 0,
+          "all_zero": 0,
+          "tx_type_symbol": 1,
+          "tx_type": 0,
+          "eob": 6,
+          "eob_pt": 4,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 6,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 1,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 3,
+          "eob_pt": 3,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 7,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        },
+        {
+          "plane": 2,
+          "size": [
+            4,
+            4
+          ],
+          "all_zero_context": 9,
+          "all_zero": 0,
+          "tx_type": 0,
+          "eob": 3,
+          "eob_pt": 3,
+          "dc_sign_context": 2,
+          "dc_category": 2,
+          "level_context": 8,
+          "coeff_br_symbols": 1,
+          "golomb_coefficients": 0
+        }
+      ]
+    }
+  ],
+  "entropy_end": {
+    "symbols": 520,
+    "physical_bit_position": 696,
+    "symbol_max_bits": -12,
+    "trailing_bit_position": 693,
+    "tile_bits": 696
+  },
+  "filter_blocks": 7
+}

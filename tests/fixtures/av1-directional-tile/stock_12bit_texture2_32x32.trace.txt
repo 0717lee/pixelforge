@@ -1,0 +1,124 @@
+Input #0, obu, from 'C:\Users\璋﹀弸Lee\Desktop\Project\mb\pixelforge\tests\fixtures\av1-directional-tile\stock_12bit_texture2_32x32.obu':
+  Duration: N/A, bitrate: N/A
+  Stream #0:0: Video: av1 (libdav1d) (Professional), yuv420p12le(pc), 32x32 [SAR 1:1 DAR 1:1], 25 fps, 1200k tbr, 1200k tbn
+[trace_headers @ 000002a47645b1c0] Extradata
+[trace_headers @ 000002a47645b1c0] OBU header
+[trace_headers @ 000002a47645b1c0] 0           obu_forbidden_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 1           obu_type                                                 0001 = 1
+[trace_headers @ 000002a47645b1c0] 5           obu_extension_flag                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 6           obu_has_size_field                                          1 = 1
+[trace_headers @ 000002a47645b1c0] 7           obu_reserved_1bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 8           obu_size                                             00000110 = 6
+[trace_headers @ 000002a47645b1c0] Sequence Header
+[trace_headers @ 000002a47645b1c0] 16          seq_profile                                               010 = 2
+[trace_headers @ 000002a47645b1c0] 19          still_picture                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 20          reduced_still_picture_header                                1 = 1
+[trace_headers @ 000002a47645b1c0] 21          seq_level_idx[0]                                        00000 = 0
+[trace_headers @ 000002a47645b1c0] 26          frame_width_bits_minus_1                                 0100 = 4
+[trace_headers @ 000002a47645b1c0] 30          frame_height_bits_minus_1                                0100 = 4
+[trace_headers @ 000002a47645b1c0] 34          max_frame_width_minus_1                                 11111 = 31
+[trace_headers @ 000002a47645b1c0] 39          max_frame_height_minus_1                                11111 = 31
+[trace_headers @ 000002a47645b1c0] 44          use_128x128_superblock                                      0 = 0
+[trace_headers @ 000002a47645b1c0] 45          enable_filter_intra                                         0 = 0
+[trace_headers @ 000002a47645b1c0] 46          enable_intra_edge_filter                                    1 = 1
+[trace_headers @ 000002a47645b1c0] 47          enable_superres                                             0 = 0
+[trace_headers @ 000002a47645b1c0] 48          enable_cdef                                                 0 = 0
+[trace_headers @ 000002a47645b1c0] 49          enable_restoration                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 50          high_bitdepth                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 51          twelve_bit                                                  1 = 1
+[trace_headers @ 000002a47645b1c0] 52          mono_chrome                                                 0 = 0
+[trace_headers @ 000002a47645b1c0] 53          color_description_present_flag                              0 = 0
+[trace_headers @ 000002a47645b1c0] 54          color_range                                                 1 = 1
+[trace_headers @ 000002a47645b1c0] 55          subsampling_x                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 56          subsampling_y                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 57          chroma_sample_position                                     00 = 0
+[trace_headers @ 000002a47645b1c0] 59          separate_uv_delta_q                                         0 = 0
+[trace_headers @ 000002a47645b1c0] 60          film_grain_params_present                                   0 = 0
+[trace_headers @ 000002a47645b1c0] 61          trailing_one_bit                                            1 = 1
+[trace_headers @ 000002a47645b1c0] 62          trailing_zero_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 63          trailing_zero_bit                                           0 = 0
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf63.1.101
+  Stream #0:0: Video: av1 (Professional), yuv420p12le(pc), 32x32 [SAR 1:1 DAR 1:1], q=2-31, 25 fps, 1200k tbr, 1200k tbn
+Press [q] to stop, [?] for help
+[trace_headers @ 000002a47645b1c0] Packet: 224 bytes, key frame, pts 0, dts 0, duration 48000.
+[trace_headers @ 000002a47645b1c0] OBU header
+[trace_headers @ 000002a47645b1c0] 0           obu_forbidden_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 1           obu_type                                                 0010 = 2
+[trace_headers @ 000002a47645b1c0] 5           obu_extension_flag                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 6           obu_has_size_field                                          1 = 1
+[trace_headers @ 000002a47645b1c0] 7           obu_reserved_1bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 8           obu_size                                             00000000 = 0
+[trace_headers @ 000002a47645b1c0] Temporal Delimiter
+[trace_headers @ 000002a47645b1c0] OBU header
+[trace_headers @ 000002a47645b1c0] 0           obu_forbidden_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 1           obu_type                                                 0001 = 1
+[trace_headers @ 000002a47645b1c0] 5           obu_extension_flag                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 6           obu_has_size_field                                          1 = 1
+[trace_headers @ 000002a47645b1c0] 7           obu_reserved_1bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 8           obu_size                                             00000110 = 6
+[trace_headers @ 000002a47645b1c0] Sequence Header
+[trace_headers @ 000002a47645b1c0] 16          seq_profile                                               010 = 2
+[trace_headers @ 000002a47645b1c0] 19          still_picture                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 20          reduced_still_picture_header                                1 = 1
+[trace_headers @ 000002a47645b1c0] 21          seq_level_idx[0]                                        00000 = 0
+[trace_headers @ 000002a47645b1c0] 26          frame_width_bits_minus_1                                 0100 = 4
+[trace_headers @ 000002a47645b1c0] 30          frame_height_bits_minus_1                                0100 = 4
+[trace_headers @ 000002a47645b1c0] 34          max_frame_width_minus_1                                 11111 = 31
+[trace_headers @ 000002a47645b1c0] 39          max_frame_height_minus_1                                11111 = 31
+[trace_headers @ 000002a47645b1c0] 44          use_128x128_superblock                                      0 = 0
+[trace_headers @ 000002a47645b1c0] 45          enable_filter_intra                                         0 = 0
+[trace_headers @ 000002a47645b1c0] 46          enable_intra_edge_filter                                    1 = 1
+[trace_headers @ 000002a47645b1c0] 47          enable_superres                                             0 = 0
+[trace_headers @ 000002a47645b1c0] 48          enable_cdef                                                 0 = 0
+[trace_headers @ 000002a47645b1c0] 49          enable_restoration                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 50          high_bitdepth                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 51          twelve_bit                                                  1 = 1
+[trace_headers @ 000002a47645b1c0] 52          mono_chrome                                                 0 = 0
+[trace_headers @ 000002a47645b1c0] 53          color_description_present_flag                              0 = 0
+[trace_headers @ 000002a47645b1c0] 54          color_range                                                 1 = 1
+[trace_headers @ 000002a47645b1c0] 55          subsampling_x                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 56          subsampling_y                                               1 = 1
+[trace_headers @ 000002a47645b1c0] 57          chroma_sample_position                                     00 = 0
+[trace_headers @ 000002a47645b1c0] 59          separate_uv_delta_q                                         0 = 0
+[trace_headers @ 000002a47645b1c0] 60          film_grain_params_present                                   0 = 0
+[trace_headers @ 000002a47645b1c0] 61          trailing_one_bit                                            1 = 1
+[trace_headers @ 000002a47645b1c0] 62          trailing_zero_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 63          trailing_zero_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] OBU header
+[trace_headers @ 000002a47645b1c0] 0           obu_forbidden_bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 1           obu_type                                                 0110 = 6
+[trace_headers @ 000002a47645b1c0] 5           obu_extension_flag                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 6           obu_has_size_field                                          1 = 1
+[trace_headers @ 000002a47645b1c0] 7           obu_reserved_1bit                                           0 = 0
+[trace_headers @ 000002a47645b1c0] 8           obu_size                                     1101001100000001 = 211
+[trace_headers @ 000002a47645b1c0] Frame Header
+[trace_headers @ 000002a47645b1c0] 24          disable_cdf_update                                          0 = 0
+[trace_headers @ 000002a47645b1c0] 25          allow_screen_content_tools                                  0 = 0
+[trace_headers @ 000002a47645b1c0] 26          render_and_frame_size_different                             0 = 0
+[trace_headers @ 000002a47645b1c0] 27          uniform_tile_spacing_flag                                   1 = 1
+[trace_headers @ 000002a47645b1c0] 28          tile_cols_log2                                                = 0
+[trace_headers @ 000002a47645b1c0] 28          tile_rows_log2                                                = 0
+[trace_headers @ 000002a47645b1c0] 28          base_q_idx                                           01111000 = 120
+[trace_headers @ 000002a47645b1c0] 36          delta_q_y_dc.delta_coded                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 37          delta_q_u_dc.delta_coded                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 38          delta_q_u_ac.delta_coded                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 39          using_qmatrix                                               0 = 0
+[trace_headers @ 000002a47645b1c0] 40          segmentation_enabled                                        0 = 0
+[trace_headers @ 000002a47645b1c0] 41          delta_q_present                                             0 = 0
+[trace_headers @ 000002a47645b1c0] 42          loop_filter_level[0]                                   000000 = 0
+[trace_headers @ 000002a47645b1c0] 48          loop_filter_level[1]                                   000000 = 0
+[trace_headers @ 000002a47645b1c0] 54          loop_filter_sharpness                                     000 = 0
+[trace_headers @ 000002a47645b1c0] 57          loop_filter_delta_enabled                                   1 = 1
+[trace_headers @ 000002a47645b1c0] 58          loop_filter_delta_update                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 59          tx_mode                                                     0 = 1
+[trace_headers @ 000002a47645b1c0] 60          reduced_tx_set                                              0 = 0
+[trace_headers @ 000002a47645b1c0] 61          zero_bit                                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 62          zero_bit                                                    0 = 0
+[trace_headers @ 000002a47645b1c0] 63          zero_bit                                                    0 = 0
+[trace_headers @ 000002a47645b1c0] Tile Group
+[out#0/null @ 000002a477e6bb00] video:0KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=    1 fps=0.0 q=-1.0 Lsize=N/A time=00:00:00.04 bitrate=N/A speed=16.9x elapsed=0:00:00.00    

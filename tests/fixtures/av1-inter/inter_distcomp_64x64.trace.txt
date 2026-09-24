@@ -1,0 +1,246 @@
+Extradata
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0001 = 1
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             00001010 = 10
+Sequence Header
+16          seq_profile                                               000 = 0
+19          still_picture                                               0 = 0
+20          reduced_still_picture_header                                0 = 0
+21          timing_info_present_flag                                    0 = 0
+22          initial_display_delay_present_flag                          0 = 0
+23          operating_points_cnt_minus_1                            00000 = 0
+28          operating_point_idc[0]                           000000000000 = 0
+40          seq_level_idx[0]                                        00000 = 0
+45          frame_width_bits_minus_1                                 0101 = 5
+49          frame_height_bits_minus_1                                0101 = 5
+53          max_frame_width_minus_1                                111111 = 63
+59          max_frame_height_minus_1                               111111 = 63
+65          frame_id_numbers_present_flag                               0 = 0
+66          use_128x128_superblock                                      1 = 1
+67          enable_filter_intra                                         1 = 1
+68          enable_intra_edge_filter                                    1 = 1
+69          enable_interintra_compound                                  0 = 0
+70          enable_masked_compound                                      0 = 0
+71          enable_warped_motion                                        0 = 0
+72          enable_dual_filter                                          0 = 0
+73          enable_order_hint                                           1 = 1
+74          enable_jnt_comp                                             1 = 1
+75          enable_ref_frame_mvs                                        0 = 0
+76          seq_choose_screen_content_tools                             1 = 1
+77          seq_choose_integer_mv                                       1 = 1
+78          order_hint_bits_minus_1                                   110 = 6
+81          enable_superres                                             0 = 0
+82          enable_cdef                                                 1 = 1
+83          enable_restoration                                          1 = 1
+84          high_bitdepth                                               0 = 0
+85          mono_chrome                                                 0 = 0
+86          color_description_present_flag                              0 = 0
+87          color_range                                                 0 = 0
+88          chroma_sample_position                                     00 = 0
+90          separate_uv_delta_q                                         0 = 0
+91          film_grain_params_present                                   0 = 0
+92          trailing_one_bit                                            1 = 1
+93          trailing_zero_bit                                           0 = 0
+94          trailing_zero_bit                                           0 = 0
+95          trailing_zero_bit                                           0 = 0
+Input #0, obu, from 'C:\Users\璋﹀弸Lee\Desktop\Project\mb\pixelforge\tests\fixtures\av1-inter\inter_distcomp_64x64.check.obu':
+  Duration: N/A, bitrate: N/A
+  Stream #0:0: Video: av1 (libdav1d) (Main), yuv420p(tv), 64x64 [SAR 1:1 DAR 1:1], 25 fps, 1200k tbr, 1200k tbn
+Stream mapping:
+  Stream #0:0 -> #0:0 (av1 (libdav1d) -> wrapped_avframe (native))
+Press [q] to stop, [?] for help
+Packet: 84 bytes, key frame, pts 0, dts 0, duration 48000.
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0010 = 2
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             00000000 = 0
+Temporal Delimiter
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0001 = 1
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             00001010 = 10
+Sequence Header
+16          seq_profile                                               000 = 0
+19          still_picture                                               0 = 0
+20          reduced_still_picture_header                                0 = 0
+21          timing_info_present_flag                                    0 = 0
+22          initial_display_delay_present_flag                          0 = 0
+23          operating_points_cnt_minus_1                            00000 = 0
+28          operating_point_idc[0]                           000000000000 = 0
+40          seq_level_idx[0]                                        00000 = 0
+45          frame_width_bits_minus_1                                 0101 = 5
+49          frame_height_bits_minus_1                                0101 = 5
+53          max_frame_width_minus_1                                111111 = 63
+59          max_frame_height_minus_1                               111111 = 63
+65          frame_id_numbers_present_flag                               0 = 0
+66          use_128x128_superblock                                      1 = 1
+67          enable_filter_intra                                         1 = 1
+68          enable_intra_edge_filter                                    1 = 1
+69          enable_interintra_compound                                  0 = 0
+70          enable_masked_compound                                      0 = 0
+71          enable_warped_motion                                        0 = 0
+72          enable_dual_filter                                          0 = 0
+73          enable_order_hint                                           1 = 1
+74          enable_jnt_comp                                             1 = 1
+75          enable_ref_frame_mvs                                        0 = 0
+76          seq_choose_screen_content_tools                             1 = 1
+77          seq_choose_integer_mv                                       1 = 1
+78          order_hint_bits_minus_1                                   110 = 6
+81          enable_superres                                             0 = 0
+82          enable_cdef                                                 1 = 1
+83          enable_restoration                                          1 = 1
+84          high_bitdepth                                               0 = 0
+85          mono_chrome                                                 0 = 0
+86          color_description_present_flag                              0 = 0
+87          color_range                                                 0 = 0
+88          chroma_sample_position                                     00 = 0
+90          separate_uv_delta_q                                         0 = 0
+91          film_grain_params_present                                   0 = 0
+92          trailing_one_bit                                            1 = 1
+93          trailing_zero_bit                                           0 = 0
+94          trailing_zero_bit                                           0 = 0
+95          trailing_zero_bit                                           0 = 0
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0110 = 6
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             01000100 = 68
+Frame Header
+16          show_existing_frame                                         0 = 0
+17          frame_type                                                 00 = 0
+19          show_frame                                                  1 = 1
+20          disable_cdf_update                                          0 = 0
+21          allow_screen_content_tools                                  0 = 0
+22          frame_size_override_flag                                    0 = 0
+23          order_hint                                            0000000 = 0
+30          render_and_frame_size_different                             0 = 0
+31          disable_frame_end_update_cdf                                0 = 0
+32          uniform_tile_spacing_flag                                   1 = 1
+33          tile_cols_log2                                                = 0
+33          tile_rows_log2                                                = 0
+33          base_q_idx                                           00110001 = 49
+41          delta_q_y_dc.delta_coded                                    0 = 0
+42          delta_q_u_dc.delta_coded                                    0 = 0
+43          delta_q_u_ac.delta_coded                                    0 = 0
+44          using_qmatrix                                               0 = 0
+45          segmentation_enabled                                        0 = 0
+46          delta_q_present                                             0 = 0
+47          loop_filter_level[0]                                   000000 = 0
+53          loop_filter_level[1]                                   000100 = 4
+59          loop_filter_level[2]                                   000000 = 0
+65          loop_filter_level[3]                                   000000 = 0
+71          loop_filter_sharpness                                     000 = 0
+74          loop_filter_delta_enabled                                   1 = 1
+75          loop_filter_delta_update                                    0 = 0
+76          cdef_damping_minus_3                                       00 = 0
+78          cdef_bits                                                  00 = 0
+80          cdef_y_pri_strength[0]                                   0110 = 6
+84          cdef_y_sec_strength[0]                                     00 = 0
+86          cdef_uv_pri_strength[0]                                  0000 = 0
+90          cdef_uv_sec_strength[0]                                    01 = 1
+92          lr_type[0]                                                 00 = 0
+94          lr_type[1]                                                 00 = 0
+96          lr_type[2]                                                 00 = 0
+98          tx_mode                                                     1 = 2
+99          reduced_tx_set                                              0 = 0
+100         zero_bit                                                    0 = 0
+101         zero_bit                                                    0 = 0
+102         zero_bit                                                    0 = 0
+103         zero_bit                                                    0 = 0
+Tile Group
+Packet: 24 bytes, pts 48000, dts 48000, duration 48000.
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0010 = 2
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             00000000 = 0
+Temporal Delimiter
+OBU header
+0           obu_forbidden_bit                                           0 = 0
+1           obu_type                                                 0110 = 6
+5           obu_extension_flag                                          0 = 0
+6           obu_has_size_field                                          1 = 1
+7           obu_reserved_1bit                                           0 = 0
+8           obu_size                                             00010100 = 20
+Frame Header
+16          show_existing_frame                                         0 = 0
+17          frame_type                                                 01 = 1
+19          show_frame                                                  1 = 1
+20          error_resilient_mode                                        0 = 0
+21          disable_cdf_update                                          0 = 0
+22          allow_screen_content_tools                                  0 = 0
+23          frame_size_override_flag                                    0 = 0
+24          order_hint                                            0000001 = 1
+31          primary_ref_frame                                         111 = 7
+34          refresh_frame_flags                                  00000010 = 2
+42          frame_refs_short_signaling                                  0 = 0
+43          ref_frame_idx[0]                                          000 = 0
+46          ref_frame_idx[1]                                          000 = 0
+49          ref_frame_idx[2]                                          000 = 0
+52          ref_frame_idx[3]                                          000 = 0
+55          ref_frame_idx[4]                                          000 = 0
+58          ref_frame_idx[5]                                          000 = 0
+61          ref_frame_idx[6]                                          000 = 0
+64          render_and_frame_size_different                             0 = 0
+65          allow_high_precision_mv                                     0 = 0
+66          is_filter_switchable                                        1 = 1
+67          is_motion_mode_switchable                                   0 = 0
+68          disable_frame_end_update_cdf                                0 = 0
+69          uniform_tile_spacing_flag                                   1 = 1
+70          tile_cols_log2                                                = 0
+70          tile_rows_log2                                                = 0
+70          base_q_idx                                           10000000 = 128
+78          delta_q_y_dc.delta_coded                                    0 = 0
+79          delta_q_u_dc.delta_coded                                    0 = 0
+80          delta_q_u_ac.delta_coded                                    0 = 0
+81          using_qmatrix                                               0 = 0
+82          segmentation_enabled                                        0 = 0
+83          delta_q_present                                             0 = 0
+84          loop_filter_level[0]                                   000000 = 0
+90          loop_filter_level[1]                                   000100 = 4
+96          loop_filter_level[2]                                   000000 = 0
+102         loop_filter_level[3]                                   000000 = 0
+108         loop_filter_sharpness                                     000 = 0
+111         loop_filter_delta_enabled                                   1 = 1
+112         loop_filter_delta_update                                    0 = 0
+113         cdef_damping_minus_3                                       10 = 2
+115         cdef_bits                                                  00 = 0
+117         cdef_y_pri_strength[0]                                   0000 = 0
+121         cdef_y_sec_strength[0]                                     00 = 0
+123         cdef_uv_pri_strength[0]                                  0000 = 0
+127         cdef_uv_sec_strength[0]                                    00 = 0
+129         lr_type[0]                                                 00 = 0
+131         lr_type[1]                                                 00 = 0
+133         lr_type[2]                                                 00 = 0
+135         tx_mode                                                     0 = 1
+136         reference_select                                            1 = 1
+137         reduced_tx_set                                              0 = 0
+138         is_global[1]                                                0 = 0
+139         is_global[2]                                                0 = 0
+140         is_global[3]                                                0 = 0
+141         is_global[4]                                                0 = 0
+142         is_global[5]                                                0 = 0
+143         is_global[6]                                                0 = 0
+144         is_global[7]                                                0 = 0
+145         zero_bit                                                    0 = 0
+146         zero_bit                                                    0 = 0
+147         zero_bit                                                    0 = 0
+148         zero_bit                                                    0 = 0
+149         zero_bit                                                    0 = 0
+150         zero_bit                                                    0 = 0
+151         zero_bit                                                    0 = 0
+Tile Group
