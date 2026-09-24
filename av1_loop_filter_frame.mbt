@@ -18,20 +18,15 @@ fn av1_loop_filter_block_state(
   match field {
     None => (av1_intra_frame, 0)
     Some(motion) => {
-      let scale_x = if plane == 0 { 1 } else { 1 << sub_x }
-      let scale_y = if plane == 0 { 1 } else { 1 << sub_y }
-      let col = (x * scale_x / 4) | sub_x
-      let row = (y * scale_y / 4) | sub_y
-      if row < 0 ||
-        row >= motion.rows ||
-        col < 0 ||
-        col >= motion.cols {
+      let (row, col) = av1_loop_filter_luma_mi(plane, x, y, sub_x, sub_y)
+      if row < 0 || row >= motion.rows || col < 0 || col >= motion.cols {
         (av1_intra_frame, 0)
       } else {
         let unit = row * motion.cols + col
         let mode = motion.y_modes[unit]
         let mode_type = if mode >= av1_mode_nearest_mv &&
-          mode != av1_mode_global_mv && mode != av1_mode_global_global_mv {
+          mode != av1_mode_global_mv &&
+          mode != av1_mode_global_global_mv {
           1
         } else {
           0
@@ -114,6 +109,7 @@ fn av1_loop_filter_frame(
   sub_x? : Int = 1,
   sub_y? : Int = 1,
   field? : Av1MotionField? = None,
+  block_map? : Av1LoopFilterBlockMap? = None,
 ) -> Bool {
   if !av1_loop_filter_config_valid(config) ||
     width <= 0 ||
@@ -129,8 +125,23 @@ fn av1_loop_filter_frame(
     coded_height - height >= 8 ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (planes.length() != 1 && planes.length() != 3) ||
-    tx_sizes.length() != planes.length() {
+    tx_sizes.length() != planes.length() ||
+    sub_x < 0 ||
+    sub_x > 1 ||
+    sub_y < 0 ||
+    sub_y > 1 {
     return false
+  }
+  match block_map {
+    Some(map) =>
+      if !av1_loop_filter_block_map_valid(
+          map,
+          coded_width / 4,
+          coded_height / 4,
+        ) {
+        return false
+      }
+    None => ()
   }
   for plane in 0..<planes.length() {
     let scale_x = if plane == 0 { 1 } else { 1 << sub_x }
@@ -163,15 +174,14 @@ fn av1_loop_filter_frame(
     for direction in 0..<2 {
       // A whole direction can only be skipped when no reference and no mode
       // delta could lift any of its edges above zero.
-      let mut inert = true
+      // Block deltas can activate a direction even when all frame-level
+      // reference/mode combinations are zero.
+      let mut inert = block_map is None
       for reference in 0..<8 {
         for mode_type in 0..<2 {
-          match av1_loop_filter_edge_level(
-              config,
-              plane,
-              direction,
-              reference,
-              mode_type,
+          match
+            av1_loop_filter_edge_level(
+              config, plane, direction, reference, mode_type,
             ) {
             Some(value) => if value > 0 { inert = false }
             None => return false
@@ -205,23 +215,31 @@ fn av1_loop_filter_frame(
             current >> 8
           }
           if (normal & (dimension - 1)) == 0 {
-            let (reference, mode_type) = av1_loop_filter_block_state(
-              field,
-              plane,
-              x,
-              y,
-              sub_x,
-              sub_y,
-            )
-            let edge_level = match av1_loop_filter_edge_level(
-                config,
-                plane,
-                direction,
-                reference,
-                mode_type,
+            let mut edge_level = match
+              av1_loop_filter_block_level(
+                config, field, block_map, plane, direction, x, y, sub_x, sub_y,
               ) {
               Some(value) => value
               None => return false
+            }
+            // AV1 filterLevel uses the previous side when this side is zero.
+            // Segment and SB boundaries may assign different deltas to them.
+            if edge_level == 0 {
+              edge_level = match
+                av1_loop_filter_block_level(
+                  config,
+                  field,
+                  block_map,
+                  plane,
+                  direction,
+                  x - (if direction == 0 { 1 } else { 0 }),
+                  y - (if direction == 1 { 1 } else { 0 }),
+                  sub_x,
+                  sub_y,
+                ) {
+                Some(value) => value
+                None => return false
+              }
             }
             let previous = map[index - (if direction == 0 { 1 } else { cols })]
             let previous_dimension = if direction == 0 {

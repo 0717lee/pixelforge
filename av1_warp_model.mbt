@@ -325,10 +325,14 @@ fn av1_warp_shear_params(
   coefficients[0] = av1_warp_iclip_wmp(matrix[2] - 0x10000)
   coefficients[1] = av1_warp_iclip_wmp(matrix[3])
   let (y, shift) = av1_warp_resolve_divisor_32(
-    if matrix[2] < 0 { -matrix[2] } else { matrix[2] },
+    if matrix[2] < 0 {
+      -matrix[2]
+    } else {
+      matrix[2]
+    },
   )
   let y = av1_warp_apply_sign(y, matrix[2])
-  let rnd = (1 << shift) >> 1
+  let rnd = 1 << shift >> 1
   // `mat[4] * 0x10000 * y` overflows 32 bits for a large gamma, and so does
   // `mat[3] * mat[4] * y`, so both products run in Int64.
   let v1 = matrix[4].to_int64() * 0x10000L * y.to_int64()
@@ -336,7 +340,11 @@ fn av1_warp_shear_params(
   coefficients[2] = av1_warp_iclip_wmp(
     av1_warp_apply_sign(
       ((magnitude + rnd.to_int64()) >> shift).to_int(),
-      if v1 < 0L { -1 } else { 1 },
+      if v1 < 0L {
+        -1
+      } else {
+        1
+      },
     ),
   )
   let v2 = matrix[3].to_int64() * matrix[4].to_int64() * y.to_int64()
@@ -345,7 +353,11 @@ fn av1_warp_shear_params(
     matrix[5] -
     av1_warp_apply_sign(
       ((magnitude2 + rnd.to_int64()) >> shift).to_int(),
-      if v2 < 0L { -1 } else { 1 },
+      if v2 < 0L {
+        -1
+      } else {
+        1
+      },
     ) -
     0x10000,
   )
@@ -353,7 +365,7 @@ fn av1_warp_shear_params(
   let a1 = if coefficients[1] < 0 { -coefficients[1] } else { coefficients[1] }
   let a2 = if coefficients[2] < 0 { -coefficients[2] } else { coefficients[2] }
   let a3 = if coefficients[3] < 0 { -coefficients[3] } else { coefficients[3] }
-  (4 * a0 + 7 * a1 >= 0x10000) || (4 * a2 + 4 * a3 >= 0x10000)
+  4 * a0 + 7 * a1 >= 0x10000 || 4 * a2 + 4 * a3 >= 0x10000
 }
 
 ///|
@@ -398,8 +410,12 @@ fn av1_warp_mult_shift_ndiag(px : Int64, idet : Int, shift : Int) -> Int {
   let v1 = px * idet.to_int64()
   let magnitude = if v1 < 0L { -v1 } else { v1 }
   let v2 = av1_warp_apply_sign(
-    ((magnitude + ((1L << shift) >> 1)) >> shift).to_int(),
-    if v1 < 0L { -1 } else { 1 },
+    ((magnitude + (1L << shift >> 1)) >> shift).to_int(),
+    if v1 < 0L {
+      -1
+    } else {
+      1
+    },
   )
   if v2 < -0x1fff {
     -0x1fff
@@ -415,8 +431,12 @@ fn av1_warp_mult_shift_diag(px : Int64, idet : Int, shift : Int) -> Int {
   let v1 = px * idet.to_int64()
   let magnitude = if v1 < 0L { -v1 } else { v1 }
   let v2 = av1_warp_apply_sign(
-    ((magnitude + ((1L << shift) >> 1)) >> shift).to_int(),
-    if v1 < 0L { -1 } else { 1 },
+    ((magnitude + (1L << shift >> 1)) >> shift).to_int(),
+    if v1 < 0L {
+      -1
+    } else {
+      1
+    },
   )
   if v2 < 0xe001 {
     0xe001
@@ -581,6 +601,7 @@ fn av1_warp_matching_masks(
   have_left : Bool,
   have_top : Bool,
   ref_name : Int,
+  have_top_right? : Bool = true,
 ) -> (Int64, Int64) {
   // The corner markers live at bit 32, so both masks are Int64: a 32-bit Int
   // would shift them away entirely.
@@ -588,7 +609,7 @@ fn av1_warp_matching_masks(
   let mut left_mask = 0L
   let mut count = 0
   let mut have_topleft = have_top && have_left
-  let mut have_top_right = have_top
+  let mut have_top_right = have_top_right && have_top && bw4 < 32 && bh4 < 32
   if have_top {
     if av1_warp_matches(field, mi_row - 1, mi_col, ref_name) {
       top_mask = top_mask | 1L
@@ -604,8 +625,8 @@ fn av1_warp_matching_masks(
       if off != 0 {
         have_topleft = false
       }
-      if aw4 - off <= bw4 {
-        // The neighbour does not reach past this block's right edge.
+      if aw4 - off > bw4 {
+        // A neighbour extending past the right edge already covers the corner.
         have_top_right = false
       }
     } else {
@@ -665,7 +686,8 @@ fn av1_warp_matching_masks(
       return (top_mask, left_mask)
     }
   }
-  if have_top_right && av1_warp_matches(field, mi_row - 1, mi_col + bw4, ref_name) {
+  if have_top_right &&
+    av1_warp_matches(field, mi_row - 1, mi_col + bw4, ref_name) {
     top_mask = top_mask | (1L << 32)
   }
   (top_mask, left_mask)
@@ -691,9 +713,20 @@ fn av1_warp_derive(
   ref_name : Int,
   mv_row : Int,
   mv_col : Int,
+  have_top_right? : Bool = true,
 ) -> Av1WarpModel? {
   let (top_mask, left_mask) = av1_warp_matching_masks(
-    field, mi_row, mi_col, bw4, bh4, w4, h4, have_left, have_top, ref_name,
+    field,
+    mi_row,
+    mi_col,
+    bw4,
+    bh4,
+    w4,
+    h4,
+    have_left,
+    have_top,
+    ref_name,
+    have_top_right~,
   )
   let pts : Array[Int] = Array::make(8 * 4, 0)
   let mut count = 0
@@ -735,7 +768,7 @@ fn av1_warp_derive(
     heights[count] = bh
     count = count + 1
   }
-  if top_mask == 1L && (left_mask >> 32) == 0L {
+  if (top_mask & 0xFFFFFFFFL) == 1L && left_mask >> 32 == 0L {
     let (aw4, _) = av1_warp_block_extent(field, mi_row - 1, mi_col)
     let off = mi_col & (aw4 - 1)
     add(-off, 0, 1, -1, mi_row - 1, mi_col)
@@ -747,7 +780,7 @@ fn av1_warp_derive(
       off = off + tz
       xmask = xmask >> tz
       add(off, 0, 1, -1, mi_row - 1, mi_col + off)
-      xmask = xmask >> 1
+      xmask = xmask & -2L
     }
   }
   if left_mask == 1L {
@@ -762,13 +795,13 @@ fn av1_warp_derive(
       off = off + tz
       ymask = ymask >> tz
       add(0, off, -1, 1, mi_row + off, mi_col - 1)
-      ymask = ymask >> 1
+      ymask = ymask & -2L
     }
   }
-  if (left_mask >> 32) != 0L {
+  if left_mask >> 32 != 0L {
     add(0, 0, -1, -1, mi_row - 1, mi_col - 1)
   }
-  if (top_mask >> 32) != 0L {
+  if top_mask >> 32 != 0L {
     add(bw4, 0, 1, -1, mi_row - 1, mi_col + bw4)
   }
   if count == 0 {
@@ -778,13 +811,7 @@ fn av1_warp_derive(
   // displacement differs from this block's own by more is replaced by the
   // last sample that stays inside it (AV1 7.11.3.5).
   let larger = if bw4 > bh4 { bw4 } else { bh4 }
-  let clipped = if larger < 4 {
-    4
-  } else if larger > 28 {
-    28
-  } else {
-    larger
-  }
+  let clipped = if larger < 4 { 4 } else if larger > 28 { 28 } else { larger }
   let thresh = 4 * clipped
   let mvd : Array[Int] = Array::make(count, 0)
   let mut kept = 0
@@ -832,15 +859,15 @@ fn av1_warp_derive(
   }
   let matrix : Array[Int] = [0, 0, 0, 0, 0, 0]
   if av1_warp_find_affine_int(
-    pts, kept, bw4, bh4, mv_row, mv_col, matrix, mi_col, mi_row,
-  ) {
+      pts, kept, bw4, bh4, mv_row, mv_col, matrix, mi_col, mi_row,
+    ) {
     return None
   }
   let coefficients : Array[Int] = [0, 0, 0, 0]
   if av1_warp_shear_params(matrix, coefficients) {
     return None
   }
-  Some({ matrix, coefficients })
+  Some({ matrix, coefficients, })
 }
 
 ///|
@@ -891,6 +918,8 @@ fn av1_warp_filter(phase : Int) -> Array[Int] {
 /// model's per-row phase, and the vertical pass reads it with the per-column
 /// phase, clipping once at the end (AV1 7.11.3.8). Samples past the frame are
 /// clamped, which is the same replication libdav1d's `emu_edge` produces.
+/// Compound output retains the intermediate fractional bits without clipping;
+/// unlike dav1d's signed 16-bit buffer it carries no PREP_BIAS offset.
 fn av1_warp_affine_chunk(
   samples : Array[Int],
   stride : Int,
@@ -904,13 +933,14 @@ fn av1_warp_affine_chunk(
   my : Int,
   width : Int,
   bit_depth : Int,
+  compound? : Bool = false,
 ) -> Array[Int] {
   let intermediate_bits = av1_warp_intermediate_bits(bit_depth)
   let mut round_shift = 7 - intermediate_bits
   if round_shift < 0 {
     round_shift = 0
   }
-  let bias = (1 << round_shift) >> 1
+  let bias = 1 << round_shift >> 1
   let mid : Array[Int] = Array::make(15 * 8, 0)
   let mut row_mx = mx
   for row in 0..<15 {
@@ -943,7 +973,8 @@ fn av1_warp_affine_chunk(
     }
     row_mx = row_mx + coefficients[1]
   }
-  let bias2 = (1 << (7 + intermediate_bits)) >> 1
+  let final_shift = if compound { 7 } else { 7 + intermediate_bits }
+  let bias2 = 1 << final_shift >> 1
   let out : Array[Int] = Array::make(8 * width, 0)
   let mut row_my = my
   for row in 0..<8 {
@@ -954,8 +985,10 @@ fn av1_warp_affine_chunk(
       for tap in 0..<8 {
         sum = sum + filter[tap] * mid[(row + tap) * 8 + column]
       }
-      let value = sum >> (7 + intermediate_bits)
-      out[row * width + column] = if value < 0 {
+      let value = sum >> final_shift
+      out[row * width + column] = if compound {
+        value
+      } else if value < 0 {
         0
       } else if value > limit {
         limit
@@ -974,7 +1007,8 @@ fn av1_warp_affine_chunk(
 /// in 8x8 chunks; each chunk's phase comes from the model evaluated at the
 /// chunk's centre in luma coordinates and shifted down by the plane's
 /// subsampling, exactly as libdav1d's `mc_warp` does. The result is row-major
-/// and already clipped, so the caller stores it like any other prediction.
+/// and clipped for single prediction; compound callers receive the unclipped
+/// post-round precision to blend with another warp or ordinary MC prediction.
 fn av1_warp_predict(
   reference : Av1RefFrame,
   model : Av1WarpModel,
@@ -985,6 +1019,7 @@ fn av1_warp_predict(
   plane_y : Int,
   plane_width : Int,
   plane_height : Int,
+  compound? : Bool = false,
 ) -> Array[Int] {
   let matrix = model.matrix
   let coefficients = model.coefficients
@@ -996,7 +1031,7 @@ fn av1_warp_predict(
   let stride = if plane == 0 {
     reference.coded_width
   } else {
-    (reference.coded_width + 1) >> reference.sub_x
+    (reference.coded_width + reference.sub_x) >> reference.sub_x
   }
   // Clamp against the visible reference extent, never the padded allocation.
   let last_x = ((reference.width + sub_x) >> sub_x) - 1
@@ -1018,13 +1053,15 @@ fn av1_warp_predict(
       let mvx = (matrix[2].to_int64() * src_x.to_int64() + mat3_y) >> sub_x
       let mvy = (matrix[4].to_int64() * src_x.to_int64() + mat5_y) >> sub_y
       let dx = (mvx >> 16).to_int() - 4
-      let mx = ((mvx & 0xFFFFL).to_int() - coefficients[0] * 4 -
-        coefficients[1] * 7) &
-        (-64)
+      let mx = (
+          (mvx & 0xFFFFL).to_int() - coefficients[0] * 4 - coefficients[1] * 7
+        ) &
+        -64
       let dy = (mvy >> 16).to_int() - 4
-      let my = ((mvy & 0xFFFFL).to_int() - coefficients[2] * 4 -
-        coefficients[3] * 4) &
-        (-64)
+      let my = (
+          (mvy & 0xFFFFL).to_int() - coefficients[2] * 4 - coefficients[3] * 4
+        ) &
+        -64
       let chunk = av1_warp_affine_chunk(
         samples,
         stride,
@@ -1038,6 +1075,7 @@ fn av1_warp_predict(
         my,
         width,
         reference.bit_depth,
+        compound~,
       )
       for row in 0..<rows {
         for column in 0..<width {
@@ -1064,7 +1102,6 @@ pub fn av1_warp_from_global_motion(matrix : Array[Int]) -> Av1WarpModel? {
   if av1_warp_shear_params(matrix, coefficients) {
     None
   } else {
-    Some({ matrix, coefficients })
+    Some({ matrix, coefficients, })
   }
 }
-

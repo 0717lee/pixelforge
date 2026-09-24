@@ -462,8 +462,8 @@ pub fn av1_decode_tile_group_with_boundaries(
 }
 
 ///|
-/// Decode a reduced-still AV1 OBU stream through the supported intra syntax,
-/// native-depth frame filters and final color conversion.
+/// Decode an AV1 OBU stream with fresh reference state and return its first
+/// displayed frame after native-depth filtering and final color conversion.
 pub fn av1_decode(data : Array[Byte]) -> Image? {
   match av1_decode_frame_planes(data, allow_monochrome=true) {
     Some(frame) => av1_frame_to_rgba(frame)
@@ -472,46 +472,57 @@ pub fn av1_decode(data : Array[Byte]) -> Image? {
 }
 
 ///|
-/// Decode an AVIF container through the same pure MoonBit intra frame
-/// path. Unsupported syntax returns None; a validated
-/// auxiliary alpha item is composed by `avif_decode_rgba` after this primary
-/// image decode succeeds.
+/// Decode the AVIF primary item's selected frame or grid with fresh AV1
+/// reference state. The RGBA entry point additionally composes auxiliary alpha.
 pub fn avif_decode(data : Array[Byte]) -> Image? {
-  let input = avif_stage1_input(data)
-  match input {
-    None => avif_decode_grid_auto(data)
-    Some(value) =>
-      av1_decode_tile_group_with_boundaries(
-        value.frame_width,
-        value.height,
-        value.tile_col_starts_sb,
-        value.tile_row_starts_sb,
-        if value.use_128x128_superblock {
-          128
-        } else {
-          64
-        },
-        value.tile_payload,
-        value.tile_size_bytes,
-        value.base_q_idx,
-        disable_cdf_update=value.disable_cdf_update,
-        allow_screen_content_tools=value.allow_screen_content_tools,
-        full_range=value.full_range,
-        matrix_coefficients=value.matrix_coefficients,
-        use_128x128_superblock=value.use_128x128_superblock,
-        bit_depth=value.bit_depth,
-        tx_mode_select=value.tx_mode_select,
-        reduced_tx_set=value.reduced_tx_set,
-        enable_filter_intra=value.enable_filter_intra,
-        enable_intra_edge_filter=value.enable_intra_edge_filter,
-        cdef=value.cdef,
-        loop_filter=value.loop_filter,
-        restoration=value.restoration,
-        upscaled_width=value.width,
-        monochrome=value.monochrome,
-        superres_denom=value.superres_denom,
-      )
+  match avif_decode_frame(data) {
+    Some(frame) => av1_frame_to_rgba(frame)
+    None => None
   }
+}
+
+///|
+/// Keep primary samples at native precision for auxiliary-alpha composition.
+fn avif_decode_frame(data : Array[Byte]) -> Av1FramePlanes? {
+  let container = match avif_container_parse(data) {
+    Some(value) => value
+    None => return None
+  }
+  let sequence = match av1_sequence_info(container.payload) {
+    Some(value) => value
+    None => {
+      let grid = match avif_grid_descriptor(data) {
+        Some(value) => value
+        None => return None
+      }
+      if !avif_grid_properties_match(data, grid) {
+        return None
+      }
+      return match avif_decode_grid_frame(data, grid) {
+        Some(frame) => Some(avif_frame_apply_color(frame, container))
+        None => None
+      }
+    }
+  }
+  if !avif_sequence_matches_container(container, sequence) {
+    return None
+  }
+  // Keep quantization, segmentation, sampling and display filters together:
+  // extracting a tile alone loses frame syntax needed for reconstruction.
+  let frame = match
+    av1_decode_frame_planes(
+      container.payload,
+      allow_monochrome=true,
+      operating_point=container.operating_point,
+      spatial_layer=container.spatial_layer,
+    ) {
+    Some(value) => value
+    None => return None
+  }
+  if frame.width != container.width || frame.height != container.height {
+    return None
+  }
+  Some(avif_frame_apply_color(frame, container))
 }
 
 ///|

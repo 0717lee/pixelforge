@@ -110,9 +110,9 @@ fn av1_parse_loop_filter_config(
 }
 
 ///|
-/// Strength selected for one edge (AV1 §7.14.5 step 4). The base level is the
-/// frame's own level for that plane and direction, then the reference and mode
-/// deltas are added *after* the shift.
+/// Strength selected for one edge (AV1 §7.14.5). Clamp the frame level plus
+/// delta-LF first, then add and clamp the segment ALT_LF feature. Reference and
+/// mode deltas scale from that resulting level, not the original frame level.
 ///
 /// The two gates below sit *outside* the delta arithmetic: a frame whose two Y
 /// levels are both zero is not deblocked at all, and §7.14.1 skips a chroma plane
@@ -129,13 +129,19 @@ fn av1_loop_filter_edge_level(
   direction : Int,
   reference : Int,
   mode_type : Int,
+  segment_delta? : Int = 0,
+  delta_lf? : Int = 0,
 ) -> Int? {
   if !av1_loop_filter_config_valid(config) ||
     plane < 0 ||
     plane > 2 ||
     direction < 0 ||
     direction > 1 ||
-    (mode_type < 0 || mode_type > 1) && reference > av1_intra_frame {
+    segment_delta < -63 ||
+    segment_delta > 63 ||
+    delta_lf < -63 ||
+    delta_lf > 63 ||
+    ((mode_type < 0 || mode_type > 1) && reference > av1_intra_frame) {
     return None
   }
   if plane == 0 {
@@ -145,7 +151,13 @@ fn av1_loop_filter_edge_level(
   } else if config.levels[plane + 1] == 0 {
     return Some(0)
   }
-  let base = config.levels[if plane == 0 { direction } else { plane + 1 }]
+  let frame_level = config.levels[if plane == 0 {
+      direction
+    } else {
+      plane + 1
+    }]
+  let delta_level = av1_loop_filter_level_clip(frame_level + delta_lf)
+  let base = av1_loop_filter_level_clip(delta_level + segment_delta)
   let shift = base >> 5
   let level = if !config.delta_enabled {
     base
@@ -154,10 +166,22 @@ fn av1_loop_filter_edge_level(
   } else if reference >= 8 {
     return None
   } else {
-    base + (config.ref_deltas[reference] << shift) +
-      (config.mode_deltas[mode_type] << shift)
+    base +
+    (config.ref_deltas[reference] << shift) +
+    (config.mode_deltas[mode_type] << shift)
   }
-  Some(if level < 0 { 0 } else if level > 63 { 63 } else { level })
+  Some(av1_loop_filter_level_clip(level))
+}
+
+///|
+fn av1_loop_filter_level_clip(level : Int) -> Int {
+  if level < 0 {
+    0
+  } else if level > 63 {
+    63
+  } else {
+    level
+  }
 }
 
 ///|

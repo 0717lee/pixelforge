@@ -352,6 +352,8 @@ fn av1_intra_edge_neighbor_indices(
   tile : Av1SbBlock,
   block : Av1SbBlock,
   plane : Int,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> (Int?, Int?)? {
   if tile.row < 0 ||
     tile.col < 0 ||
@@ -374,8 +376,8 @@ fn av1_intra_edge_neighbor_indices(
   }
   if plane != 0 &&
     (
-      (block.width < 8 && ((block.col / 4) & 1) == 0) ||
-      (block.height < 8 && ((block.row / 4) & 1) == 0)
+      (sub_x == 1 && block.width < 8 && ((block.col / 4) & 1) == 0) ||
+      (sub_y == 1 && block.height < 8 && ((block.row / 4) & 1) == 0)
     ) {
     return None
   }
@@ -383,14 +385,22 @@ fn av1_intra_edge_neighbor_indices(
   let rows = tile.height / 4
   let row = (block.row - tile.row) / 4
   let col = (block.col - tile.col) / 4
-  let above_row = if plane == 0 {
+  let above_row = if plane == 0 || sub_y == 0 {
     row - 1
   } else {
     row - ((block.row / 4) & 1) - 1
   }
-  let above_col = if plane == 0 { col } else { col - ((block.col / 4) & 1) + 1 }
-  let left_row = if plane == 0 { row } else { row - ((block.row / 4) & 1) + 1 }
-  let left_col = if plane == 0 {
+  let above_col = if plane == 0 || sub_x == 0 {
+    col
+  } else {
+    col - ((block.col / 4) & 1) + 1
+  }
+  let left_row = if plane == 0 || sub_y == 0 {
+    row
+  } else {
+    row - ((block.row / 4) & 1) + 1
+  }
+  let left_col = if plane == 0 || sub_x == 0 {
     col - 1
   } else {
     col - ((block.col / 4) & 1) - 1
@@ -425,9 +435,11 @@ fn av1_intra_edge_neighbor_smooth(
   y_modes : Array[Int],
   uv_modes : Array[Int],
   inter? : Array[Bool]? = None,
+  sub_x? : Int = 1,
+  sub_y? : Int = 1,
 ) -> Bool? {
   let (above, left) = match
-    av1_intra_edge_neighbor_indices(tile, block, plane) {
+    av1_intra_edge_neighbor_indices(tile, block, plane, sub_x~, sub_y~) {
     Some(value) => value
     None => return None
   }

@@ -1,11 +1,11 @@
-/// Bounded, pure MoonBit AV1 bitstream foundation used by the AVIF decoder.
+/// Pure MoonBit AV1 bitstream parsing used by the AVIF decoder.
 ///
-/// Parses low-overhead OBU headers and supported reduced-still sequences,
+/// Parses low-overhead OBU headers and reduced-still or general sequences,
 /// retaining native 8/10/12-bit color configuration and the distinction between
 /// entropy-coded and displayed dimensions for the tile reconstruction stage.
 
 ///|
-/// Parsed AV1 sequence configuration for the stage-one decoder.
+/// Parsed AV1 sequence configuration shared by still and video decoding.
 pub(all) struct Av1SequenceInfo {
   profile : Int
   width : Int
@@ -52,6 +52,7 @@ pub(all) struct Av1SequenceInfo {
   frame_presentation_time_length_minus_1 : Int
   operating_points_cnt_minus_1 : Int
   operating_point_idc : Array[Int]
+  decoder_model_present_for_this_op : Array[Bool]
   /// `frame_width_bits_minus_1` / `frame_height_bits_minus_1`: the field widths
   /// a `frame_size_override` re-reads the coded dimensions with.
   frame_width_bits_minus_1 : Int
@@ -479,6 +480,7 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
   let mut frame_presentation_time_length_minus_1 = 0
   let mut operating_points_cnt_minus_1 = 0
   let mut operating_point_idc : Array[Int] = [0]
+  let mut decoder_model_present_for_this_op : Array[Bool] = [false]
   if reduced {
     if !av1_skip(reader, 5) {
       return None
@@ -536,6 +538,7 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
       return None
     }
     let idcs : Array[Int] = []
+    let models : Array[Bool] = []
     for _ in 0..<=operating_points_cnt_minus_1 {
       let idc = match av1_u(reader, 12) {
         Some(v) => v
@@ -553,15 +556,25 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
           Some(v) => v == 1
           None => return None
         }
+        models.push(present)
         if present {
           let width = buffer_delay_length_minus_1 + 1
-          if width > 31 ||
-            !av1_skip(reader, width) ||
-            !av1_skip(reader, width) ||
+          if !(if width == 32 {
+              av1_skip32(reader)
+            } else {
+              av1_skip(reader, width)
+            }) ||
+            !(if width == 32 {
+              av1_skip32(reader)
+            } else {
+              av1_skip(reader, width)
+            }) ||
             !av1_skip(reader, 1) {
             return None
           }
         }
+      } else {
+        models.push(false)
       }
       if initial_display_delay_present {
         let present = match reader.read(1) {
@@ -575,6 +588,7 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
       idcs.push(idc)
     }
     operating_point_idc = idcs
+    decoder_model_present_for_this_op = models
   }
   let width_bits = match av1_u(reader, 4) {
     Some(v) => v + 1
@@ -773,6 +787,7 @@ fn av1_parse_sequence_payload(payload : Array[Byte]) -> Av1SequenceInfo? {
     frame_presentation_time_length_minus_1,
     operating_points_cnt_minus_1,
     operating_point_idc,
+    decoder_model_present_for_this_op,
     frame_width_bits_minus_1,
     frame_height_bits_minus_1,
   })
@@ -871,27 +886,7 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
         None => return None
         Some(value) => value
       }
-      if (c.bit_depth != 8 && c.bit_depth != 10 && c.bit_depth != 12) ||
-        c.bit_depth != seq.bit_depth ||
-        c.monochrome != seq.monochrome ||
-        (
-          !c.monochrome &&
-          (
-            c.subsampling_x != seq.subsampling_x ||
-            c.subsampling_y != seq.subsampling_y
-          )
-        ) {
-        return None
-      }
-      if c.width != seq.width ||
-        c.height != seq.height ||
-        (
-          !seq.monochrome &&
-          seq.matrix_coefficients != 1 &&
-          seq.matrix_coefficients != 2 &&
-          seq.matrix_coefficients != 5 &&
-          seq.matrix_coefficients != 6
-        ) {
+      if !avif_sequence_matches_container(c, seq) {
         return None
       }
       let frames = av1_obu_payloads(c.payload, 6)
@@ -942,4 +937,34 @@ pub fn avif_stage1_input(data : Array[Byte]) -> Av1Stage1Input? {
       }
     }
   }
+}
+
+///|
+/// Validate the coded item's configuration before either exposing tile data
+/// or decoding through the complete native-depth frame pipeline.
+fn avif_sequence_matches_container(
+  container : AvifContainer,
+  sequence : Av1SequenceInfo,
+) -> Bool {
+  (
+    container.bit_depth == 8 ||
+    container.bit_depth == 10 ||
+    container.bit_depth == 12
+  ) &&
+  container.bit_depth == sequence.bit_depth &&
+  container.monochrome == sequence.monochrome &&
+  (
+    container.monochrome ||
+    (
+      container.subsampling_x == sequence.subsampling_x &&
+      container.subsampling_y == sequence.subsampling_y
+    )
+  ) &&
+  // ispe describes the selected frame, whereas the sequence stores maxima.
+  // The public decode entry validates equality with the actual frame later.
+  container.width > 0 &&
+  container.width <= sequence.width &&
+  container.height > 0 &&
+  container.height <= sequence.height &&
+  container.operating_point < sequence.operating_point_idc.length()
 }

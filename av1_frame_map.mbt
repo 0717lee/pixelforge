@@ -85,6 +85,57 @@ fn av1_identity_gm_params() -> Array[Int] {
 }
 
 ///|
+/// reset_grain_params for a reference whose frame carried no grain syntax.
+fn av1_frame_grain_empty() -> Av1FilmGrainParams {
+  {
+    apply_grain: false,
+    grain_seed: 0,
+    num_y_points: 0,
+    point_y_value: [],
+    point_y_scaling: [],
+    chroma_scaling_from_luma: false,
+    num_cb_points: 0,
+    point_cb_value: [],
+    point_cb_scaling: [],
+    num_cr_points: 0,
+    point_cr_value: [],
+    point_cr_scaling: [],
+    grain_scaling_minus8: 0,
+    ar_coeff_lag: 0,
+    ar_coeffs_y: [],
+    ar_coeffs_cb: [],
+    ar_coeffs_cr: [],
+    ar_coeff_shift_minus6: 0,
+    grain_scale_shift: 0,
+    cb_mult: 0,
+    cb_luma_mult: 0,
+    cb_offset: 0,
+    cr_mult: 0,
+    cr_luma_mult: 0,
+    cr_offset: 0,
+    overlap_flag: false,
+    clip_to_restricted_range: false,
+  }
+}
+
+///|
+/// Reference snapshots and a frame inheriting them own their array storage.
+fn av1_frame_grain_copy(params : Av1FilmGrainParams) -> Av1FilmGrainParams {
+  {
+    ..params,
+    point_y_value: params.point_y_value.copy(),
+    point_y_scaling: params.point_y_scaling.copy(),
+    point_cb_value: params.point_cb_value.copy(),
+    point_cb_scaling: params.point_cb_scaling.copy(),
+    point_cr_value: params.point_cr_value.copy(),
+    point_cr_scaling: params.point_cr_scaling.copy(),
+    ar_coeffs_y: params.ar_coeffs_y.copy(),
+    ar_coeffs_cb: params.ar_coeffs_cb.copy(),
+    ar_coeffs_cr: params.ar_coeffs_cr.copy(),
+  }
+}
+
+///|
 /// One decoded picture in the reference buffer. Geometry is flattened out of
 /// the private `Av1FramePlanes` layout so this stays a describable public type.
 pub(all) struct Av1RefFrame {
@@ -115,9 +166,9 @@ pub(all) struct Av1RefFrame {
   gm_params : Array[Array[Int]]
   loop_filter_ref_deltas : Array[Int]
   loop_filter_mode_deltas : Array[Int]
-  /// The entropy context stored with this picture; `None` marks a slot
-  /// refreshed while `disable_frame_end_update_cdf` suppressed the write, so
-  /// the previous frame context survives (AV1 §7.20 `save_cdfs`).
+  /// The entropy context stored with this picture (AV1 §7.20 `save_cdfs`).
+  /// A disabled frame-end update stores this frame's initial context, including
+  /// its quantizer-dependent defaults. Decoded frames always store a snapshot.
   cdfs : Av1FrameCdfs?
   /// `MfRefFrames`/`MfMvs` from the motion-field storage process (§7.19), at
   /// MI granularity with two motion vectors per unit. Empty for a frame that
@@ -151,11 +202,16 @@ pub(all) struct Av1FrameMap {
   saved_gm_params : Array[Array[Array[Int]]]
   saved_loop_filter_ref_deltas : Array[Array[Int]]
   saved_loop_filter_mode_deltas : Array[Array[Int]]
-  current_frame_id : Int
-  /// The frame context a frame with a `primary_ref_frame` inherits. `None`
-  /// marks the never-written state, which behaves as the normative defaults;
-  /// an enabled frame end writes the context_update_tile_id tile's adapted
-  /// rows here (AV1 §8.3 `frame_end_update_cdf`, §7.20 `save_cdfs`).
+  saved_segmentation : Array[Av1SegmentationParams]
+  saved_segment_ids : Array[Array[Int]]
+  /// Film-grain syntax is saved separately from the grain-free native pixels.
+  saved_film_grain : Array[Av1FilmGrainParams?]
+  saved_showable : Array[Bool]
+  mut current_frame_id : Int
+  mut has_frame_id : Bool
+  /// The most recently stored frame context, retained for inspection. Inheritance
+  /// resolves the selected reference slot rather than this latest snapshot.
+  /// `None` means no frame has been stored yet.
   mut saved_cdfs : Av1FrameCdfs?
 }
 
@@ -183,7 +239,14 @@ pub fn av1_frame_map() -> Av1FrameMap {
       av1_default_loop_filter_ref_deltas(),
     ),
     saved_loop_filter_mode_deltas: Array::make(av1_num_ref_frames, [0, 0]),
+    saved_segmentation: Array::makei(av1_num_ref_frames, _ => {
+      av1_segmentation_empty()
+    }),
+    saved_segment_ids: Array::makei(av1_num_ref_frames, _ => []),
+    saved_film_grain: Array::make(av1_num_ref_frames, None),
+    saved_showable: Array::make(av1_num_ref_frames, false),
     current_frame_id: 0,
+    has_frame_id: false,
     saved_cdfs: None,
   }
 }
@@ -198,6 +261,7 @@ fn av1_default_loop_filter_ref_deltas() -> Array[Int] {
 /// Invalidates every slot. A showing key frame must not leave stale references
 /// behind (AV1 §7.20).
 fn av1_frame_map_invalidate(map : Av1FrameMap) -> Unit {
+  map.has_frame_id = false
   for i in 0..<av1_num_ref_frames {
     map.slots[i] = None
     map.valid[i] = false
@@ -215,6 +279,38 @@ fn av1_frame_map_invalidate(map : Av1FrameMap) -> Unit {
     )
     map.saved_loop_filter_ref_deltas[i] = av1_default_loop_filter_ref_deltas()
     map.saved_loop_filter_mode_deltas[i] = [0, 0]
+    map.saved_film_grain[i] = None
+    map.saved_showable[i] = false
+  }
+}
+
+///|
+/// AV1 frame IDs use diffLen delta bits and at most sixteen total ID bits.
+fn av1_frame_id_lengths(sequence : Av1SequenceInfo) -> (Int, Int)? {
+  let diff = sequence.delta_frame_id_length_minus_2 + 2
+  let total = sequence.additional_frame_id_length_minus_1 + diff + 1
+  if diff < 2 || total <= diff || total > 16 {
+    return None
+  }
+  Some((diff, total))
+}
+
+///|
+/// mark_ref_frames: keep age zero and age 2^diffLen, expire only larger ages.
+/// Invalid slots remain invalid even when their saved numeric ID is in range.
+fn av1_frame_mark_refs(
+  map : Av1FrameMap,
+  current : Int,
+  diff_len : Int,
+  id_len : Int,
+) -> Unit {
+  let modulus = 1 << id_len
+  let window = 1 << diff_len
+  for slot in 0..<av1_num_ref_frames {
+    let age = (current + modulus - map.frame_ids[slot]) & (modulus - 1)
+    if age > window {
+      map.valid[slot] = false
+    }
   }
 }
 
@@ -324,6 +420,33 @@ fn av1_set_frame_refs(
 }
 
 ///|
+/// Resolve the initial frame entropy context before refreshing reference slots.
+/// Defaults are materialized here because their coefficient tables depend on
+/// this frame's base quantizer, which can differ from a future loading frame.
+fn av1_frame_initial_cdfs(
+  map : Av1FrameMap,
+  header : Av1FrameHeaderInfo,
+) -> Av1FrameCdfs {
+  if av1_cdf_load_enabled &&
+    header.primary_ref_frame >= 0 &&
+    header.primary_ref_frame < av1_primary_ref_none &&
+    header.primary_ref_frame < header.ref_frame_idx.length() {
+    let slot = header.ref_frame_idx[header.primary_ref_frame]
+    if slot >= 0 && slot < av1_num_ref_frames && map.valid[slot] {
+      match map.slots[slot] {
+        Some(stored) =>
+          match stored.cdfs {
+            Some(snapshot) => return av1_frame_cdfs_copy(snapshot)
+            None => ()
+          }
+        None => ()
+      }
+    }
+  }
+  av1_frame_cdfs_default(header.base_q_idx)
+}
+
+///|
 /// `update_reference_map` (AV1 §7.20). Every slot named by
 /// `refresh_frame_flags` starts sharing this picture, its header state and the
 /// parameters the next frame may inherit through `load_previous`.
@@ -331,12 +454,11 @@ fn av1_set_frame_refs(
 /// All refreshed slots deliberately alias one `Av1RefFrame`: a later frame may
 /// use any of them as its primary reference and must see identical state.
 ///
-/// `cdfs` is the context_update_tile_id tile's final entropy state. The frame
-/// context is a single evolving object: an enabled frame end writes this
-/// frame's adapted rows into it, a disabled one leaves it as the previous
-/// frame left it, and every refreshed slot then shares it (AV1 §8.3
-/// `frame_end_update_cdf`, §7.20 `save_cdfs`). `None` is the never-written
-/// state, which a later load treats as the normative defaults.
+/// `cdfs` is the context_update_tile_id tile's final entropy state. An enabled
+/// frame end stores those adapted rows; a disabled one stores the context this
+/// frame started from, selected by primary_ref_frame or initialized using this
+/// frame's base quantizer. It must not inherit an unrelated, more recent frame
+/// (AV1 §8.3 `frame_end_update_cdf`, §7.20 `save_cdfs`).
 fn av1_frame_map_update(
   map : Av1FrameMap,
   header : Av1FrameHeaderInfo,
@@ -344,6 +466,7 @@ fn av1_frame_map_update(
   sequence : Av1SequenceInfo,
   cdfs? : Av1FrameCdfs? = None,
   field? : Av1MotionField? = None,
+  segment_ids? : Array[Int] = [],
 ) -> Unit {
   // Motion field motion vector storage (§7.19). Runs over the inter frame's
   // motion field before the slots are refreshed, so `map.order_hints` still
@@ -387,21 +510,21 @@ fn av1_frame_map_update(
       }
     None => ()
   }
-  let slot_cdfs : Av1FrameCdfs? = if header.disable_frame_end_update_cdf {
-    map.saved_cdfs.map(fn(previous) { av1_frame_cdfs_copy(previous) })
+  let snapshot = if header.disable_frame_end_update_cdf {
+    av1_frame_initial_cdfs(map, header)
   } else {
     match cdfs {
-      Some(snapshot) => {
-        // The adaptation counters stop here: a frame loading this snapshot must
-        // restart the rate schedule from zero (libaom
-        // `av1_reset_cdf_symbol_counters`).
-        av1_frame_cdfs_reset_counts(snapshot)
-        map.saved_cdfs = Some(snapshot)
-        Some(av1_frame_cdfs_copy(snapshot))
-      }
-      None => map.saved_cdfs.map(fn(previous) { av1_frame_cdfs_copy(previous) })
+      Some(adapted) => av1_frame_cdfs_copy(adapted)
+      None => av1_frame_initial_cdfs(map, header)
     }
   }
+  // A reference load restarts the adaptation rate schedule. Copying above
+  // also leaves the decoded tile's working counters and older slots untouched.
+  av1_frame_cdfs_reset_counts(snapshot)
+  let slot_cdfs = Some(snapshot)
+  map.current_frame_id = header.current_frame_id
+  map.has_frame_id = sequence.frame_id_numbers_present
+  map.saved_cdfs = Some(av1_frame_cdfs_copy(snapshot))
   let ref_frame : Av1RefFrame = {
     planes: frame.planes,
     coded_width: frame.coded_width,
@@ -418,7 +541,7 @@ fn av1_frame_map_update(
     render_height: header.render_height,
     order_hint: header.order_hint,
     frame_type: header.frame_type,
-    frame_id: map.current_frame_id,
+    frame_id: header.current_frame_id,
     order_hints: Array::copy(header.order_hints),
     gm_params: header.gm_params,
     loop_filter_ref_deltas: Array::copy(header.loop_filter_ref_deltas),
@@ -438,10 +561,14 @@ fn av1_frame_map_update(
     map.valid[slot] = true
     map.order_hints[slot] = header.order_hint
     map.frame_types[slot] = header.frame_type
-    map.frame_ids[slot] = map.current_frame_id
+    map.frame_ids[slot] = header.current_frame_id
     map.upscaled_widths[slot] = header.upscaled_width
     map.frame_widths[slot] = header.frame_width
     map.frame_heights[slot] = header.frame_height
+    map.saved_segmentation[slot] = av1_segmentation_copy(header.segmentation)
+    map.saved_segment_ids[slot] = segment_ids.copy()
+    map.saved_film_grain[slot] = header.film_grain.map(av1_frame_grain_copy)
+    map.saved_showable[slot] = header.showable_frame
     map.render_widths[slot] = header.render_width
     map.render_heights[slot] = header.render_height
     // §7.21 saves the per-reference warp models and the loop-filter deltas so

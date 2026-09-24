@@ -124,7 +124,7 @@ pub fn av1_parse_show_existing_frame(Array[Byte], Av1ShowExistingFrameConfig) ->
 
 pub fn av1_parse_show_existing_frame_envelope(Array[Byte], Av1ShowExistingFrameConfig) -> Av1ShowExistingFrameEnvelope?
 
-pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool, map? : Av1FrameMap) -> Av1FrameHeaderInfo?
+pub fn av1_parse_stage1_frame(Array[Byte], Av1SequenceInfo, allow_monochrome? : Bool, allow_highbd? : Bool, map? : Av1FrameMap, frame_header_obu? : Bool, tile_groups? : Array[Array[Byte]], temporal_id? : Int, spatial_id? : Int) -> Av1FrameHeaderInfo?
 
 pub fn av1_partition_children(Av1SbPartitionNode, Av1SbPartition) -> Array[Av1SbBlock]
 
@@ -188,6 +188,8 @@ pub fn av1_tx_traversal_state(Int, Int) -> Av1TxTraversalState
 
 pub fn av1_video_decode_frame(Av1VideoDecoder, Array[Byte], allow_monochrome? : Bool) -> Image?
 
+pub fn av1_video_decode_temporal_unit(Av1VideoDecoder, Array[Byte], allow_monochrome? : Bool) -> Array[Image]?
+
 pub fn av1_video_decoder() -> Av1VideoDecoder
 
 pub fn av1_warp_from_global_motion(Array[Int]) -> Av1WarpModel?
@@ -198,15 +200,15 @@ pub fn av1_wedge_mask(Int, Int, Int, Int) -> Array[Int]?
 
 pub fn av1_wedge_shape_ok(Int, Int) -> Bool
 
-pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int) -> Image?
+pub fn av1_yuv420_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, full_range? : Bool, matrix_coefficients? : Int, color_primaries? : Int, transfer_characteristics? : Int) -> Image?
 
 pub fn av1_yuv420_to_rgba(Int, Int, Array[Byte], Array[Byte], Array[Byte]) -> Image?
 
-pub fn av1_yuv420_to_rgba_color(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool, matrix_coefficients? : Int) -> Image?
+pub fn av1_yuv420_to_rgba_color(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool, matrix_coefficients? : Int, color_primaries? : Int, transfer_characteristics? : Int) -> Image?
 
 pub fn av1_yuv420_to_rgba_range(Int, Int, Array[Byte], Array[Byte], Array[Byte], full_range? : Bool) -> Image?
 
-pub fn av1_yuv_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, subsampling_x? : Bool, subsampling_y? : Bool, full_range? : Bool, matrix_coefficients? : Int) -> Image?
+pub fn av1_yuv_highbd_to_rgba(Int, Int, Array[Int], Array[Int], Array[Int], Int, subsampling_x? : Bool, subsampling_y? : Bool, full_range? : Bool, matrix_coefficients? : Int, color_primaries? : Int, transfer_characteristics? : Int) -> Image?
 
 pub fn avif_alpha_item_descriptor(Array[Byte]) -> AvifAlphaItemDescriptor?
 
@@ -374,6 +376,9 @@ pub(all) struct Av1FrameHeaderInfo {
   header_bytes : Int
   tile_payload : Array[Byte]
   base_q_idx : Int
+  quant_matrix : Av1QuantMatrix?
+  delta_lf_res : Int
+  delta_lf_multi : Bool
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
@@ -381,6 +386,7 @@ pub(all) struct Av1FrameHeaderInfo {
   tile_col_starts_sb : Array[Int]
   tile_row_starts_sb : Array[Int]
   tile_size_bytes : Int
+  context_update_tile_id : Int
   tx_mode_select : Bool
   reduced_tx_set : Bool
   coded_lossless : Bool
@@ -449,7 +455,12 @@ pub(all) struct Av1FrameMap {
   saved_gm_params : Array[Array[Array[Int]]]
   saved_loop_filter_ref_deltas : Array[Array[Int]]
   saved_loop_filter_mode_deltas : Array[Array[Int]]
-  current_frame_id : Int
+  saved_segmentation : Array[Av1SegmentationParams]
+  saved_segment_ids : Array[Array[Int]]
+  saved_film_grain : Array[Av1FilmGrainParams?]
+  saved_showable : Array[Bool]
+  mut current_frame_id : Int
+  mut has_frame_id : Bool
   mut saved_cdfs : Av1FrameCdfs?
 }
 
@@ -465,6 +476,9 @@ pub(all) struct Av1InterBlock {
   avail_l : Bool
   mut skip : Int
   mut skip_mode : Bool
+  mut segment_ref : Int
+  mut segment_skip : Bool
+  mut segment_global : Bool
   mut is_inter : Bool
   mut y_mode : Int
   mut ref_frame : Int
@@ -505,6 +519,14 @@ pub(all) struct Av1InterFrame {
   enable_jnt_comp : Bool
   mi_cols : Int
   mi_rows : Int
+}
+
+pub(all) struct Av1LoopFilterBlockMap {
+  cols : Int
+  rows : Int
+  segment_ids : Array[Int]
+  deltas : Array[Int]
+  segmentation : Av1SegmentationParams
 }
 
 pub(all) struct Av1LoopFilterConfig {
@@ -613,6 +635,12 @@ pub(all) struct Av1QuantDeltas {
   v_dc : Int
   v_ac : Int
 }
+
+pub(all) struct Av1QuantMatrix {
+  y : Int
+  u : Int
+  v : Int
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Av1RefFrame {
   planes : Array[Array[Int]]
@@ -796,6 +824,7 @@ pub(all) struct Av1SequenceInfo {
   frame_presentation_time_length_minus_1 : Int
   operating_points_cnt_minus_1 : Int
   operating_point_idc : Array[Int]
+  decoder_model_present_for_this_op : Array[Bool]
   frame_width_bits_minus_1 : Int
   frame_height_bits_minus_1 : Int
 }
@@ -814,7 +843,7 @@ pub(all) struct Av1ShowExistingFrameEnvelope {
   show_existing_frame : Bool
   frame_to_show_map_idx : Int
   reference_frame_type : Int
-  frame_presentation_time : Int?
+  frame_presentation_time : Int64?
   display_frame_id : Int?
   header_bits : Int
   header_bytes : Int
@@ -938,6 +967,7 @@ pub struct AvifAlphaItemDescriptor {
   height : Int
   bit_depth : Int
   auxiliary_property : Bool
+  premultiplied : Bool
   extents : Array[AvifAlphaExtent]
 }
 
@@ -979,9 +1009,12 @@ pub struct AvifContainer {
   has_alpha : Bool
   av1c : Array[Byte]
   payload : Array[Byte]
+  operating_point : Int
+  spatial_layer : Int?
   nclx_primaries : Int?
   nclx_transfer : Int?
   nclx_matrix : Int?
+  nclx_full_range : Bool?
 }
 
 pub struct AvifGridDescriptor {

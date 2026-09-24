@@ -1,0 +1,687 @@
+{
+  "libavif_version": "0.11.1",
+  "libyuv_version": 0,
+  "codec_versions": "dav1d [dec]:1.2.1, aom [enc/dec]:v3.6.0",
+  "width": 16,
+  "height": 16,
+  "encoder": {
+    "codec": "aom",
+    "speed": 6,
+    "threads": 1,
+    "color_quantizer": 0,
+    "alpha_quantizer": 0
+  },
+  "oracle": {
+    "source": "actual libavif decoding; PixelForge is never used for expected values",
+    "rgb_depth": 8,
+    "avoidLibYUV": 1,
+    "chromaUpsampling": 3,
+    "alphaPremultiplied": 0,
+    "native_lossless_checked": true,
+    "source_premultiplication": "native nonlinear RGB channels are each between zero and native alpha",
+    "prem_references": "written by libavif encoder and confirmed by libavif decoder alphaPremultiplied",
+    "rounding_discriminator": "compare actual straight RGBA against separately quantized premultiplied RGBA8 then integer unpremultiply"
+  },
+  "references": [
+    "https://github.com/AOMediaCodec/libavif/blob/v0.11.1/src/reformat.c#L1261",
+    "https://github.com/AOMediaCodec/libavif/blob/v0.11.1/src/alpha.c#L231"
+  ],
+  "cases": [
+    {
+      "name": "static_matrix6_8bit",
+      "file": "static_matrix6_8bit.avif",
+      "reference": "static_matrix6_8bit",
+      "animated": false,
+      "depth": 8,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "static_matrix6_8bit_reversed_prem",
+      "file": "static_matrix6_8bit_reversed_prem.avif",
+      "reference": "static_matrix6_8bit_reversed_prem",
+      "animated": false,
+      "depth": 8,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": false,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ],
+      "mutation": "only prem reference source/target changed; AV1 samples untouched"
+    },
+    {
+      "name": "animation_matrix6_8bit",
+      "file": "animation_matrix6_8bit.avif",
+      "reference": "animation_matrix6_8bit",
+      "animated": true,
+      "depth": 8,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix6_8bit_swapped_tracks",
+      "file": "animation_matrix6_8bit_swapped_tracks.avif",
+      "reference": "animation_matrix6_8bit",
+      "animated": true,
+      "depth": 8,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix6_8bit_prem_targets_color",
+      "file": "animation_matrix6_8bit_prem_targets_color.avif",
+      "reference": "animation_matrix6_8bit_prem_targets_color",
+      "animated": true,
+      "depth": 8,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": false,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ],
+      "mutation": "only prem reference source/target changed; AV1 samples untouched"
+    },
+    {
+      "name": "static_matrix6_10bit",
+      "file": "static_matrix6_10bit.avif",
+      "reference": "static_matrix6_10bit",
+      "animated": false,
+      "depth": 10,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix6_10bit",
+      "file": "animation_matrix6_10bit.avif",
+      "reference": "animation_matrix6_10bit",
+      "animated": true,
+      "depth": 10,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "static_matrix6_12bit",
+      "file": "static_matrix6_12bit.avif",
+      "reference": "static_matrix6_12bit",
+      "animated": false,
+      "depth": 12,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix6_12bit",
+      "file": "animation_matrix6_12bit.avif",
+      "reference": "animation_matrix6_12bit",
+      "animated": true,
+      "depth": 12,
+      "matrix": 6,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 0,
+          "first_post8_difference": null
+        }
+      ]
+    },
+    {
+      "name": "static_matrix0_10bit",
+      "file": "static_matrix0_10bit.avif",
+      "reference": "static_matrix0_10bit",
+      "animated": false,
+      "depth": 10,
+      "matrix": 0,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 398,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix0_10bit",
+      "file": "animation_matrix0_10bit.avif",
+      "reference": "animation_matrix0_10bit",
+      "animated": true,
+      "depth": 10,
+      "matrix": 0,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 398,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 418,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 396,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "static_matrix0_12bit",
+      "file": "static_matrix0_12bit.avif",
+      "reference": "static_matrix0_12bit",
+      "animated": false,
+      "depth": 12,
+      "matrix": 0,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 371,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix0_12bit",
+      "file": "animation_matrix0_12bit.avif",
+      "reference": "animation_matrix0_12bit",
+      "animated": true,
+      "depth": 12,
+      "matrix": 0,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 371,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 402,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 381,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix0_12bit_swapped_tracks",
+      "file": "animation_matrix0_12bit_swapped_tracks.avif",
+      "reference": "animation_matrix0_12bit",
+      "animated": true,
+      "depth": 12,
+      "matrix": 0,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 371,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 402,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 381,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "static_matrix8_10bit",
+      "file": "static_matrix8_10bit.avif",
+      "reference": "static_matrix8_10bit",
+      "animated": false,
+      "depth": 10,
+      "matrix": 8,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 411,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "animation_matrix8_10bit",
+      "file": "animation_matrix8_10bit.avif",
+      "reference": "animation_matrix8_10bit",
+      "animated": true,
+      "depth": 10,
+      "matrix": 8,
+      "monochrome": false,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 100,
+          "timescale": 1000,
+          "post8_mismatches": 411,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 1,
+          "timestamp": 100,
+          "duration": 200,
+          "timescale": 1000,
+          "post8_mismatches": 417,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        },
+        {
+          "index": 2,
+          "timestamp": 300,
+          "duration": 300,
+          "timescale": 1000,
+          "post8_mismatches": 411,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "static_mono_matrix8_10bit",
+      "file": "static_mono_matrix8_10bit.avif",
+      "reference": "static_mono_matrix8_10bit",
+      "animated": false,
+      "depth": 10,
+      "matrix": 8,
+      "monochrome": true,
+      "premultiplied": true,
+      "frames": [
+        {
+          "index": 0,
+          "timestamp": 0,
+          "duration": 1,
+          "timescale": 1,
+          "post8_mismatches": 432,
+          "first_post8_difference": {
+            "byte": 8,
+            "native_fused": 255,
+            "post8": 0
+          }
+        }
+      ]
+    }
+  ],
+  "artifacts": {
+    "static_matrix6_8bit.avif": "d7b16cbff88248887dea305488c1f3ec5e3cb7229f29e7e381ad9d249fb400c0",
+    "static_matrix6_8bit_frame0.rgba": "77c105feb09d957f0bce7b5095bd701e3e369ca6821ee561c095dacf9ca4cda4",
+    "static_matrix6_8bit_frame0.alpha.bin": "edb0eed6f1c6c406585659d0e897479ad5132ef7ea4cb9a77acb461e5ccdc3ae",
+    "static_matrix6_8bit_frame0.yuv.bin": "90d17f425e8691e7ad03340d871953ec3ecb9bd534f3eddc4b5ad9ef1bc097f3",
+    "static_matrix6_8bit_reversed_prem.avif": "3b0444fd474c9f0aef41bfa1e3b93747f27ffdb67ad189a183d44695814b248f",
+    "static_matrix6_8bit_reversed_prem_frame0.rgba": "4039bb64b1f3b1025f989a87ec34be9ee53ff9e0338a63a02a479eb3729db935",
+    "static_matrix6_8bit_reversed_prem_frame0.alpha.bin": "edb0eed6f1c6c406585659d0e897479ad5132ef7ea4cb9a77acb461e5ccdc3ae",
+    "static_matrix6_8bit_reversed_prem_frame0.yuv.bin": "90d17f425e8691e7ad03340d871953ec3ecb9bd534f3eddc4b5ad9ef1bc097f3",
+    "animation_matrix6_8bit.avif": "0d8cd74aa940dbe47b9a8c485b42b65883fe5ceae1990c60c91afc333d7ee8e7",
+    "animation_matrix6_8bit_frame0.rgba": "77c105feb09d957f0bce7b5095bd701e3e369ca6821ee561c095dacf9ca4cda4",
+    "animation_matrix6_8bit_frame0.alpha.bin": "edb0eed6f1c6c406585659d0e897479ad5132ef7ea4cb9a77acb461e5ccdc3ae",
+    "animation_matrix6_8bit_frame0.yuv.bin": "90d17f425e8691e7ad03340d871953ec3ecb9bd534f3eddc4b5ad9ef1bc097f3",
+    "animation_matrix6_8bit_frame1.rgba": "c8a6218f12b66088e4d55f7cccc521b15b94765d58afc70a54ef5e907a0d2530",
+    "animation_matrix6_8bit_frame1.alpha.bin": "ab447cfc4a58d0cb59955a1e48937a4ff0cbc3055a884dd1c9274ac2e962adcf",
+    "animation_matrix6_8bit_frame1.yuv.bin": "51f0d18988b8a6a4abbc8822440457c37a6b6f99b9c48e25fcf7e33d8759970d",
+    "animation_matrix6_8bit_frame2.rgba": "eda1bf1755c027f442a78c22e47c6af8a6bf84eeb39e119cd682cfd9be379a02",
+    "animation_matrix6_8bit_frame2.alpha.bin": "156e12745b835378736912ada828c8c166a9f9c9efea328488cc7617b2acea3a",
+    "animation_matrix6_8bit_frame2.yuv.bin": "2a5171e81be6ab72f5a30adfadd08f1343eb59cb90fe8b584560aa4490910651",
+    "animation_matrix6_8bit_swapped_tracks.avif": "0db9db3434242b6a6b10ef39f8ebe35c8ca7d869cd9a22cf7ce87eb2463ab42a",
+    "animation_matrix6_8bit_prem_targets_color.avif": "0e7fd47af2f5827a00abf9cb6ffde97dd79a94c69b5faabf41c0381f3e4c50e9",
+    "animation_matrix6_8bit_prem_targets_color_frame0.rgba": "4039bb64b1f3b1025f989a87ec34be9ee53ff9e0338a63a02a479eb3729db935",
+    "animation_matrix6_8bit_prem_targets_color_frame0.alpha.bin": "edb0eed6f1c6c406585659d0e897479ad5132ef7ea4cb9a77acb461e5ccdc3ae",
+    "animation_matrix6_8bit_prem_targets_color_frame0.yuv.bin": "90d17f425e8691e7ad03340d871953ec3ecb9bd534f3eddc4b5ad9ef1bc097f3",
+    "animation_matrix6_8bit_prem_targets_color_frame1.rgba": "f1c209502365fad2035b334907a4e7c2b520d158701d0ff74271b2cbc49de0c7",
+    "animation_matrix6_8bit_prem_targets_color_frame1.alpha.bin": "ab447cfc4a58d0cb59955a1e48937a4ff0cbc3055a884dd1c9274ac2e962adcf",
+    "animation_matrix6_8bit_prem_targets_color_frame1.yuv.bin": "51f0d18988b8a6a4abbc8822440457c37a6b6f99b9c48e25fcf7e33d8759970d",
+    "animation_matrix6_8bit_prem_targets_color_frame2.rgba": "ecf8b527659ba559792cf255a124799ecf7977f470700a97a0ee1ce90132d5bc",
+    "animation_matrix6_8bit_prem_targets_color_frame2.alpha.bin": "156e12745b835378736912ada828c8c166a9f9c9efea328488cc7617b2acea3a",
+    "animation_matrix6_8bit_prem_targets_color_frame2.yuv.bin": "2a5171e81be6ab72f5a30adfadd08f1343eb59cb90fe8b584560aa4490910651",
+    "static_matrix6_10bit.avif": "dce73eb58a892ce4d79dc9c5b52a146b671c0806e9da57a175145f19959ca459",
+    "static_matrix6_10bit_frame0.rgba": "471a3ffdf3fe52144d8853fe95dfe1b4285187c7bee015ac2aaf71ed23b23f09",
+    "static_matrix6_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "static_matrix6_10bit_frame0.yuv.bin": "2c63ece981d23a9b21fd11fd6ec5ac78242e89dbd751a65647cb9e312571a162",
+    "animation_matrix6_10bit.avif": "5643649f2626eb2a4a3e4b99c31e9b694cde50d1da275fc32c19b036f964828c",
+    "animation_matrix6_10bit_frame0.rgba": "471a3ffdf3fe52144d8853fe95dfe1b4285187c7bee015ac2aaf71ed23b23f09",
+    "animation_matrix6_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "animation_matrix6_10bit_frame0.yuv.bin": "2c63ece981d23a9b21fd11fd6ec5ac78242e89dbd751a65647cb9e312571a162",
+    "animation_matrix6_10bit_frame1.rgba": "989f8c1bae62d8a6c2acca1b788ed2e12c3888b7459f506091ac9ff34ff96aab",
+    "animation_matrix6_10bit_frame1.alpha.bin": "6b5b15970960973b845f0ee1f9e94bb7e62945f5eb9e9605551d56b97c68b952",
+    "animation_matrix6_10bit_frame1.yuv.bin": "da9166aed39a9ce503b475274daa6406c20eebc29e32a9819362b94ea1dcffc3",
+    "animation_matrix6_10bit_frame2.rgba": "934a06940b522414de16e3101c7421d8671e6a02e3235833e1182ae763b9d291",
+    "animation_matrix6_10bit_frame2.alpha.bin": "a075d031af83608c34c3d75bec7fee175e303dfbb8e3cf7e5d3059975607e6a5",
+    "animation_matrix6_10bit_frame2.yuv.bin": "19727cc82e06639184291ea07575501b40ec8441d6eb38cf3cb9b43332d72dba",
+    "static_matrix6_12bit.avif": "ab72d57ee4c32232f221bda0882498e40e885e9aee4855f92e5f3a3621c3f6d9",
+    "static_matrix6_12bit_frame0.rgba": "477e0d66906739a10f90f2d33077c97784ec4b9f945c7081ed56818f344e421e",
+    "static_matrix6_12bit_frame0.alpha.bin": "d5cbac5eee6d383e788b05795f3e3857dc1cd9b703507cde527abd3a5386d284",
+    "static_matrix6_12bit_frame0.yuv.bin": "23ca639d4656a3688af761f916dc7fba0915adbceef7be67901727b6072e949a",
+    "animation_matrix6_12bit.avif": "15df7635ff2d274b4680b95c8944126cc5d1b6d9209649e8d267e0afb50fb51e",
+    "animation_matrix6_12bit_frame0.rgba": "477e0d66906739a10f90f2d33077c97784ec4b9f945c7081ed56818f344e421e",
+    "animation_matrix6_12bit_frame0.alpha.bin": "d5cbac5eee6d383e788b05795f3e3857dc1cd9b703507cde527abd3a5386d284",
+    "animation_matrix6_12bit_frame0.yuv.bin": "23ca639d4656a3688af761f916dc7fba0915adbceef7be67901727b6072e949a",
+    "animation_matrix6_12bit_frame1.rgba": "07fbdeb40ba4bf8f45392a4dcde0605adab16770b2434b1d6cbb757462b01480",
+    "animation_matrix6_12bit_frame1.alpha.bin": "a813944c55f03629de32c9875b51c6bb2621572fa8c381d6290e23d5c9fa5823",
+    "animation_matrix6_12bit_frame1.yuv.bin": "c76eb126780e225eafd512c9a3d52a3b9d837e3f2a944aa140d2eb85f044e4f6",
+    "animation_matrix6_12bit_frame2.rgba": "1b668d06d98bead90f32564d002ac62c38683183a8722a5e2c4cef676d74b44b",
+    "animation_matrix6_12bit_frame2.alpha.bin": "e54c4fcb89fdf12269e7fad3a3cb8fbb722a60738a1256f90c8c0fd4c830861d",
+    "animation_matrix6_12bit_frame2.yuv.bin": "715fdd9d0004c7ba5deca10455925689debb42874c869f18f24bea568124155b",
+    "static_matrix0_10bit.avif": "b845532e82100cd7b3186368036a7d0f72a1f02649b38f1cca245dd048e90043",
+    "static_matrix0_10bit_frame0.rgba": "e62ba2267922e85f0bdd7d2d4ba89124f48493a802e124416dc0037eef498044",
+    "static_matrix0_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "static_matrix0_10bit_frame0.yuv.bin": "f0143b012701b789c76b650b012031c4ed2cd8abeb0845ebb10b5f4e2a4d8d54",
+    "animation_matrix0_10bit.avif": "1fad68c2282ca1b5922085fb13dff39d628571c58756d88dec79019ec64b8f0e",
+    "animation_matrix0_10bit_frame0.rgba": "e62ba2267922e85f0bdd7d2d4ba89124f48493a802e124416dc0037eef498044",
+    "animation_matrix0_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "animation_matrix0_10bit_frame0.yuv.bin": "f0143b012701b789c76b650b012031c4ed2cd8abeb0845ebb10b5f4e2a4d8d54",
+    "animation_matrix0_10bit_frame1.rgba": "033dedc59d637d04a6cce2906eee3530c85bf3027164b7c7bcff7d98988fdf6a",
+    "animation_matrix0_10bit_frame1.alpha.bin": "6b5b15970960973b845f0ee1f9e94bb7e62945f5eb9e9605551d56b97c68b952",
+    "animation_matrix0_10bit_frame1.yuv.bin": "d9e36f3a040ff6e0b18a22eb8003ce6ef3b9f994521d93c9bc2c62238dd32ecb",
+    "animation_matrix0_10bit_frame2.rgba": "aa337abb8f45a7f485f05ff792392420ce188dd1fbdb2cf74bcb1e15c871794d",
+    "animation_matrix0_10bit_frame2.alpha.bin": "a075d031af83608c34c3d75bec7fee175e303dfbb8e3cf7e5d3059975607e6a5",
+    "animation_matrix0_10bit_frame2.yuv.bin": "266c7c6f08c9abedeaaec816b7a1387c995bb7d7c8dc909878704ce7b98dc1a6",
+    "static_matrix0_12bit.avif": "8ebbe721dadff4cf0eabbf7d884e64291bf6d373f62fe4ed0d78caf3fdfcf935",
+    "static_matrix0_12bit_frame0.rgba": "19000b3fd03ce2ad33340bc17b407a894d3d4ee9483ecaacacf660cdece5205e",
+    "static_matrix0_12bit_frame0.alpha.bin": "d5cbac5eee6d383e788b05795f3e3857dc1cd9b703507cde527abd3a5386d284",
+    "static_matrix0_12bit_frame0.yuv.bin": "a2caf412d0fa66bd34ac696b459f706516cf8cb7bfa782b58f61c0ee0204a12e",
+    "animation_matrix0_12bit.avif": "f1055656a4b89c0f03071741a6aa648a3d4747cfdaa1b0376bdfbe7f2140130b",
+    "animation_matrix0_12bit_frame0.rgba": "19000b3fd03ce2ad33340bc17b407a894d3d4ee9483ecaacacf660cdece5205e",
+    "animation_matrix0_12bit_frame0.alpha.bin": "d5cbac5eee6d383e788b05795f3e3857dc1cd9b703507cde527abd3a5386d284",
+    "animation_matrix0_12bit_frame0.yuv.bin": "a2caf412d0fa66bd34ac696b459f706516cf8cb7bfa782b58f61c0ee0204a12e",
+    "animation_matrix0_12bit_frame1.rgba": "3d1782e2227c84660c9b64214307a2713042f5fad64783dfe5459396a2a2916d",
+    "animation_matrix0_12bit_frame1.alpha.bin": "a813944c55f03629de32c9875b51c6bb2621572fa8c381d6290e23d5c9fa5823",
+    "animation_matrix0_12bit_frame1.yuv.bin": "5a5d8caab37767ba1f1a16010a9953319b014cf4a7f39e78802ea0d1804a70d1",
+    "animation_matrix0_12bit_frame2.rgba": "1057ba7e5d274bfbca0b0b5c4a7a17db31381ffdfe467128a6339ba2088d9a0b",
+    "animation_matrix0_12bit_frame2.alpha.bin": "e54c4fcb89fdf12269e7fad3a3cb8fbb722a60738a1256f90c8c0fd4c830861d",
+    "animation_matrix0_12bit_frame2.yuv.bin": "3e31ef09dd4128be3745123572a21bacb1a2e30e3068f90e454e2970cd5b280a",
+    "animation_matrix0_12bit_swapped_tracks.avif": "7ecd3eb0d877a30d63e0a42a946aee4b217e964ae1a604f0bc20396865522e55",
+    "static_matrix8_10bit.avif": "34776a739c0e9963cfce30a29e7764dbd94a274b58d9dd5ce4fb9e0d1a54a1d2",
+    "static_matrix8_10bit_frame0.rgba": "a09b5e1ea7f31705af72b7e76c420596b36476fba2c954fab57e53e76729997a",
+    "static_matrix8_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "static_matrix8_10bit_frame0.yuv.bin": "89193f8664461cc9eb41087d743eed899fd067455ed2a169744b09be50775300",
+    "animation_matrix8_10bit.avif": "7db627552ca7e7cdd55386990bef226ecd59806643ec9c35a85df97d97ab3872",
+    "animation_matrix8_10bit_frame0.rgba": "a09b5e1ea7f31705af72b7e76c420596b36476fba2c954fab57e53e76729997a",
+    "animation_matrix8_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "animation_matrix8_10bit_frame0.yuv.bin": "89193f8664461cc9eb41087d743eed899fd067455ed2a169744b09be50775300",
+    "animation_matrix8_10bit_frame1.rgba": "f9f2cb45d9fdebe8aa3add169319c29fc7dfc319839680a793ebf9a76077ed8a",
+    "animation_matrix8_10bit_frame1.alpha.bin": "6b5b15970960973b845f0ee1f9e94bb7e62945f5eb9e9605551d56b97c68b952",
+    "animation_matrix8_10bit_frame1.yuv.bin": "0a289c9699b6858d76d9cf88bd0d82389f09e448f76060cd245e30c4ab769152",
+    "animation_matrix8_10bit_frame2.rgba": "3818b1a3fa39166c98e432017473643a6c760068aa7fa1eda30d11611ab9f7f4",
+    "animation_matrix8_10bit_frame2.alpha.bin": "a075d031af83608c34c3d75bec7fee175e303dfbb8e3cf7e5d3059975607e6a5",
+    "animation_matrix8_10bit_frame2.yuv.bin": "856547c9c9d905aa07311e8f716815559614139e584e8f8d7fd572cf721c4795",
+    "static_mono_matrix8_10bit.avif": "f33933946f584ecdc8a38932012b2430d5d5cbbbc84f24c61f68ac6767a633a8",
+    "static_mono_matrix8_10bit_frame0.rgba": "a1bd77a704f58c43e2baa05950f9adfbd1e063f61ee676832624d02ad0a20c61",
+    "static_mono_matrix8_10bit_frame0.alpha.bin": "7942e9b3f5f07d710b3448a447468e66c7edd6a23d16cb6f16ca42136c8c842a",
+    "static_mono_matrix8_10bit_frame0.yuv.bin": "b187ba6571f04a109f1486fb10b41995a3cada3bf68fa3ad5637f2f1bc6ebe94"
+  }
+}

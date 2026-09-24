@@ -273,8 +273,8 @@ fn av1_diffwtd_mask(
   // by 4. The mask's own rounding is the reference decoder's
   // `38 + ((|diff| + rnd) >> sh)` over those intermediates, which on the
   // sample scale is `38 + diff / 16` at 8 bits.
-  let shift = if bit_depth == 12 { 10 } else { 8 }
-  let rnd = if bit_depth == 12 { 32 } else { 8 }
+  let shift = bit_depth + (if bit_depth == 12 { 2 } else { 4 }) - 4
+  let rnd = 1 << (shift - 5)
   let luma = Array::make(width * height, 0)
   for k in 0..<luma.length() {
     let diff = if first[k] > second[k] {
@@ -312,7 +312,7 @@ fn av1_reduce_plane_mask(
   let out = Array::make(out_w * out_h, 0)
   for i in 0..<out_h {
     for j in 0..<out_w {
-      let base = (i * (1 + sub_y)) * width + 2 * j
+      let base = i * (1 + sub_y) * width + 2 * j
       let mut sum = luma[base] + luma[base + 1]
       if sub_y == 1 {
         sum = sum + luma[base + width] + luma[base + width + 1]

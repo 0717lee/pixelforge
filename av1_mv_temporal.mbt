@@ -12,11 +12,8 @@
 /// Scan the block's own cells, then the three offsets outside the block that
 /// stay inside the same 64x64 superblock (§7.10.2.5).
 ///
-/// Returns `false` when the frame asks for a temporal scan that cannot be
-/// performed: a compound block needs both lists of §7.10.2.6, and compound
-/// prediction is refused together with `reference_select` at the frame gate, so
-/// a `false` here means the caller must refuse the frame instead of decoding it
-/// with a candidate list that is missing its temporal half.
+/// Compound entries are complete vector pairs: both reference projections must
+/// be present before either vector can contribute to the candidate stack.
 fn av1_temporal_scan(
   stack : Av1MvStack,
   block : Av1MvBlock,
@@ -26,9 +23,6 @@ fn av1_temporal_scan(
   let grid = match frame.temporal {
     Some(value) => value
     None => return false
-  }
-  if is_compound {
-    return false
   }
   let bw4 = block.width4
   let bh4 = block.height4
@@ -40,7 +34,15 @@ fn av1_temporal_scan(
   while delta_row < row_limit {
     let mut delta_col = 0
     while delta_col < col_limit {
-      av1_temporal_sample(stack, block, frame, grid, delta_row, delta_col)
+      av1_temporal_sample(
+        stack,
+        block,
+        frame,
+        grid,
+        delta_row,
+        delta_col,
+        is_compound~,
+      )
       delta_col = delta_col + step_w4
     }
     delta_row = delta_row + step_h4
@@ -52,7 +54,15 @@ fn av1_temporal_scan(
     let offsets : Array[(Int, Int)] = [(bh4, -2), (bh4, bw4), (bh4 - 2, bw4)]
     for offset in offsets {
       if av1_tpl_sb_border(block, offset.0, offset.1) {
-        av1_temporal_sample(stack, block, frame, grid, offset.0, offset.1)
+        av1_temporal_sample(
+          stack,
+          block,
+          frame,
+          grid,
+          offset.0,
+          offset.1,
+          is_compound~,
+        )
       }
     }
   }
@@ -74,8 +84,8 @@ fn av1_tpl_sb_border(
 
 ///|
 /// Look up the projected vector at one offset and push it onto the stack
-/// (§7.10.2.6, single-reference branch). The lookup is on the 8x8 grid of the
-/// block's own reference name, so a cell no projection reached is skipped.
+/// (§7.10.2.6). A compound pair is merged only when both list vectors match;
+/// sharing the first vector alone does not make two candidates identical.
 fn av1_temporal_sample(
   stack : Av1MvStack,
   block : Av1MvBlock,
@@ -83,6 +93,7 @@ fn av1_temporal_sample(
   grid : Av1MotionFieldGrid,
   delta_row : Int,
   delta_col : Int,
+  is_compound? : Bool = false,
 ) -> Unit {
   let mv_row = (block.mi_row + delta_row) | 1
   let mv_col = (block.mi_col + delta_col) | 1
@@ -110,22 +121,47 @@ fn av1_temporal_sample(
   // The grid holds projected vectors, which carry one more bit of precision
   // than the frame is allowed to signal.
   let candidate = av1_lower_mv_precision(cand_row, cand_col, frame)
+  let other = if is_compound {
+    let other_slot = block.refs[1] - av1_last_frame
+    if other_slot < 0 || other_slot >= grid.mv_rows.length() {
+      return
+    }
+    let other_row = grid.mv_rows[other_slot][index]
+    let other_col = grid.mv_cols[other_slot][index]
+    if other_row == av1_mv_invalid {
+      return
+    }
+    av1_lower_mv_precision(other_row, other_col, frame)
+  } else {
+    (0, 0)
+  }
   if delta_row == 0 && delta_col == 0 {
     if (candidate.0 - stack.global_rows[0]).abs() >= 16 ||
-      (candidate.1 - stack.global_cols[0]).abs() >= 16 {
+      (candidate.1 - stack.global_cols[0]).abs() >= 16 ||
+      (
+        is_compound &&
+        (
+          (other.0 - stack.global_rows[1]).abs() >= 16 ||
+          (other.1 - stack.global_cols[1]).abs() >= 16
+        )
+      ) {
       stack.zero_mv_context = 1
     } else {
       stack.zero_mv_context = 0
     }
   }
   for idx in 0..<stack.count {
-    if av1_stack_mv(stack, idx, 0) == candidate {
+    if av1_stack_mv(stack, idx, 0) == candidate &&
+      (!is_compound || av1_stack_mv(stack, idx, 1) == other) {
       stack.weights[idx] = stack.weights[idx] + 2
       return
     }
   }
   if stack.count < av1_ref_mv_stack_size {
     av1_stack_set_mv(stack, stack.count, 0, candidate.0, candidate.1)
+    if is_compound {
+      av1_stack_set_mv(stack, stack.count, 1, other.0, other.1)
+    }
     stack.weights[stack.count] = 2
     stack.count = stack.count + 1
   }

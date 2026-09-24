@@ -133,11 +133,19 @@ fn av1_wiener_filter_piece(
       for t in 0..<7 {
         s = s +
           hfilter[t] *
-          av1_restoration_source_sample(view, plane, x0 + c + t - 3, y0 + r - 3,
-            stripe)
+          av1_restoration_source_sample(
+            view,
+            plane,
+            x0 + c + t - 3,
+            y0 + r - 3,
+            stripe,
+          )
       }
-      intermediate[r * w + c] = av1_lr_clip(-offset, limit - offset,
-        av1_lr_round_n(s, round0))
+      intermediate[r * w + c] = av1_lr_clip(
+        -offset,
+        limit - offset,
+        av1_lr_round_n(s, round0),
+      )
     }
   }
   let out : Array[Int] = Array::make(w * h, 0)
@@ -191,8 +199,13 @@ fn av1_sgr_box_pass(
       let mut b = 0
       for dy in -r..<(r + 1) {
         for dx in -r..<(r + 1) {
-          let c = av1_restoration_source_sample(view, plane, x0 + j + dx, y0 + i +
-            dy, stripe)
+          let c = av1_restoration_source_sample(
+            view,
+            plane,
+            x0 + j + dx,
+            y0 + i + dy,
+            stripe,
+          )
           a = a + c * c
           b = b + c
         }
@@ -201,7 +214,11 @@ fn av1_sgr_box_pass(
       let d = av1_lr_round_n(b, bit_depth - 8)
       let diff = a * n - d * d
       let p = if diff > 0 { diff } else { 0 }
-      let z = av1_lr_round_n(p * s, 20)
+      // dav1d's p/s and mean products use unsigned arithmetic. Both can
+      // exceed signed Int: high-contrast 3x3 windows for p*s, and bright
+      // low-variance 12-bit windows for b2. Keep the complete product until
+      // rounding; the shifted statistics fit Int again.
+      let z = ((p.to_int64() * s.to_int64() + (1L << 19)) >> 20).to_int()
       let a2 = if z >= 255 {
         256
       } else if z == 0 {
@@ -210,9 +227,9 @@ fn av1_sgr_box_pass(
         ((z << 8) + z / 2) / (z + 1)
       }
       let one_over_n = ((1 << 12) + n / 2) / n
-      let b2 = ((1 << 8) - a2) * b * one_over_n
+      let b2 = ((1 << 8) - a2).to_int64() * b.to_int64() * one_over_n.to_int64()
       a_arr[(i + 1) * (w + 2) + (j + 1)] = a2
-      b_arr[(i + 1) * (w + 2) + (j + 1)] = av1_lr_round_n(b2, 12)
+      b_arr[(i + 1) * (w + 2) + (j + 1)] = ((b2 + (1L << 11)) >> 12).to_int()
     }
   }
   let out : Array[Int] = Array::make(w * h, 0)
@@ -232,24 +249,23 @@ fn av1_sgr_box_pass(
             } else {
               0
             }
+          } else if dx == 0 || dy == 0 {
+            4
           } else {
-            if dx == 0 || dy == 0 {
-              4
-            } else {
-              3
-            }
+            3
           }
-          wa = wa +
-            weight *
-            a_arr[(i + dy + 1) * (w + 2) + (j + dx + 1)]
-          wb = wb +
-            weight *
-            b_arr[(i + dy + 1) * (w + 2) + (j + dx + 1)]
+          wa = wa + weight * a_arr[(i + dy + 1) * (w + 2) + (j + dx + 1)]
+          wb = wb + weight * b_arr[(i + dy + 1) * (w + 2) + (j + dx + 1)]
         }
       }
       let shift = if pass == 0 && (i & 1) != 0 { 4 } else { 5 }
-      let center = av1_restoration_source_sample(view, plane, x0 + j, y0 + i,
-        stripe)
+      let center = av1_restoration_source_sample(
+        view,
+        plane,
+        x0 + j,
+        y0 + i,
+        stripe,
+      )
       out[i * w + j] = av1_lr_round_n(wa * center + wb, 8 + shift - 4)
     }
   }
@@ -284,7 +300,10 @@ fn av1_sgr_filter_piece(
   let w2 = (1 << 7) - w0 - w1
   let hi = (1 << bit_depth) - 1
   let flt0 = if r0 != 0 {
-    match av1_sgr_box_pass(view, plane, x0, y0, w, h, stripe, r0, eps0, 0, bit_depth) {
+    match
+      av1_sgr_box_pass(
+        view, plane, x0, y0, w, h, stripe, r0, eps0, 0, bit_depth,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -292,7 +311,10 @@ fn av1_sgr_filter_piece(
     Array::make(0, 0)
   }
   let flt1 = if r1 != 0 {
-    match av1_sgr_box_pass(view, plane, x0, y0, w, h, stripe, r1, eps1, 1, bit_depth) {
+    match
+      av1_sgr_box_pass(
+        view, plane, x0, y0, w, h, stripe, r1, eps1, 1, bit_depth,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -381,8 +403,12 @@ fn av1_restoration_filter_plane(
           if vertical.length() != 3 || horizontal.length() != 3 {
             return None
           }
-          Some(av1_wiener_collect_pieces(view, plane, nx0, w, v_start, v_end,
-            stripes, vertical, horizontal, bit_depth))
+          Some(
+            av1_wiener_collect_pieces(
+              view, plane, nx0, w, v_start, v_end, stripes, vertical, horizontal,
+              bit_depth,
+            ),
+          )
         }
         Some(Av1RestorationUnitSgrproj(set, xqd)) => {
           if xqd.length() != 2 {
@@ -391,24 +417,25 @@ fn av1_restoration_filter_plane(
           if xqd[0] < -96 || xqd[0] > 31 || xqd[1] < -32 || xqd[1] > 95 {
             return None
           }
-          av1_sgr_collect_pieces(view, plane, nx0, w, v_start, v_end,
-            stripes, set, xqd, bit_depth)
+          av1_sgr_collect_pieces(
+            view, plane, nx0, w, v_start, v_end, stripes, set, xqd, bit_depth,
+          )
         }
         _ => continue
       }
       match filtered {
-        Some(pieces) => {
+        Some(pieces) =>
           for piece in pieces {
             let (py0, py1, data) = piece
             let ph = py1 - py0
             for i in 0..<ph {
               for j in 0..<w {
-                out[(py0 + i) * view.frame_strides[plane] + nx0 + j] = data[i * w +
+                out[(py0 + i) * view.frame_strides[plane] + nx0 + j] = data[i *
+                  w +
                   j]
               }
             }
           }
-        }
         None => return None
       }
     }
@@ -438,16 +465,22 @@ fn av1_wiener_collect_pieces(
     } else {
       stripes.starts[k]
     }
-    let py1 = if v_end < stripes.ends[k] {
-      v_end
-    } else {
-      stripes.ends[k]
-    }
+    let py1 = if v_end < stripes.ends[k] { v_end } else { stripes.ends[k] }
     if py1 <= py0 {
       continue
     }
-    let data = av1_wiener_filter_piece(view, plane, nx0, py0, w, py1 - py0, k,
-      vertical, horizontal, bit_depth)
+    let data = av1_wiener_filter_piece(
+      view,
+      plane,
+      nx0,
+      py0,
+      w,
+      py1 - py0,
+      k,
+      vertical,
+      horizontal,
+      bit_depth,
+    )
     pieces.push((py0, py1, data))
   }
   pieces
@@ -474,17 +507,23 @@ fn av1_sgr_collect_pieces(
     } else {
       stripes.starts[k]
     }
-    let py1 = if v_end < stripes.ends[k] {
-      v_end
-    } else {
-      stripes.ends[k]
-    }
+    let py1 = if v_end < stripes.ends[k] { v_end } else { stripes.ends[k] }
     if py1 <= py0 {
       continue
     }
     let data = match
-      av1_sgr_filter_piece(view, plane, nx0, py0, w, py1 - py0, k, set, xqd,
-        bit_depth) {
+      av1_sgr_filter_piece(
+        view,
+        plane,
+        nx0,
+        py0,
+        w,
+        py1 - py0,
+        k,
+        set,
+        xqd,
+        bit_depth,
+      ) {
       Some(value) => value
       None => return None
     }
@@ -516,8 +555,16 @@ fn av1_restoration_filter_frame(
   let out : Array[Array[Int]] = []
   for plane in 0..<num_planes {
     let filtered = match
-      av1_restoration_filter_plane(view.frame[plane], view, units[plane], layout,
-        plane, subsampling_x, subsampling_y, bit_depth) {
+      av1_restoration_filter_plane(
+        view.frame[plane],
+        view,
+        units[plane],
+        layout,
+        plane,
+        subsampling_x,
+        subsampling_y,
+        bit_depth,
+      ) {
       Some(value) => value
       None => return None
     }

@@ -1,6 +1,6 @@
+///|
 /// Hand-built bitstreams exercise only the show-existing envelope.  No test
 /// here claims to decode inter prediction or reference-frame pixels.
-
 test "av1 parses show-existing timing and frame-id envelope" {
   // 1 | map_idx=5 (101) | presentation_time=17 (10001) |
   // frame_id=77 (1001101) => 0xD8CD.
@@ -28,6 +28,7 @@ test "av1 parses show-existing timing and frame-id envelope" {
   }
 }
 
+///|
 test "av1 parses show-existing without optional timing" {
   // 1 | map_idx=2 (010), followed by byte alignment padding.
   let config : Av1ShowExistingFrameConfig = {
@@ -49,6 +50,7 @@ test "av1 parses show-existing without optional timing" {
   assert_eq(value.header_bytes, 1)
 }
 
+///|
 test "av1 rejects truncated or illegal show-existing envelope" {
   let config : Av1ShowExistingFrameConfig = {
     decoder_model_info_present: true,
@@ -75,4 +77,31 @@ test "av1 rejects truncated or illegal show-existing envelope" {
   assert_true(av1_parse_show_existing_frame([b'\x80'], valid_slots) is None)
   // show_existing=0 is outside this reference-display-only API.
   assert_true(av1_parse_show_existing_frame([b'\x00'], valid_slots) is None)
+}
+
+///|
+test "av1 show-existing preserves unsigned 32-bit presentation times" {
+  let config : Av1ShowExistingFrameConfig = {
+    decoder_model_info_present: true,
+    equal_picture_interval: false,
+    frame_presentation_time_length_minus_1: 31,
+    frame_id_numbers_present: false,
+    additional_frame_id_len_minus1: 0,
+    delta_frame_id_length_minus2: 0,
+    reference_frame_types: [0, 1, 1, 1, 1, 1, 1, 1],
+  }
+  let maximum = av1_parse_show_existing_frame(
+    [0x8f, 0xff, 0xff, 0xff, 0xf8],
+    config,
+  ).unwrap()
+  assert_eq(maximum.frame_presentation_time, Some(4294967295L))
+  assert_eq((maximum.header_bits, maximum.header_bytes), (36, 5))
+  let high = av1_parse_show_existing_frame(
+    [0x88, 0x00, 0x00, 0x00, 0x08],
+    config,
+  ).unwrap()
+  assert_eq(high.frame_presentation_time, Some(2147483648L))
+  assert_true(
+    av1_parse_show_existing_frame([0x8f, 0xff, 0xff, 0xff], config) is None,
+  )
 }

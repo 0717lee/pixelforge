@@ -8,6 +8,8 @@ priv struct Av1FramePlanes {
   bit_depth : Int
   full_range : Bool
   matrix_coefficients : Int
+  color_primaries : Int
+  transfer_characteristics : Int
   /// Chroma subsampling shifts (0 or 1) for planes 1 and 2.
   sub_x : Int
   sub_y : Int
@@ -72,6 +74,8 @@ fn av1_frame_to_rgba(frame : Av1FramePlanes) -> Image? {
     subsampling_y=frame.sub_y == 1,
     full_range=frame.full_range,
     matrix_coefficients=frame.matrix_coefficients,
+    color_primaries=frame.color_primaries,
+    transfer_characteristics=frame.transfer_characteristics,
   )
 }
 
@@ -170,6 +174,10 @@ fn av1_frame_apply_grain(
     ) {
     None => None
     Some(_) => {
+      let display = {
+        ..frame,
+        planes: frame.planes.map(samples => samples.copy()),
+      }
       for p in 0..<frame.planes.length() {
         let (divisor_x, divisor_y) = av1_frame_plane_divisor(frame, p)
         let w = (frame.width + divisor_x - 1) / divisor_x
@@ -177,11 +185,11 @@ fn av1_frame_apply_grain(
         let stride = frame.coded_width / divisor_x
         for y in 0..<h {
           for x in 0..<w {
-            frame.planes[p][y * stride + x] = cropped[p][y * w + x]
+            display.planes[p][y * stride + x] = cropped[p][y * w + x]
           }
         }
       }
-      Some(frame)
+      Some(display)
     }
   }
 }
@@ -231,11 +239,21 @@ fn av1_decode_tile_planes(
   /// The frame's parsed `segmentation_params` (AV1 §6.10.9); blocks read their
   /// segment id from it and take their quantizer index from the segment.
   segmentation? : Av1SegmentationParams? = None,
+  color_primaries? : Int = 2,
+  transfer_characteristics? : Int = 2,
+  quant_matrix? : Av1QuantMatrix? = None,
+  allow_intrabc? : Bool = false,
+  previous_seg_ids? : Array[Int] = [],
+  delta_lf_present? : Bool = false,
+  delta_lf_res? : Int = 0,
+  delta_lf_multi? : Bool = false,
+  segment_ids_out? : Array[Array[Int]]? = None,
   /// The frame entropy context every tile starts from (AV1 §5.9). `None`
   /// seeds the normative defaults.
   cdfs? : Av1FrameCdfs? = None,
-  /// When present, the context_update_tile_id tile (tile 0) pushes its final
-  /// entropy state here for the frame-end update.
+  /// Row-major tile index whose adapted context is saved at frame end.
+  context_update_tile_id? : Int = 0,
+  /// When present, the selected tile pushes its final entropy state here.
   cdfs_out? : Array[Av1FrameCdfs?]? = None,
 ) -> (Av1FramePlanes, Av1RestorationStripeStore?, Av1FrameCdfs?)? {
   let output_width = if upscaled_width == 0 { width } else { upscaled_width }
@@ -261,8 +279,13 @@ fn av1_decode_tile_planes(
     ) {
     return None
   }
+  let coded_lossless = av1_frame_coded_lossless(
+    base_q_idx,
+    quant_deltas,
+    segmentation.unwrap_or(av1_segmentation_empty()),
+  )
   if cdef is Some(config) {
-    if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
+    if coded_lossless || !av1_cdef_config_valid(config, monochrome~) {
       return None
     }
   }
@@ -273,8 +296,20 @@ fn av1_decode_tile_planes(
   }
   let mut filter_active = false
   if loop_filter is Some(config) {
-    if base_q_idx == 0 || !av1_loop_filter_config_valid(config) {
+    if coded_lossless || !av1_loop_filter_config_valid(config) {
       return None
+    }
+    if delta_lf_present {
+      filter_active = true
+    }
+    if segmentation is Some(params) {
+      for id in 0..<8 {
+        for feature in 1..<5 {
+          if av1_segment_feature(params, id, feature) {
+            filter_active = true
+          }
+        }
+      }
     }
     for plane in 0..<(if monochrome { 1 } else { 3 }) {
       for direction in 0..<2 {
@@ -312,6 +347,9 @@ fn av1_decode_tile_planes(
     Some(value) => value
     None => return None
   }
+  if context_update_tile_id < 0 || context_update_tile_id >= tiles.length() {
+    return None
+  }
   let chroma_coded_w = (coded_width + (1 << sub_x) - 1) >> sub_x
   let chroma_coded_h = (coded_height + (1 << sub_y) - 1) >> sub_y
   let planes : Array[Array[Int]] = [Array::make(coded_width * coded_height, 0)]
@@ -333,6 +371,8 @@ fn av1_decode_tile_planes(
     }
   }
   let mi_cols = coded_width / 4
+  let segment_ids = Array::make(mi_cols * (coded_height / 4), 0)
+  let lf_deltas = Array::make(mi_cols * (coded_height / 4) * 4, 0)
   let skips = Array::make(mi_cols * (coded_height / 4), 0)
   let cdef_cols = (coded_width + 63) / 64
   let indices = Array::make(cdef_cols * ((coded_height + 63) / 64), -1)
@@ -365,12 +405,22 @@ fn av1_decode_tile_planes(
       }
     None => ()
   }
-  let mut tile_index = 0
   for tile in tiles {
     let left = col_starts[tile.col]
     let top = row_starts[tile.row]
     let tile_width = col_starts[tile.col + 1] - left
     let tile_height = row_starts[tile.row + 1] - top
+    let tile_cols4 = av1_partition_coded_extent(tile_width) / 4
+    let tile_rows4 = av1_partition_coded_extent(tile_height) / 4
+    let previous_tile = if previous_seg_ids.length() == segment_ids.length() {
+      Array::makei(tile_cols4 * tile_rows4, i => {
+        previous_seg_ids[(top / 4 + i / tile_cols4) * mi_cols +
+        left / 4 +
+        i % tile_cols4]
+      })
+    } else {
+      []
+    }
     let tile_inter = match inter {
       Some(config) =>
         Some(
@@ -412,15 +462,26 @@ fn av1_decode_tile_planes(
         segmentation~,
         delta_q_present~,
         delta_q_res~,
-        // Only the context_update_tile_id tile (0 by default) writes the
-        // frame-end context; every other tile's rows are discarded.
+        quant_matrix~,
+        allow_intrabc~,
+        frame_mi_cols=mi_cols,
+        frame_mi_rows=coded_height / 4,
+        previous_seg_ids=previous_tile,
+        delta_lf_present~,
+        delta_lf_res~,
+        delta_lf_multi~,
+        // Every tile starts from the same frame context; only the selected
+        // tile contributes adapted rows to the frame-end snapshot.
         frame_cdfs=cdfs,
-        cdfs_out=if tile_index == 0 { cdfs_out } else { None },
+        cdfs_out=if tile.index == context_update_tile_id {
+          cdfs_out
+        } else {
+          None
+        },
       ) {
       Some(value) => value
       None => return None
     }
-    tile_index = tile_index + 1
     for p in 0..<planes.length() {
       let divisor_x = if p == 0 { 1 } else { 1 << sub_x }
       let divisor_y = if p == 0 { 1 } else { 1 << sub_y }
@@ -447,6 +508,15 @@ fn av1_decode_tile_planes(
     }
     for row in 0..<state.rows {
       for col in 0..<state.cols {
+        let index = (top / 4 + row) * mi_cols + left / 4 + col
+        segment_ids[index] = state.seg_ids[row * state.cols + col]
+        if delta_lf_present {
+          for k in 0..<4 {
+            lf_deltas[index * 4 + k] = state.lf_deltas[(row * state.cols + col) *
+              4 +
+              k]
+          }
+        }
         skips[(top / 4 + row) * mi_cols + left / 4 + col] = state.skips[row *
           state.cols +
           col]
@@ -472,6 +542,9 @@ fn av1_decode_tile_planes(
     }
   }
   // Every active plane's unit grid must be fully covered; an unread
+  if segment_ids_out is Some(sink) {
+    sink.push(segment_ids)
+  }
   // position means missing syntax, not a decoded-None unit.
   if lr_layout is Some(layout) {
     for plane in 0..<lr_units.length() {
@@ -504,6 +577,13 @@ fn av1_decode_tile_planes(
       sub_x~,
       sub_y~,
       field~,
+      block_map=Some({
+        cols: mi_cols,
+        rows: coded_height / 4,
+        segment_ids,
+        deltas: lf_deltas,
+        segmentation: segmentation.unwrap_or(av1_segmentation_empty()),
+      }),
     ) {
     return None
   }
@@ -561,6 +641,8 @@ fn av1_decode_tile_planes(
     bit_depth,
     full_range,
     matrix_coefficients,
+    color_primaries,
+    transfer_characteristics,
     sub_x,
     sub_y,
     planes: filtered,
@@ -613,6 +695,8 @@ fn av1_decode_tile_planes(
             bit_depth: frame.bit_depth,
             full_range: frame.full_range,
             matrix_coefficients: frame.matrix_coefficients,
+            color_primaries: frame.color_primaries,
+            transfer_characteristics: frame.transfer_characteristics,
             sub_x: frame.sub_x,
             sub_y: frame.sub_y,
             planes,
@@ -643,16 +727,17 @@ fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
   }
   let planes : Array[Array[Int]] = []
   for plane in 0..<frame.planes.length() {
-    let divisor = if plane == 0 { 1 } else { 2 }
-    let source_width = (frame.width + divisor - 1) / divisor
-    let target_width = (width + divisor - 1) / divisor
-    let height = (frame.height + divisor - 1) / divisor
-    let stride = coded_width / divisor
+    let divisor_x = if plane == 0 { 1 } else { 1 << frame.sub_x }
+    let divisor_y = if plane == 0 { 1 } else { 1 << frame.sub_y }
+    let source_width = (frame.width + divisor_x - 1) / divisor_x
+    let target_width = (width + divisor_x - 1) / divisor_x
+    let height = (frame.height + divisor_y - 1) / divisor_y
+    let stride = coded_width / divisor_x
     let samples = match
       av1_superres_upscale_plane(
         frame.planes[plane],
-        frame.coded_width / divisor,
-        frame.coded_width / divisor,
+        frame.coded_width / divisor_x,
+        frame.coded_width / divisor_x,
         source_width,
         target_width,
         height,
@@ -661,7 +746,7 @@ fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
       Some(value) => value
       None => return None
     }
-    let padded = Array::makei(stride * (coded_height / divisor), i => {
+    let padded = Array::makei(stride * (coded_height / divisor_y), i => {
       let row = if i / stride < height { i / stride } else { height - 1 }
       let col = if i % stride < target_width {
         i % stride
@@ -680,6 +765,8 @@ fn av1_frame_upscale(frame : Av1FramePlanes, width : Int) -> Av1FramePlanes? {
     bit_depth: frame.bit_depth,
     full_range: frame.full_range,
     matrix_coefficients: frame.matrix_coefficients,
+    color_primaries: frame.color_primaries,
+    transfer_characteristics: frame.transfer_characteristics,
     sub_x: frame.sub_x,
     sub_y: frame.sub_y,
   })
@@ -691,45 +778,40 @@ fn av1_decode_frame_planes(
   allow_monochrome? : Bool = false,
   map? : Av1FrameMap,
   sequence? : Av1SequenceInfo,
+  operating_point? : Int = 0,
+  spatial_layer? : Int? = None,
 ) -> Av1FramePlanes? {
-  // An AVIF image sequence carries the sequence header in the first item only,
-  // so a later temporal unit may legitimately have none of its own.
-  let seq = match sequence {
-    Some(value) => value
-    None =>
-      match av1_sequence_info(data) {
-        Some(value) => value
-        None => return None
-      }
-  }
-  if !seq.monochrome &&
-    seq.matrix_coefficients != 1 &&
-    seq.matrix_coefficients != 2 &&
-    seq.matrix_coefficients != 5 &&
-    seq.matrix_coefficients != 6 {
-    return None
-  }
-  let frames = av1_obu_payloads(data, 6)
-  if frames.length() == 0 {
-    return None
-  }
-  // A caller decoding a whole sequence supplies its own buffer; a one-shot
-  // image decode gets a scratch one, which is all a key frame needs.
   let state = match map {
     Some(value) => value
     None => av1_frame_map()
   }
-  let header = match
-    av1_parse_stage1_frame(
-      frames[0],
-      seq,
-      allow_highbd=true,
-      allow_monochrome~,
-      map=state,
+  let (_, displayed) = match
+    av1_decode_obu_planes(
+      data,
+      state,
+      sequence,
+      allow_monochrome,
+      operating_point~,
+      spatial_layer~,
     ) {
     Some(value) => value
     None => return None
   }
+  if displayed.is_empty() {
+    None
+  } else {
+    Some(displayed[0])
+  }
+}
+
+///|
+/// Decode and save one assembled frame. Presentation (show_frame and grain)
+/// belongs to the OBU sequencer, so hidden frames take this exact same path.
+fn av1_decode_parsed_frame_planes(
+  header : Av1FrameHeaderInfo,
+  seq : Av1SequenceInfo,
+  state : Av1FrameMap,
+) -> Av1FramePlanes? {
   // An inter frame is only decodable once every tool it signals can be acted
   // on; a frame that uses one the block stage lacks is refused whole rather
   // than decoded as a prefix of itself.
@@ -743,31 +825,9 @@ fn av1_decode_frame_planes(
       None => return None
     }
   }
-  let film_grain = header.film_grain
   let frame_height = header.frame_height
   let sb_size = if seq.use_128x128_superblock { 128 } else { 64 }
-  // `load_cdfs` versus `setup_past_independence` (AV1 §6.10, §7.20). A frame
-  // whose `primary_ref_frame` names a slot starts every tile table from that
-  // slot's stored entropy context; `PRIMARY_REF_NONE` (every key and
-  // intra-only frame) starts from the normative defaults. A slot that never
-  // stored a context behaves as the defaults, matching a decoder whose frame
-  // context memory was never written.
-  let inherited : Av1FrameCdfs? = if !av1_cdf_load_enabled ||
-    header.primary_ref_frame < 0 ||
-    header.primary_ref_frame >= av1_primary_ref_none ||
-    header.primary_ref_frame >= header.ref_frame_idx.length() {
-    None
-  } else {
-    let slot = header.ref_frame_idx[header.primary_ref_frame]
-    match state.slots[slot] {
-      Some(stored) =>
-        match stored.cdfs {
-          Some(snapshot) => Some(av1_frame_cdfs_copy(snapshot))
-          None => None
-        }
-      None => None
-    }
-  }
+  let inherited = Some(av1_frame_initial_cdfs(state, header))
   let cols = match
     av1_frame_tile_starts(
       header.tile_col_starts_sb,
@@ -783,6 +843,20 @@ fn av1_decode_frame_planes(
     None => return None
   }
   let cdfs_sink : Array[Av1FrameCdfs?] = []
+  let segment_sink : Array[Array[Int]] = []
+  let previous_segments = if header.primary_ref_frame >= 0 &&
+    header.primary_ref_frame < av1_primary_ref_none {
+    let slot = header.ref_frame_idx[header.primary_ref_frame]
+    if state.valid[slot] &&
+      state.frame_widths[slot] == header.frame_width &&
+      state.frame_heights[slot] == header.frame_height {
+      state.saved_segment_ids[slot]
+    } else {
+      []
+    }
+  } else {
+    []
+  }
   let (decoded, _stripe_store, frame_cdfs) = match
     av1_decode_tile_planes(
       header.frame_width,
@@ -802,6 +876,8 @@ fn av1_decode_frame_planes(
       seq.enable_filter_intra,
       header.tx_mode_select,
       header.cdef,
+      color_primaries=seq.color_primaries,
+      transfer_characteristics=seq.transfer_characteristics,
       monochrome=seq.monochrome,
       enable_intra_edge_filter=seq.enable_intra_edge_filter,
       loop_filter=header.loop_filter,
@@ -815,7 +891,15 @@ fn av1_decode_frame_planes(
       subsampling_y=seq.subsampling_y,
       inter~,
       segmentation=Some(header.segmentation),
+      quant_matrix=header.quant_matrix,
+      allow_intrabc=header.allow_intrabc,
+      previous_seg_ids=previous_segments,
+      delta_lf_present=header.delta_lf_present,
+      delta_lf_res=header.delta_lf_res,
+      delta_lf_multi=header.delta_lf_multi,
+      segment_ids_out=Some(segment_sink),
       cdfs=inherited,
+      context_update_tile_id=header.context_update_tile_id,
       cdfs_out=Some(cdfs_sink),
     ) {
     Some(value) => value
@@ -831,18 +915,7 @@ fn av1_decode_frame_planes(
     seq,
     cdfs=frame_cdfs,
     field=inter.map(fn(info) { info.field }),
+    segment_ids=if segment_sink.length() > 0 { segment_sink[0] } else { [] },
   )
-  // Film grain is the last step before colour conversion: it modifies the
-  // displayed picture while the stored reference samples stay grain free.
-  match film_grain {
-    None => Some(decoded)
-    Some(params) =>
-      av1_frame_apply_grain(
-        decoded,
-        params,
-        seq.monochrome,
-        seq.subsampling_x,
-        seq.subsampling_y,
-      )
-  }
+  Some(decoded)
 }

@@ -42,6 +42,7 @@ pub struct AvifAnimationDescriptor {
   frames : Array[AvifAnimationFrame]
 }
 
+///|
 /// A successfully decoded animation sample with its track timing.
 pub struct AvifAnimationPixelFrame {
   index : Int
@@ -51,6 +52,7 @@ pub struct AvifAnimationPixelFrame {
   image : Image
 }
 
+///|
 /// Decoded animation samples. Samples are supplied in the order returned by
 /// `avif_animation_descriptor`; each sample is passed to the pure AV1 decoder.
 pub struct AvifAnimationPixels {
@@ -58,6 +60,7 @@ pub struct AvifAnimationPixels {
   frames : Array[AvifAnimationPixelFrame]
 }
 
+///|
 /// Decode an ordered set of AV1 animation samples using the native decoder.
 /// A malformed or unsupported sample rejects the whole sequence so callers do
 /// not accidentally present a partial animation.
@@ -65,7 +68,8 @@ pub fn avif_decode_animation_frames(
   descriptor : AvifAnimationDescriptor,
   samples : Array[Array[Byte]],
 ) -> AvifAnimationPixels? {
-  if descriptor.timescale <= 0 || descriptor.frames.length() == 0 ||
+  if descriptor.timescale <= 0 ||
+    descriptor.frames.length() == 0 ||
     descriptor.frames.length() != samples.length() {
     return None
   }
@@ -78,18 +82,23 @@ pub fn avif_decode_animation_frames(
     let timing = descriptor.frames[i]
     // AVIF image sequences are presented in decode order. Reject malformed
     // timing tables instead of silently attaching pixels to the wrong frame.
-    if timing.index != i || timing.timescale != descriptor.timescale ||
-      timing.timestamp != expected_timestamp || timing.duration <= 0 {
+    if timing.index != i ||
+      timing.timescale != descriptor.timescale ||
+      timing.timestamp != expected_timestamp ||
+      timing.duration <= 0 {
       return None
     }
-    let image = match av1_video_decode_frame(
-      video,
-      samples[i],
-      allow_monochrome=true,
-    ) {
+    let displayed = match
+      av1_video_decode_temporal_unit(video, samples[i], allow_monochrome=true) {
       Some(value) => value
       None => return None
     }
+    // A BMFF sample is one temporal unit with one presentation time. Decode
+    // every hidden/reference frame, but require one presented image for it.
+    if displayed.length() != 1 {
+      return None
+    }
+    let image = displayed[0]
     frames.push({
       index: timing.index,
       timestamp: timing.timestamp,
@@ -109,6 +118,7 @@ pub fn avif_decode_animation_frames(
   Some({ timescale: descriptor.timescale, frames, })
 }
 
+///|
 /// Convenience entrypoint for callers that already extracted sample timing
 /// tables. The arrays must match the sample order and length.
 pub fn avif_decode_animation_samples(
@@ -117,8 +127,10 @@ pub fn avif_decode_animation_samples(
   durations : Array[Int],
   samples : Array[Array[Byte]],
 ) -> AvifAnimationPixels? {
-  if timescale <= 0 || timestamps.length() != samples.length() ||
-    durations.length() != samples.length() || samples.length() == 0 {
+  if timescale <= 0 ||
+    timestamps.length() != samples.length() ||
+    durations.length() != samples.length() ||
+    samples.length() == 0 {
     return None
   }
   let frames : Array[AvifAnimationFrame] = []
@@ -135,7 +147,8 @@ pub fn avif_decode_animation_samples(
   avif_decode_animation_frames({ timescale, frames, }, samples)
 }
 
-/// Extract sample payloads referenced by the first animation track.
+///|
+/// Extract sample payloads from the selected primary animation track.
 pub fn avif_animation_sample_payloads(
   data : Array[Byte],
 ) -> (AvifAnimationDescriptor, Array[Array[Byte]])? {
@@ -145,7 +158,8 @@ pub fn avif_animation_sample_payloads(
   }
   let samples : Array[Array[Byte]] = []
   for frame in descriptor.frames {
-    if frame.offset < 0 || frame.length < 0 ||
+    if frame.offset < 0 ||
+      frame.length < 0 ||
       frame.offset > data.length() - frame.length {
       return None
     }
@@ -158,19 +172,83 @@ pub fn avif_animation_sample_payloads(
   Some((descriptor, samples))
 }
 
+///|
 /// Parse and decode all animation samples from a self-contained BMFF buffer.
 pub fn avif_decode_animation(data : Array[Byte]) -> AvifAnimationPixels? {
-  let (descriptor, samples) = match avif_animation_sample_payloads(data) {
+  let (color, alpha) = match ga_animation_tracks(data) {
     Some(value) => value
     None => return None
   }
-  avif_decode_animation_frames(descriptor, samples)
+  let color_planes = match ga_animation_decode_track(data, color) {
+    Some(value) => value
+    None => return None
+  }
+  let alpha_planes = match alpha {
+    None => []
+    Some(track) => {
+      if track.descriptor.frames.length() != color.descriptor.frames.length() {
+        return None
+      }
+      // Compare media times exactly, including tracks using different scales.
+      for i in 0..<track.descriptor.frames.length() {
+        let a = track.descriptor.frames[i]
+        let c = color.descriptor.frames[i]
+        if a.timestamp.to_int64() * c.timescale.to_int64() !=
+          c.timestamp.to_int64() * a.timescale.to_int64() ||
+          a.duration.to_int64() * c.timescale.to_int64() !=
+          c.duration.to_int64() * a.timescale.to_int64() {
+          return None
+        }
+      }
+      match ga_animation_decode_track(data, track) {
+        Some(value) => value
+        None => return None
+      }
+    }
+  }
+  let frames : Array[AvifAnimationPixelFrame] = []
+  for i in 0..<color_planes.length() {
+    let native = color_planes[i]
+    let colored = av1_frame_apply_nclx(
+      native,
+      color.nclx_primaries,
+      color.nclx_transfer,
+      color.nclx_matrix,
+      color.nclx_full_range,
+    )
+    let converted = match alpha {
+      None => av1_frame_to_rgba(colored)
+      Some(track) =>
+        av1_frame_with_alpha(
+          colored,
+          alpha_planes[i],
+          color.premultiplied_by.contains(track.id),
+        )
+    }
+    let image = match converted {
+      Some(value) => value
+      None => return None
+    }
+    let timing = color.descriptor.frames[i]
+    frames.push({
+      index: i,
+      timestamp: timing.timestamp,
+      duration: timing.duration,
+      timescale: timing.timescale,
+      image,
+    })
+  }
+  Some({ timescale: color.descriptor.timescale, frames, })
 }
 
+///|
 /// Decode an AVIF sequence and select the image visible at `timestamp` in
 /// track timescale units.  The full sequence is validated before selection;
 /// malformed timing or pixel samples therefore cannot produce a partial frame.
-pub fn avif_decode_animation_frame(data : Array[Byte], timestamp : Int) -> Image? {
+pub fn avif_decode_animation_frame(
+  data : Array[Byte],
+  timestamp : Int,
+) -> Image? {
   let animation = match avif_decode_animation(data) {
     Some(value) => value
     None => return None
@@ -178,6 +256,7 @@ pub fn avif_decode_animation_frame(data : Array[Byte], timestamp : Int) -> Image
   avif_animation_frame_at(animation, timestamp)
 }
 
+///|
 /// Select the frame visible at a media timestamp. Playback loops at the
 /// track duration; negative timestamps are rejected.
 pub fn avif_animation_frame_at(
@@ -198,7 +277,9 @@ pub fn avif_animation_frame_at(
     }
     total = next_total
   }
-  if total <= 0 { return None }
+  if total <= 0 {
+    return None
+  }
   let t = timestamp % total
   for frame in animation.frames {
     if t < frame.timestamp + frame.duration {
@@ -213,6 +294,7 @@ pub fn avif_animation_frame_at(
 /// presentation time, which is especially hard to diagnose in a player.
 /// This regression stays beside the private record fields so it can construct
 /// an intentionally malformed descriptor without widening the public API.
+
 ///|
 test "animation decoder rejects noncontiguous timing tables" {
   let sample : Array[Byte] = [
@@ -246,6 +328,7 @@ test "animation decoder rejects noncontiguous timing tables" {
     avif_decode_animation_frames(descriptor, [sample, sample]) is None,
   )
 }
+
 ///|
 /// Unknown iloc construction methods must fail closed.  In particular, method
 /// 2 must not be interpreted as a file-relative extent (method 0).
@@ -277,6 +360,7 @@ test "iloc rejects unsupported construction method" {
   }
   assert_true(rejected)
 }
+
 ///|
 test "iloc resolves idat construction method extents" {
   let data : Array[Byte] = [
@@ -300,6 +384,7 @@ test "iloc resolves idat construction method extents" {
   assert_eq(items[0].offs[0], 5)
   assert_eq(items[0].lens[0], 3)
 }
+
 ///|
 priv suberror GridAnimError {
   Invalid
@@ -323,6 +408,375 @@ priv struct GaItem {
   mut base : Int
   offs : Array[Int]
   lens : Array[Int]
+}
+
+///|
+priv struct GaAnimationTrack {
+  id : Int
+  enabled : Bool
+  descriptor : AvifAnimationDescriptor
+  config_obus : Array[Byte]
+  config_depth : Int
+  config_monochrome : Bool
+  config_width : Int
+  config_height : Int
+  nclx_primaries : Int?
+  nclx_transfer : Int?
+  nclx_matrix : Int?
+  nclx_full_range : Bool?
+  aux_for : Array[Int]
+  premultiplied_by : Array[Int]
+  is_alpha : Bool
+}
+
+///|
+fn ga_cstring_matches(
+  data : Array[Byte],
+  from : Int,
+  end : Int,
+  value : String,
+) -> Bool raise GridAnimError {
+  let chars = value.to_array()
+  let mut matches = true
+  for p in from..<end {
+    let byte = ga_u8(data, p, end)
+    if byte == 0 {
+      return matches && p - from == chars.length()
+    }
+    if p - from >= chars.length() || byte != chars[p - from].to_int() {
+      matches = false
+    }
+  }
+  raise GridAnimError::Invalid
+}
+
+///|
+fn ga_animation_track(
+  data : Array[Byte],
+  bs : Array[GaBox],
+  trak : GaBox,
+  legacy : Bool,
+) -> GaAnimationTrack? raise GridAnimError {
+  let ti = ga_idx(bs, trak.start)
+  let mut id = 1
+  let mut enabled = true
+  match ga_find(bs, ti, 0x746B6864) { // tkhd
+    Some(header) => {
+      let version = ga_u8(data, header.payload, header.end)
+      if version > 1 {
+        raise GridAnimError::Unsupported
+      }
+      id = ga_u32(
+        data,
+        header.payload + (if version == 0 { 12 } else { 20 }),
+        header.end,
+      )
+      enabled = (ga_u8(data, header.payload + 3, header.end) & 1) != 0
+      if id <= 0 {
+        raise GridAnimError::Invalid
+      }
+    }
+    None => if !legacy { raise GridAnimError::Invalid }
+  }
+  let mdia = match ga_find(bs, ti, ga_mdia) {
+    Some(value) => value
+    None => raise GridAnimError::Invalid
+  }
+  let di = ga_idx(bs, mdia.start)
+  match ga_find(bs, di, 0x68646C72) { // hdlr
+    Some(handler) => {
+      let kind = ga_u32(data, handler.payload + 8, handler.end)
+      if kind == 0x61757876 { // auxv is never a primary picture.
+        enabled = false
+      } else if kind != 0x70696374 {
+        return None
+      }
+    }
+    None => if !legacy { raise GridAnimError::Invalid }
+  }
+  let minf = match ga_find(bs, di, ga_minf) {
+    Some(value) => value
+    None => raise GridAnimError::Invalid
+  }
+  let stbl = match ga_find(bs, ga_idx(bs, minf.start), ga_stbl) {
+    Some(value) => value
+    None => raise GridAnimError::Invalid
+  }
+  let mut config_depth = 0
+  let mut config_monochrome = false
+  let mut config_width = 0
+  let mut config_height = 0
+  let mut nclx_primaries : Int? = None
+  let mut nclx_transfer : Int? = None
+  let mut nclx_matrix : Int? = None
+  let mut nclx_full_range : Bool? = None
+  let config_obus : Array[Byte] = []
+  let mut is_alpha = false
+  match ga_find(bs, ga_idx(bs, stbl.start), 0x73747364) { // stsd
+    None => if !legacy { raise GridAnimError::Invalid }
+    Some(stsd) => {
+      if ga_u32(data, stsd.payload, stsd.end) != 0 ||
+        ga_u32(data, stsd.payload + 4, stsd.end) != 1 {
+        raise GridAnimError::Unsupported
+      }
+      let entries : Array[GaBox] = []
+      ga_walk(data, stsd.payload + 8, stsd.end, -1, entries)
+      if entries.length() != 1 || entries[0].typ != 0x61763031 {
+        return None
+      }
+      let entry = entries[0]
+      if entry.end - entry.payload < 78 {
+        raise GridAnimError::Invalid
+      }
+      config_width = ga_u16(data, entry.payload + 24, entry.end)
+      config_height = ga_u16(data, entry.payload + 26, entry.end)
+      if config_width <= 0 || config_height <= 0 {
+        raise GridAnimError::Invalid
+      }
+      let properties : Array[GaBox] = []
+      ga_walk(data, entry.payload + 78, entry.end, -1, properties)
+      for property in properties {
+        if property.typ == 0x636F6C72 &&
+          ga_u32(data, property.payload, property.end) == 0x6E636C78 {
+          if nclx_primaries is Some(_) {
+            raise GridAnimError::Invalid
+          }
+          nclx_primaries = Some(
+            ga_u16(data, property.payload + 4, property.end),
+          )
+          nclx_transfer = Some(ga_u16(data, property.payload + 6, property.end))
+          nclx_matrix = Some(ga_u16(data, property.payload + 8, property.end))
+          nclx_full_range = Some(
+            (ga_u8(data, property.payload + 10, property.end) & 0x80) != 0,
+          )
+        }
+      }
+      let config = match ga_find(properties, -1, 0x61763143) { // av1C
+        Some(value) => value
+        None => raise GridAnimError::Invalid
+      }
+      if config.end - config.payload < 4 ||
+        ga_u8(data, config.payload, config.end) != 0x81 {
+        raise GridAnimError::Invalid
+      }
+      let flags = ga_u8(data, config.payload + 2, config.end)
+      config_depth = if (flags & 0x40) == 0 {
+        8
+      } else if (flags & 0x20) == 0 {
+        10
+      } else {
+        12
+      }
+      config_monochrome = (flags & 0x10) != 0
+      for p in (config.payload + 4)..<config.end {
+        config_obus.push(data[p])
+      }
+      match ga_find(properties, -1, 0x61757869) { // AuxiliaryTypeInfoBox, auxi
+        None => ()
+        Some(auxi) => {
+          if ga_u32(data, auxi.payload, auxi.end) != 0 {
+            raise GridAnimError::Unsupported
+          }
+          is_alpha = ga_cstring_matches(
+            data,
+            auxi.payload + 4,
+            auxi.end,
+            "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha",
+          )
+        }
+      }
+    }
+  }
+  let aux_for : Array[Int] = []
+  let premultiplied_by : Array[Int] = []
+  match ga_find(bs, ti, 0x74726566) { // tref
+    None => ()
+    Some(references) => {
+      match ga_find(bs, ga_idx(bs, references.start), 0x6175786C) { // auxl
+        None => ()
+        Some(auxl) => {
+          if auxl.end == auxl.payload || (auxl.end - auxl.payload) % 4 != 0 {
+            raise GridAnimError::Invalid
+          }
+          for p = auxl.payload; p < auxl.end; p = p + 4 {
+            let master = ga_u32(data, p, auxl.end)
+            if master <= 0 || master == id {
+              raise GridAnimError::Invalid
+            }
+            aux_for.push(master)
+          }
+        }
+      }
+      match ga_find(bs, ga_idx(bs, references.start), 0x7072656D) { // prem
+        None => ()
+        Some(prem) => {
+          if prem.end == prem.payload || (prem.end - prem.payload) % 4 != 0 {
+            raise GridAnimError::Invalid
+          }
+          for p = prem.payload; p < prem.end; p = p + 4 {
+            let auxiliary = ga_u32(data, p, prem.end)
+            premultiplied_by.push(auxiliary)
+          }
+        }
+      }
+    }
+  }
+  let descriptor = match ga_animation_track_descriptor(data, bs, trak) {
+    Some(value) => value
+    None => raise GridAnimError::Invalid
+  }
+  Some({
+    id,
+    enabled,
+    descriptor,
+    config_obus,
+    config_depth,
+    config_monochrome,
+    config_width,
+    config_height,
+    nclx_primaries,
+    nclx_transfer,
+    nclx_matrix,
+    nclx_full_range,
+    aux_for,
+    premultiplied_by,
+    is_alpha,
+  })
+}
+
+///|
+/// Select by track identity and auxl association, never by physical trak order.
+/// If several enabled primary picture tracks exist, the lowest track ID wins.
+fn ga_animation_tracks(
+  data : Array[Byte],
+) -> (GaAnimationTrack, GaAnimationTrack?)? {
+  try {
+    let bs : Array[GaBox] = []
+    ga_walk(data, 0, data.length(), -1, bs)
+    let moov = match ga_find(bs, -1, ga_moov) {
+      Some(value) => value
+      None => return None
+    }
+    let mi = ga_idx(bs, moov.start)
+    let tracks = bs.filter(box => box.parent == mi && box.typ == ga_trak)
+    let parsed : Array[GaAnimationTrack] = []
+    for track in tracks {
+      match ga_animation_track(data, bs, track, tracks.length() == 1) {
+        None => ()
+        Some(value) => {
+          if parsed.any(previous => previous.id == value.id) {
+            return None
+          }
+          parsed.push(value)
+        }
+      }
+    }
+    let mut color : GaAnimationTrack? = None
+    for track in parsed {
+      if track.enabled && track.aux_for.length() == 0 && !track.is_alpha {
+        match color {
+          None => color = Some(track)
+          Some(previous) => if track.id < previous.id { color = Some(track) }
+        }
+      }
+    }
+    let color = match color {
+      Some(value) => value
+      None => return None
+    }
+    let mut alpha : GaAnimationTrack? = None
+    for track in parsed {
+      if track.is_alpha && track.aux_for.contains(color.id) {
+        if alpha is Some(_) ||
+          !track.config_monochrome ||
+          track.config_depth != color.config_depth {
+          return None
+        }
+        alpha = Some(track)
+      }
+    }
+    Some((color, alpha))
+  } catch {
+    _ => None
+  }
+}
+
+///|
+/// Metadata for the selected primary AV1 picture track.
+pub fn avif_animation_descriptor(
+  data : Array[Byte],
+) -> AvifAnimationDescriptor? {
+  match ga_animation_tracks(data) {
+    Some((color, _)) => Some(color.descriptor)
+    None => None
+  }
+}
+
+///|
+fn ga_animation_decode_track(
+  data : Array[Byte],
+  track : GaAnimationTrack,
+) -> Array[Av1FramePlanes]? {
+  let decoder = av1_video_decoder()
+  let frames : Array[Av1FramePlanes] = []
+  let mut expected_timestamp = 0
+  let mut sequence_payload : Array[Byte]? = None
+  for i in 0..<track.descriptor.frames.length() {
+    let timing = track.descriptor.frames[i]
+    if timing.index != i ||
+      timing.timescale != track.descriptor.timescale ||
+      timing.timestamp != expected_timestamp ||
+      timing.duration <= 0 {
+      return None
+    }
+    let sample = if i == 0 { track.config_obus.copy() } else { [] }
+    for p in timing.offset..<(timing.offset + timing.length) {
+      sample.push(data[p])
+    }
+    for payload in av1_obu_payloads(sample, 1) {
+      match sequence_payload {
+        None => sequence_payload = Some(payload)
+        Some(previous) => if previous != payload { return None }
+      }
+    }
+    let displayed = match
+      av1_video_decode_temporal_unit_planes(
+        decoder,
+        sample,
+        allow_monochrome=true,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    if displayed.length() != 1 {
+      return None
+    }
+    let frame = displayed[0]
+    if track.config_width != 0 {
+      let sequence = match decoder.sequence {
+        Some(value) => value
+        None => return None
+      }
+      if sequence.width != track.config_width ||
+        sequence.height != track.config_height {
+        return None
+      }
+    }
+    if track.config_depth != 0 &&
+      (
+        frame.bit_depth != track.config_depth ||
+        (frame.planes.length() == 1) != track.config_monochrome
+      ) {
+      return None
+    }
+    frames.push(frame)
+    let next = expected_timestamp + timing.duration
+    if next < expected_timestamp {
+      return None
+    }
+    expected_timestamp = next
+  }
+  Some(frames)
 }
 
 ///|
@@ -351,6 +805,7 @@ let ga_grid = 0x67726964
 
 ///|
 let ga_pitm = 0x7069746D
+
 ///|
 let ga_moov = 0x6D6F6F76
 
@@ -417,6 +872,7 @@ fn ga_u64(d : Array[Byte], p : Int, e : Int) -> Int raise GridAnimError {
   }
   ga_u32(d, p + 4, e)
 }
+
 ///|
 fn ga_idx(bs : Array[GaBox], start : Int) -> Int {
   for i in 0..<bs.length() {
@@ -484,7 +940,8 @@ fn ga_walk(
       typ == ga_trak ||
       typ == ga_mdia ||
       typ == ga_minf ||
-      typ == ga_stbl {
+      typ == ga_stbl ||
+      typ == 0x74726566 {
       ga_walk(d, payload, end, bi, out)
     }
     p = end
@@ -528,6 +985,7 @@ fn ga_items(
   }
   out
 }
+
 ///|
 fn ga_item_idx(xs : Array[GaItem], id : Int) -> Int {
   for i in 0..<xs.length() {
@@ -620,23 +1078,15 @@ fn ga_parse_iloc(
     }
   }
 }
+
 ///|
-/// Extract bounded animation samples from the first picture track in `moov`.
-pub fn avif_animation_descriptor(
+/// Extract bounded samples from one already-selected track.
+fn ga_animation_track_descriptor(
   data : Array[Byte],
+  bs : Array[GaBox],
+  trak : GaBox,
 ) -> AvifAnimationDescriptor? {
   try {
-    let bs : Array[GaBox] = []
-    ga_walk(data, 0, data.length(), -1, bs)
-    let moov = match ga_find(bs, -1, ga_moov) {
-      Some(x) => x
-      None => return None
-    }
-    let mi = ga_idx(bs, moov.start)
-    let trak = match ga_find(bs, mi, ga_trak) {
-      Some(x) => x
-      None => raise GridAnimError::Invalid
-    }
     let ti = ga_idx(bs, trak.start)
     let mdia = match ga_find(bs, ti, ga_mdia) {
       Some(x) => x
@@ -648,6 +1098,9 @@ pub fn avif_animation_descriptor(
       None => raise GridAnimError::Invalid
     }
     let ver = ga_u8(data, mdhd.payload, mdhd.end)
+    if ver > 1 {
+      raise GridAnimError::Unsupported
+    }
     let tspos = mdhd.payload + (if ver == 0 { 12 } else { 20 })
     let scale = ga_u32(data, tspos, mdhd.end)
     if scale <= 0 {
@@ -709,15 +1162,17 @@ pub fn avif_animation_descriptor(
     // incorrect for either layout.
     let sample_offsets : Array[Int] = []
     match stsc {
-      None => {
+      None =>
         if nc == count {
           for i in 0..<count {
             let op = cp + 4 + i * (if co.typ == ga_stco { 4 } else { 8 })
-            sample_offsets.push(if co.typ == ga_stco {
-              ga_u32(data, op, co.end)
-            } else {
-              ga_u64(data, op, co.end)
-            })
+            sample_offsets.push(
+              if co.typ == ga_stco {
+                ga_u32(data, op, co.end)
+              } else {
+                ga_u64(data, op, co.end)
+              },
+            )
           }
         } else {
           let base = if co.typ == ga_stco {
@@ -731,11 +1186,10 @@ pub fn avif_animation_descriptor(
             delta = delta + sizes[i]
           }
         }
-      }
       Some(table) => {
         let ep = table.payload + 4
         let entries = ga_u32(data, ep, table.end)
-        if entries <= 0 || entries > 4096 || table.end - ep < 8 + entries * 12 {
+        if entries <= 0 || entries > 4096 || table.end - ep < 4 + entries * 12 {
           raise GridAnimError::Invalid
         }
         let first_chunks : Array[Int] = []
@@ -745,7 +1199,9 @@ pub fn avif_animation_descriptor(
           let first_chunk = ga_u32(data, p, table.end)
           let samples_per_chunk = ga_u32(data, p + 4, table.end)
           let description = ga_u32(data, p + 8, table.end)
-          if first_chunk <= 0 || samples_per_chunk <= 0 || description <= 0 ||
+          if first_chunk <= 0 ||
+            samples_per_chunk <= 0 ||
+            description != 1 ||
             (j > 0 && first_chunk <= first_chunks[j - 1]) {
             raise GridAnimError::Invalid
           }
@@ -756,9 +1212,13 @@ pub fn avif_animation_descriptor(
         for chunk in 1..<(nc + 1) {
           let mut entry = -1
           for j in 0..<entries {
-            if first_chunks[j] <= chunk { entry = j }
+            if first_chunks[j] <= chunk {
+              entry = j
+            }
           }
-          if entry < 0 { raise GridAnimError::Invalid }
+          if entry < 0 {
+            raise GridAnimError::Invalid
+          }
           let chunk_offset = if co.typ == ga_stco {
             ga_u32(data, cp + 4 + (chunk - 1) * 4, co.end)
           } else {
@@ -766,13 +1226,17 @@ pub fn avif_animation_descriptor(
           }
           let mut offset = chunk_offset
           for _ in 0..<per_chunk[entry] {
-            if sample_index >= count { raise GridAnimError::Invalid }
+            if sample_index >= count {
+              raise GridAnimError::Invalid
+            }
             sample_offsets.push(offset)
             offset = offset + sizes[sample_index]
             sample_index = sample_index + 1
           }
         }
-        if sample_index != count { raise GridAnimError::Invalid }
+        if sample_index != count {
+          raise GridAnimError::Invalid
+        }
       }
     }
     let stts = match ga_find(bs, si, ga_stts) {
@@ -788,6 +1252,9 @@ pub fn avif_animation_descriptor(
     for i in 0..<ne {
       let c = ga_u32(data, tp + 4 + i * 8, stts.end)
       let dt = ga_u32(data, tp + 8 + i * 8, stts.end)
+      if c <= 0 || c > count - durations.length() || dt <= 0 {
+        raise GridAnimError::Invalid
+      }
       for _ in 0..<c {
         durations.push(dt)
       }

@@ -14,7 +14,7 @@ pub let av1_segment_levels : Int = 8
 
 ///|
 /// `SEG_LVL_REF_FRAME`: features at or above it set `SegIdPreSkip`.
-pub let av1_seg_level_ref_frame : Int = 4
+pub let av1_seg_level_ref_frame : Int = 5
 
 ///|
 /// `SEG_LVL_ALT_Q`: the one per-segment feature this decoder applies. It only
@@ -41,11 +41,8 @@ pub(all) struct Av1SegmentationParams {
 ///|
 /// `MAX_LOOP_FILTER` as the segment feature table needs it (AV1 §6.10.9).
 fn av1_segmentation_loop_filter_limit(sequence : Av1SequenceInfo) -> Int {
-  if sequence.bit_depth >= 12 {
-    255
-  } else {
-    63
-  }
+  ignore(sequence)
+  63
 }
 
 ///|
@@ -61,6 +58,9 @@ pub(all) struct Av1FrameHeaderInfo {
   header_bytes : Int
   tile_payload : Array[Byte]
   base_q_idx : Int
+  quant_matrix : Av1QuantMatrix?
+  delta_lf_res : Int
+  delta_lf_multi : Bool
   tile_cols : Int
   tile_rows : Int
   tile_cols_log2 : Int
@@ -73,6 +73,8 @@ pub(all) struct Av1FrameHeaderInfo {
   tile_row_starts_sb : Array[Int]
   /// Size-prefix width for the tile group (0 for the legacy isolated tile).
   tile_size_bytes : Int
+  /// Tile whose adapted CDF rows become the frame-end probability context.
+  context_update_tile_id : Int
   tx_mode_select : Bool
   reduced_tx_set : Bool
   coded_lossless : Bool
@@ -416,36 +418,21 @@ fn av1_frame_tile_group_payload(
 ///|
 /// Parse film_grain_params (AV1 §5.9.30) after reduced_tx_set.
 ///
-/// Only intra frames reach this path, so `update_grain` is never coded: the
-/// whole parameter set is always present. The AR coefficient counts follow the
-/// go-av1 reference, which is confirmed by byte alignment on encoder output:
-/// luma always carries `2 * lag * (lag + 1)` coefficients, and chroma adds the
-/// single centre tap whenever `num_y_points > 0`. See _refs/film_grain_sim.py.
+/// The seed precedes the INTER-only update flag. An inherited parameter set
+/// names one of this frame's reference slots, and retains the new frame's seed.
+/// Intra and SWITCH frames always code a complete parameter set.
 fn av1_parse_film_grain_params(
   reader : Av1FrameBits,
   monochrome : Bool,
   subsampling_x : Bool,
   subsampling_y : Bool,
-  frame_is_intra? : Bool = true,
+  frame_type? : Int = av1_key_frame,
+  map? : Av1FrameMap? = None,
+  ref_frame_idx? : Array[Int] = [],
 ) -> Av1FilmGrainParams? {
   let apply_grain = match reader.take(1) {
     Some(v) => v == 1
     None => return None
-  }
-  // An inter frame says whether it re-codes the parameter set or inherits one
-  // from a reference (AV1 5.9.30). Inheriting is out of scope here, so such a
-  // frame is rejected rather than decoded with the wrong grain.
-  if apply_grain && !frame_is_intra {
-    let update_grain = match reader.take(1) {
-      Some(v) => v == 1
-      None => return None
-    }
-    if !update_grain {
-      if reader.take(3) is None {
-        return None
-      } // find_ref_idx
-      return None
-    }
   }
   let mut grain_seed = 0
   let mut num_y_points = 0
@@ -478,12 +465,36 @@ fn av1_parse_film_grain_params(
       Some(v) => v
       None => return None
     }
+    if frame_type == av1_inter_frame {
+      let update = match reader.take(1) {
+        Some(value) => value == 1
+        None => return None
+      }
+      if !update {
+        let slot = match reader.take(3) {
+          Some(value) => value
+          None => return None
+        }
+        let state = match map {
+          Some(value) => value
+          None => return None
+        }
+        if !state.valid[slot] || !ref_frame_idx.contains(slot) {
+          return None
+        }
+        let stored = state.saved_film_grain[slot].unwrap_or(
+          av1_frame_grain_empty(),
+        )
+        let copied = av1_frame_grain_copy(stored)
+        return Some({ ..copied, apply_grain: true, grain_seed, })
+      }
+    }
     num_y_points = match reader.take(4) {
       Some(v) => v
       None => return None
     }
     if num_y_points > 14 {
-      num_y_points = 14
+      return None
     }
     for _ in 0..<num_y_points {
       let value = match reader.take(8) {
@@ -493,6 +504,10 @@ fn av1_parse_film_grain_params(
       let scaling = match reader.take(8) {
         Some(v) => v
         None => return None
+      }
+      if point_y_value.length() > 0 &&
+        point_y_value[point_y_value.length() - 1] >= value {
+        return None
       }
       point_y_value.push(value)
       point_y_scaling.push(scaling)
@@ -514,7 +529,7 @@ fn av1_parse_film_grain_params(
         None => return None
       }
       if num_cb_points > 10 {
-        num_cb_points = 10
+        return None
       }
       for _ in 0..<num_cb_points {
         let value = match reader.take(8) {
@@ -525,6 +540,10 @@ fn av1_parse_film_grain_params(
           Some(v) => v
           None => return None
         }
+        if point_cb_value.length() > 0 &&
+          point_cb_value[point_cb_value.length() - 1] >= value {
+          return None
+        }
         point_cb_value.push(value)
         point_cb_scaling.push(scaling)
       }
@@ -533,7 +552,7 @@ fn av1_parse_film_grain_params(
         None => return None
       }
       if num_cr_points > 10 {
-        num_cr_points = 10
+        return None
       }
       for _ in 0..<num_cr_points {
         let value = match reader.take(8) {
@@ -544,9 +563,18 @@ fn av1_parse_film_grain_params(
           Some(v) => v
           None => return None
         }
+        if point_cr_value.length() > 0 &&
+          point_cr_value[point_cr_value.length() - 1] >= value {
+          return None
+        }
         point_cr_value.push(value)
         point_cr_scaling.push(scaling)
       }
+    }
+    if subsampling_x &&
+      subsampling_y &&
+      (num_cb_points == 0) != (num_cr_points == 0) {
+      return None
     }
     grain_scaling_minus8 = match reader.take(2) {
       Some(v) => v
@@ -730,6 +758,21 @@ fn av1_frame_prefix_size(
   } else {
     (sequence.width, sequence.height)
   }
+  av1_frame_prefix_superres(r, prefix, sequence, width, height)
+}
+
+///|
+/// A frame inherits display geometry, never the preceding frame's coded width.
+/// Both explicit and reference-derived sizes read a fresh superres denominator.
+/// libaom and dav1d clamp the coded width to min(16, UpscaledWidth), including
+/// legal active-superres streams whose small display width stays unchanged.
+fn av1_frame_prefix_superres(
+  r : Av1FrameBits,
+  prefix : Av1FramePrefix,
+  sequence : Av1SequenceInfo,
+  upscaled : Int,
+  height : Int,
+) -> Bool {
   let denom = if sequence.enable_superres {
     let use_superres = match r.take(1) {
       Some(v) => v == 1
@@ -746,25 +789,12 @@ fn av1_frame_prefix_size(
   } else {
     8
   }
-  // Under a size override the frame's own width becomes the upscaled width the
-  // reference buffer records; otherwise the sequence maximum still applies.
-  let upscaled = if override_size { width } else { sequence.width }
-  let coded = (upscaled * 8 + denom / 2) / denom
-  if coded <= 0 ||
-    upscaled <= 0 ||
-    height <= 0 ||
-    coded > 65536 ||
-    height > 65536 {
+  if upscaled <= 0 || height <= 0 || upscaled > 65536 || height > 65536 {
     return false
   }
-  // Active superres must strictly shrink every plane (AV1 §7.16).
-  if denom != 8 &&
-    (
-      coded >= upscaled ||
-      (!sequence.monochrome && (coded + 1) / 2 >= (upscaled + 1) / 2)
-    ) {
-    return false
-  }
+  let minimum = if upscaled < 16 { upscaled } else { 16 }
+  let rounded = (upscaled * 8 + denom / 2) / denom
+  let coded = if rounded < minimum { minimum } else { rounded }
   prefix.upscaled_width = upscaled
   prefix.frame_width = coded
   prefix.frame_height = height
@@ -845,8 +875,18 @@ fn av1_frame_prefix_inter_refs(
       prefix.ref_frame_idx[i] = slot
     }
     if sequence.frame_id_numbers_present {
-      // delta_frame_id_minus_1 is only used to validate frame identity.
-      if r.take(sequence.delta_frame_id_length_minus_2 + 2) is None {
+      let (diff_len, id_len) = match av1_frame_id_lengths(sequence) {
+        Some(value) => value
+        None => return false
+      }
+      let delta = match r.take(diff_len) {
+        Some(value) => value + 1
+        None => return false
+      }
+      let slot = prefix.ref_frame_idx[i]
+      let mask = (1 << id_len) - 1
+      let expected = (prefix.current_frame_id - delta) & mask
+      if !map.valid[slot] || map.frame_ids[slot] != expected {
         return false
       }
     }
@@ -862,16 +902,19 @@ fn av1_frame_prefix_inter_refs(
       }
       if found {
         let slot = prefix.ref_frame_idx[i]
-        prefix.upscaled_width = map.upscaled_widths[slot]
-        prefix.frame_width = map.frame_widths[slot]
-        prefix.frame_height = map.frame_heights[slot]
+        if !map.valid[slot] ||
+          !av1_frame_prefix_superres(
+            r,
+            prefix,
+            sequence,
+            map.upscaled_widths[slot],
+            map.frame_heights[slot],
+          ) {
+          return false
+        }
         prefix.render_width = map.render_widths[slot]
         prefix.render_height = map.render_heights[slot]
         inherited = true
-        // A superres flag is still coded for an inherited-size frame.
-        if sequence.enable_superres && r.take(1) is None {
-          return false
-        }
         break
       }
     }
@@ -952,6 +995,8 @@ fn av1_parse_frame_prefix(
   r : Av1FrameBits,
   sequence : Av1SequenceInfo,
   map : Av1FrameMap?,
+  temporal_id? : Int = 0,
+  spatial_id? : Int = 0,
 ) -> Av1FramePrefix? {
   let prefix : Av1FramePrefix = {
     disable_cdf_update: false,
@@ -994,9 +1039,10 @@ fn av1_parse_frame_prefix(
     ),
   }
   let id_len = if sequence.frame_id_numbers_present {
-    sequence.additional_frame_id_length_minus_1 +
-    sequence.delta_frame_id_length_minus_2 +
-    3
+    match av1_frame_id_lengths(sequence) {
+      Some((_, value)) => value
+      None => return None
+    }
   } else {
     0
   }
@@ -1013,11 +1059,27 @@ fn av1_parse_frame_prefix(
       }
       if sequence.decoder_model_info_present &&
         !sequence.equal_picture_interval &&
-        r.take(sequence.frame_presentation_time_length_minus_1 + 1) is None {
+        av1_frame_timing_value(
+          r,
+          sequence.frame_presentation_time_length_minus_1 + 1,
+        )
+        is None {
         return None
       }
-      if sequence.frame_id_numbers_present && r.take(id_len) is None {
-        return None
+      if sequence.frame_id_numbers_present {
+        let display_id = match r.take(id_len) {
+          Some(value) => value
+          None => return None
+        }
+        let state = match map {
+          Some(value) => value
+          None => return None
+        }
+        let slot = prefix.frame_to_show_map_idx
+        if !state.valid[slot] || state.frame_ids[slot] != display_id {
+          return None
+        }
+        prefix.current_frame_id = display_id
       }
       // The remaining fields keep their reduced-still defaults; a
       // show-existing frame carries no new syntax, so the caller resolves it
@@ -1043,7 +1105,11 @@ fn av1_parse_frame_prefix(
     if prefix.show_frame &&
       sequence.decoder_model_info_present &&
       !sequence.equal_picture_interval &&
-      r.take(sequence.frame_presentation_time_length_minus_1 + 1) is None {
+      av1_frame_timing_value(
+        r,
+        sequence.frame_presentation_time_length_minus_1 + 1,
+      )
+      is None {
       return None
     }
     prefix.showable_frame = if prefix.show_frame {
@@ -1108,6 +1174,23 @@ fn av1_parse_frame_prefix(
   } else {
     0
   }
+  if sequence.frame_id_numbers_present {
+    let state = match map {
+      Some(value) => value
+      None => return None
+    }
+    let (diff_len, _) = av1_frame_id_lengths(sequence).unwrap()
+    if state.has_frame_id &&
+      !(prefix.frame_type == av1_key_frame && prefix.show_frame) {
+      let modulus = 1 << id_len
+      let advance = (prefix.current_frame_id + modulus - state.current_frame_id) &
+        (modulus - 1)
+      if advance == 0 || advance >= modulus / 2 {
+        return None
+      }
+    }
+    av1_frame_mark_refs(state, prefix.current_frame_id, diff_len, id_len)
+  }
   prefix.frame_size_override_flag = if prefix.frame_type == av1_switch_frame {
     1
   } else if sequence.reduced_still_picture_header {
@@ -1138,14 +1221,24 @@ fn av1_parse_frame_prefix(
       None => return None
     }
     if present {
-      // `buffer_removal_time` is coded once per operating point this stream
-      // selects. Temporal and spatial ids are 0 for single-layer decode.
+      // Only operating points with their own decoder model and this OBU's
+      // actual temporal/spatial layer code a buffer-removal timestamp.
       for op in 0..<=sequence.operating_points_cnt_minus_1 {
         let idc = sequence.operating_point_idc[op]
-        let needed = idc == 0 ||
-          (((idc >> 0) & 1) == 1 && ((idc >> 8) & 1) == 1)
+        let needed = sequence.decoder_model_present_for_this_op[op] &&
+          (
+            idc == 0 ||
+            (
+              ((idc >> temporal_id) & 1) == 1 &&
+              ((idc >> (spatial_id + 8)) & 1) == 1
+            )
+          )
         if needed &&
-          r.take(sequence.buffer_removal_time_length_minus_1 + 1) is None {
+          av1_frame_timing_value(
+            r,
+            sequence.buffer_removal_time_length_minus_1 + 1,
+          )
+          is None {
           return None
         }
       }
@@ -1177,8 +1270,7 @@ fn av1_parse_frame_prefix(
     if !av1_frame_prefix_render_size(r, prefix) {
       return None
     }
-    if prefix.allow_screen_content_tools != 0 &&
-      prefix.frame_width == prefix.upscaled_width {
+    if prefix.allow_screen_content_tools != 0 && prefix.superres_denom == 8 {
       prefix.allow_intrabc = match r.take(1) {
         Some(v) => v == 1
         None => return None
@@ -1336,10 +1428,9 @@ fn av1_frame_global_motion(
   prefix : Av1FramePrefix,
 ) -> (Array[Int], Array[Array[Int]])? {
   let gm_type = Array::make(av1_total_refs_per_frame, av1_gm_identity)
-  let gm_params = Array::make(
-    av1_total_refs_per_frame,
-    av1_identity_gm_params(),
-  )
+  let gm_params = Array::makei(av1_total_refs_per_frame, _ => {
+    av1_identity_gm_params()
+  })
   if prefix.frame_is_intra {
     return Some((gm_type, gm_params))
   }
@@ -1427,19 +1518,19 @@ fn av1_frame_skip_mode(
       let hint = prefix.order_hints[av1_last_frame + i]
       let d = dist(hint)
       if d < 0 {
-        if forward_idx < 0 || dist(hint) < dist(forward_hint) {
+        if forward_idx < 0 || dist(hint) > dist(forward_hint) {
           forward_idx = i
           forward_hint = hint
         }
       } else if d > 0 {
-        if backward_idx < 0 || dist(hint) > dist(backward_hint) {
+        if backward_idx < 0 || dist(hint) < dist(backward_hint) {
           backward_idx = i
           backward_hint = hint
         }
       }
     }
-    // With no backward reference the mode pairs the latest forward reference
-    // with the earliest one ahead of it.
+    // Pair the closest earlier/later references. With no later reference,
+    // pair the closest earlier reference with the next distinct earlier one.
     let mut second_idx = -1
     let mut second_hint = 0
     if forward_idx >= 0 && backward_idx < 0 {
@@ -1494,6 +1585,10 @@ pub fn av1_parse_stage1_frame(
   allow_monochrome? : Bool = false,
   allow_highbd? : Bool = false,
   map? : Av1FrameMap,
+  frame_header_obu? : Bool = false,
+  tile_groups? : Array[Array[Byte]] = [],
+  temporal_id? : Int = 0,
+  spatial_id? : Int = 0,
 ) -> Av1FrameHeaderInfo? {
   // Profile and bit-depth pairing from AV1 section 6.4.1: profiles 0 and 1
   // are 8/10-bit, profile 2 also allows 12-bit. Chroma subsampling is not a
@@ -1518,18 +1613,14 @@ pub fn av1_parse_stage1_frame(
     return None
   }
   let r : Av1FrameBits = { data: frame_payload, bit_pos: 0, }
-  let prefix = match av1_parse_frame_prefix(r, sequence, map) {
+  let prefix = match
+    av1_parse_frame_prefix(r, sequence, map, temporal_id~, spatial_id~) {
     Some(value) => value
     None => return None
   }
   if prefix.show_existing_frame {
     // A buffered frame carries no tile data: the caller resolves the envelope
     // against the reference buffer instead of decoding a second time.
-    return None
-  }
-  // Screen-content block copy stays out of scope; it changes both the tile
-  // path and the reference used for motion compensation.
-  if prefix.allow_intrabc {
     return None
   }
   let disable_cdf_update = prefix.disable_cdf_update
@@ -1697,8 +1788,13 @@ pub fn av1_parse_stage1_frame(
     return None
   }
   let mut tile_size_bytes = 0
+  let mut context_update_tile_id = 0
   if tile_cols_log2 > 0 || tile_rows_log2 > 0 {
-    if r.take(tile_cols_log2 + tile_rows_log2) is None {
+    context_update_tile_id = match r.take(tile_cols_log2 + tile_rows_log2) {
+      Some(value) => value
+      None => return None
+    }
+    if context_update_tile_id >= tile_cols * tile_rows {
       return None
     }
     tile_size_bytes = match r.take(2) {
@@ -1792,19 +1888,40 @@ pub fn av1_parse_stage1_frame(
     None => return None
   }
 
-
-  if using_qmatrix {
+  let quant_matrix = if using_qmatrix {
     // qm_y and qm_u are present even for monochrome; qm_v is conditional.
-    if r.take(4) is None || r.take(4) is None {
-      return None
+    let y = match r.take(4) {
+      Some(v) => v
+      None => return None
     }
-    if sequence.separate_uv_delta_q && r.take(4) is None {
-      return None
+    let u = match r.take(4) {
+      Some(v) => v
+      None => return None
     }
-    return None
+    let v = if sequence.separate_uv_delta_q {
+      match r.take(4) {
+        Some(v) => v
+        None => return None
+      }
+    } else {
+      u
+    }
+    Some(Av1QuantMatrix::{ y, u, v, })
+  } else {
+    None
   }
 
-  let segmentation = match av1_parse_segmentation_params(r, prefix.primary_ref_frame, av1_segmentation_loop_filter_limit(sequence)) {
+  let segmentation = match
+    av1_parse_segmentation_params(
+      r,
+      prefix.primary_ref_frame,
+      av1_segmentation_loop_filter_limit(sequence),
+      inherited=av1_segmentation_primary(
+        map,
+        prefix.primary_ref_frame,
+        prefix.ref_frame_idx,
+      ),
+    ) {
     Some(value) => value
     None => return None
   }
@@ -1829,6 +1946,8 @@ pub fn av1_parse_stage1_frame(
   let mut delta_q_present = false
   let mut delta_q_res = 0
   let mut delta_lf_present = false
+  let mut delta_lf_res = 0
+  let mut delta_lf_multi = false
   if base_q_idx > 0 {
     delta_q_present = match r.take(1) {
       Some(v) => v == 1
@@ -1839,39 +1958,32 @@ pub fn av1_parse_stage1_frame(
         Some(v) => v
         None => return None
       }
-      delta_lf_present = match r.take(1) {
-        Some(v) => v == 1
-        None => return None
-      }
-      if delta_lf_present {
-        // delta_lf_res and delta_lf_multi, then the four deltas.
-        let lf_res = match r.take(2) {
-          Some(v) => v
-          None => return None
-        }
-        let lf_multi = match r.take(1) {
+      if !prefix.allow_intrabc {
+        delta_lf_present = match r.take(1) {
           Some(v) => v == 1
           None => return None
         }
-        let bits = 6 + lf_res
-        let count = if lf_multi { 4 } else { 1 }
-        for _ in 0..<count {
-          if r.signed(bits) is None {
-            return None
-          }
+      }
+      if delta_lf_present {
+        // Actual delta values occur in the tile entropy stream, not this header.
+        delta_lf_res = match r.take(2) {
+          Some(v) => v
+          None => return None
+        }
+        delta_lf_multi = match r.take(1) {
+          Some(v) => v == 1
+          None => return None
         }
       }
     }
   }
-  if delta_lf_present {
-    return None
-  }
 
-  // CodedLossless also requires every quantizer delta to be zero (AV1 5.9.14),
-  // which gates the loop-filter, CDEF, restoration and tx-mode syntax below.
-  let coded_lossless = base_q_idx == 0 &&
-    av1_quant_deltas_lossless(quant_deltas)
-  let loop_filter = if coded_lossless {
+  // CodedLossless is the AND of all eight LosslessArray entries. Segment
+  // ALT_Q participates; superblock delta-Q does not (AV1 5.9.14).
+  let coded_lossless = av1_frame_coded_lossless(
+    base_q_idx, quant_deltas, segmentation,
+  )
+  let loop_filter = if coded_lossless || prefix.allow_intrabc {
     None
   } else {
     match
@@ -1885,7 +1997,7 @@ pub fn av1_parse_stage1_frame(
       None => return None
     }
   }
-  let cdef = if !coded_lossless && sequence.enable_cdef {
+  let cdef = if !coded_lossless && !prefix.allow_intrabc && sequence.enable_cdef {
     match av1_parse_cdef_config(r, sequence.monochrome) {
       Some(config) => Some(config)
       None => return None
@@ -1895,8 +2007,9 @@ pub fn av1_parse_stage1_frame(
   }
   // Superres changes samples even when every transform is lossless. Such a
   // frame still carries restoration syntax, unlike an all-lossless frame.
-  let all_lossless = coded_lossless && frame_width == upscaled_width
+  let all_lossless = coded_lossless && superres_denom == 8
   let restoration : Av1RestorationConfig? = if !all_lossless &&
+    !prefix.allow_intrabc &&
     sequence.enable_restoration {
     match
       av1_parse_restoration_config(
@@ -1955,16 +2068,18 @@ pub fn av1_parse_stage1_frame(
     Some(value) => value
     None => return None
   }
-  // Reduced-still frames are always shown, so the grain syntax is present
-  // whenever the sequence enables the tool (AV1 section 5.9.30).
-  let film_grain : Av1FilmGrainParams? = if sequence.film_grain_params_present {
+  // A hidden frame that cannot be shown has no film-grain syntax.
+  let film_grain : Av1FilmGrainParams? = if sequence.film_grain_params_present &&
+    (prefix.show_frame || prefix.showable_frame) {
     match
       av1_parse_film_grain_params(
         r,
         sequence.monochrome,
         sequence.subsampling_x,
         sequence.subsampling_y,
-        frame_is_intra=prefix.frame_is_intra,
+        frame_type=prefix.frame_type,
+        map~,
+        ref_frame_idx=prefix.ref_frame_idx,
       ) {
       Some(params) => Some(params)
       None => return None
@@ -1972,10 +2087,34 @@ pub fn av1_parse_stage1_frame(
   } else {
     None
   }
-  let (offset, tile_payload) = match
-    av1_frame_tile_group_payload(frame_payload, r.bit_pos, tile_cols, tile_rows) {
-    Some(value) => value
-    None => return None
+  let (offset, tile_payload) = if frame_header_obu {
+    if !av1_obu_trailing_bits(frame_payload, r.bit_pos) {
+      return None
+    }
+    let payload = match
+      av1_assemble_tile_groups(
+        tile_groups,
+        tile_cols,
+        tile_rows,
+        tile_cols_log2 + tile_rows_log2,
+        tile_size_bytes,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    tile_size_bytes = if tile_cols * tile_rows > 1 { 4 } else { 0 }
+    (frame_payload.length(), payload)
+  } else {
+    match
+      av1_frame_tile_group_payload(
+        frame_payload,
+        r.bit_pos,
+        tile_cols,
+        tile_rows,
+      ) {
+      Some(value) => value
+      None => return None
+    }
   }
   Some({
     frame_width,
@@ -1985,6 +2124,9 @@ pub fn av1_parse_stage1_frame(
     header_bytes: offset,
     tile_payload,
     base_q_idx,
+    quant_matrix,
+    delta_lf_res,
+    delta_lf_multi,
     tile_cols,
     tile_rows,
     tile_cols_log2,
@@ -1992,6 +2134,7 @@ pub fn av1_parse_stage1_frame(
     tile_col_starts_sb,
     tile_row_starts_sb,
     tile_size_bytes,
+    context_update_tile_id,
     tx_mode_select,
     reduced_tx_set,
     coded_lossless,
@@ -2040,6 +2183,7 @@ pub fn av1_parse_stage1_frame(
     render_height: prefix.render_height,
   })
 }
+
 ///|
 /// `Segmentation_Feature_Bits`, `Segmentation_Feature_Signed` and
 /// `Segmentation_Feature_Max` (AV1 §6.10.9): the eight segment levels.
@@ -2055,6 +2199,7 @@ fn av1_parse_segmentation_params(
   r : Av1FrameBits,
   primary_ref_frame : Int,
   max_loop_filter : Int,
+  inherited? : Av1SegmentationParams? = None,
 ) -> Av1SegmentationParams? {
   let enabled = match r.take(1) {
     Some(v) => v == 1
@@ -2082,10 +2227,17 @@ fn av1_parse_segmentation_params(
       None => return None
     }
   }
-  let feature_enabled = Array::makei(av1_segments, _ => Array::make(av1_segment_levels, false))
-  let feature_data = Array::makei(av1_segments, _ => Array::make(av1_segment_levels, 0))
+  let feature_enabled = Array::makei(av1_segments, _ => {
+    Array::make(av1_segment_levels, false)
+  })
+  let feature_data = Array::makei(av1_segments, _ => {
+    Array::make(av1_segment_levels, 0)
+  })
   if update_data {
-    let limit = [255, max_loop_filter, max_loop_filter, max_loop_filter, max_loop_filter, 7, 0, 0]
+    let limit = [
+      255, max_loop_filter, max_loop_filter, max_loop_filter, max_loop_filter, 7,
+      0, 0,
+    ]
     for i in 0..<av1_segments {
       for j in 0..<av1_segment_levels {
         let on = match r.take(1) {
@@ -2098,7 +2250,7 @@ fn av1_parse_segmentation_params(
         }
         let bits = av1_segmentation_feature_bits[j]
         if bits == 0 {
-          return None
+          continue
         }
         let signed = av1_segmentation_feature_signed[j] == 1
         let value = if signed {
@@ -2123,8 +2275,20 @@ fn av1_parse_segmentation_params(
       }
     }
   }
-  var seg_id_pre_skip = false
-  var last_active = -1
+  if !update_data {
+    let previous = match inherited {
+      Some(value) => value
+      None => av1_segmentation_empty()
+    }
+    for i in 0..<av1_segments {
+      for j in 0..<av1_segment_levels {
+        feature_enabled[i][j] = previous.feature_enabled[i][j]
+        feature_data[i][j] = previous.feature_data[i][j]
+      }
+    }
+  }
+  let mut seg_id_pre_skip = false
+  let mut last_active = 0
   for i in 0..<av1_segments {
     for j in 0..<av1_segment_levels {
       if feature_enabled[i][j] {
@@ -2148,15 +2312,36 @@ fn av1_parse_segmentation_params(
 }
 
 ///|
-/// Whether every feature this frame enables is one the decoder applies.
-/// `SEG_LVL_ALT_Q` is; the loop-filter, reference-frame, skip and global-motion
-/// levels are not yet, so a frame enabling any of them is refused.
+/// Validate all eight segment feature ranges. Quantization, four loop-filter
+/// deltas, forced references, skip and global motion each have tile consumers.
 pub fn av1_segmentation_features_supported(
   segmentation : Av1SegmentationParams,
 ) -> Bool {
+  if segmentation.feature_enabled.length() != 8 ||
+    segmentation.feature_data.length() != 8 {
+    return false
+  }
   for i in 0..<av1_segments {
+    if segmentation.feature_enabled[i].length() != 8 ||
+      segmentation.feature_data[i].length() != 8 {
+      return false
+    }
     for j in 0..<av1_segment_levels {
-      if segmentation.feature_enabled[i][j] && j != av1_seg_level_alt_q {
+      if !segmentation.feature_enabled[i][j] {
+        continue
+      }
+      let value = segmentation.feature_data[i][j]
+      let max = if j == 0 {
+        255
+      } else if j < 5 {
+        63
+      } else if j == 5 {
+        7
+      } else {
+        0
+      }
+      let min = if j < 5 { -max } else { 0 }
+      if value < min || value > max {
         return false
       }
     }
@@ -2165,20 +2350,12 @@ pub fn av1_segmentation_features_supported(
 }
 
 ///|
-/// Whether this frame's segmentation can be decoded as coded. Writing the map
-/// without the frame's own data would borrow per-block features from a primary
-/// reference, and the temporal prediction would borrow the map itself; both
-/// need cross-frame state this decoder does not keep for segments, and every
-/// feature level other than ALT_Q changes samples the block stage produces.
+/// Frame parsing resolves inherited feature tables from the primary reference;
+/// tile decoding resolves unchanged or temporally predicted segment maps from
+/// the saved frame state. This check validates the resulting feature data.
 pub fn av1_segmentation_supported(segmentation : Av1SegmentationParams) -> Bool {
   if !segmentation.enabled {
     return true
-  }
-  if !segmentation.update_map || segmentation.temporal_update {
-    return false
-  }
-  if !segmentation.update_data {
-    return false
   }
   av1_segmentation_features_supported(segmentation)
 }
@@ -2190,11 +2367,57 @@ fn av1_segmentation_empty() -> Av1SegmentationParams {
     update_map: false,
     temporal_update: false,
     update_data: false,
-    feature_enabled: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, false)),
-    feature_data: Array::makei(av1_segments, _ => Array::make(av1_segment_levels, 0)),
+    feature_enabled: Array::makei(av1_segments, _ => {
+      Array::make(av1_segment_levels, false)
+    }),
+    feature_data: Array::makei(av1_segments, _ => {
+      Array::make(av1_segment_levels, 0)
+    }),
     seg_id_pre_skip: false,
     last_active_seg_id: -1,
   }
+}
+
+///|
+/// Apply SEG_LVL_ALT_Q to a supplied base index (AV1 get_qindex). Callers
+/// supply the frame base for syntax, or the current SB index for dequant.
+fn av1_segment_qindex(
+  base_q_idx : Int,
+  segmentation : Av1SegmentationParams,
+  segment_id : Int,
+) -> Int {
+  if !segmentation.enabled ||
+    segment_id < 0 ||
+    segment_id >= av1_segments ||
+    !segmentation.feature_enabled[segment_id][av1_seg_level_alt_q] {
+    return base_q_idx
+  }
+  let value = base_q_idx +
+    segmentation.feature_data[segment_id][av1_seg_level_alt_q]
+  if value < 0 {
+    0
+  } else if value > 255 {
+    255
+  } else {
+    value
+  }
+}
+
+///|
+fn av1_frame_coded_lossless(
+  base_q_idx : Int,
+  quant_deltas : Av1QuantDeltas,
+  segmentation : Av1SegmentationParams,
+) -> Bool {
+  if !av1_quant_deltas_lossless(quant_deltas) {
+    return false
+  }
+  for segment_id in 0..<av1_segments {
+    if av1_segment_qindex(base_q_idx, segmentation, segment_id) != 0 {
+      return false
+    }
+  }
+  true
 }
 
 ///|

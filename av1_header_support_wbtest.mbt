@@ -45,6 +45,7 @@ let av1_reduced_still_sequence : Av1SequenceInfo = {
   frame_presentation_time_length_minus_1: 0,
   operating_points_cnt_minus_1: 0,
   operating_point_idc: [0],
+  decoder_model_present_for_this_op: [false],
   frame_width_bits_minus_1: 0,
   frame_height_bits_minus_1: 0,
 }

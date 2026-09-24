@@ -6,6 +6,7 @@
 /// pixels.  The reduced-still parser remains in `av1_frame_header.mbt` and is
 /// intentionally independent from this API.
 
+///|
 /// Sequence-level syntax needed by `show_existing_frame` (§5.9.2).
 pub(all) struct Av1ShowExistingFrameConfig {
   /// Whether decoder model information is present in the active sequence.
@@ -26,6 +27,7 @@ pub(all) struct Av1ShowExistingFrameConfig {
   reference_frame_types : Array[Int]
 }
 
+///|
 /// Parsed fields from an AV1 `show_existing_frame` header.
 ///
 /// `frame_presentation_time` and `display_frame_id` are optional because the
@@ -36,12 +38,13 @@ pub(all) struct Av1ShowExistingFrameEnvelope {
   show_existing_frame : Bool
   frame_to_show_map_idx : Int
   reference_frame_type : Int
-  frame_presentation_time : Int?
+  frame_presentation_time : Int64?
   display_frame_id : Int?
   header_bits : Int
   header_bytes : Int
 }
 
+///|
 /// Parse the minimal `show_existing_frame` prefix of an AV1 frame header.
 ///
 /// The first bit must be one.  The parser then consumes the three-bit map
@@ -75,13 +78,13 @@ pub fn av1_parse_show_existing_frame(
     return None
   }
 
-  let mut frame_presentation_time : Int? = None
+  let mut frame_presentation_time : Int64? = None
   if config.decoder_model_info_present && !config.equal_picture_interval {
     let count = config.frame_presentation_time_length_minus_1 + 1
     if count < 1 || count > 32 {
       return None
     }
-    frame_presentation_time = match reader.take(count) {
+    frame_presentation_time = match av1_frame_timing_value(reader, count) {
       Some(v) => Some(v)
       None => return None
     }
@@ -94,8 +97,9 @@ pub fn av1_parse_show_existing_frame(
       return None
     }
     let count = config.additional_frame_id_len_minus1 +
-      config.delta_frame_id_length_minus2 + 3
-    if count < 3 || count > 32 {
+      config.delta_frame_id_length_minus2 +
+      3
+    if count < 3 || count > 16 {
       return None
     }
     display_frame_id = match reader.take(count) {
@@ -114,6 +118,28 @@ pub fn av1_parse_show_existing_frame(
   })
 }
 
+///|
+/// Timing syntax is unsigned and may use all 32 bits. Read bounded halves and
+/// widen before combining so values above 2^31-1 stay positive on every target.
+fn av1_frame_timing_value(reader : Av1FrameBits, count : Int) -> Int64? {
+  if count < 1 || count > 32 {
+    return None
+  }
+  if count <= 16 {
+    return reader.take(count).map(value => value.to_int64())
+  }
+  let high = match reader.take(count - 16) {
+    Some(value) => value
+    None => return None
+  }
+  let low = match reader.take(16) {
+    Some(value) => value
+    None => return None
+  }
+  Some((high.to_int64() << 16) | low.to_int64())
+}
+
+///|
 /// Explicitly named alias for callers that prefer the envelope terminology.
 pub fn av1_parse_show_existing_frame_envelope(
   frame_payload : Array[Byte],

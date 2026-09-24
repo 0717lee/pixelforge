@@ -1,3 +1,4 @@
+
 ///|
 /// Inter-frame block mode syntax (AV1 §5.11.20 through §5.11.30).
 ///
@@ -10,10 +11,9 @@
 /// its probabilities as it decodes. Grouping them in one struct lets a frame
 /// context be snapshotted and restored as a unit.
 ///
-/// Scope: single reference prediction. Compound, overlapped and warped motion,
-/// inter-intra blending, intra block copy and segmentation each add either a
-/// second motion vector or a blend, and the frame gate refuses a frame that
-/// allows them, so nothing below reads syntax it cannot act on.
+/// Reads single and compound reference modes, OBMC, local/global motion and
+/// inter-intra blending. Reconstruction checks live in `av1_inter_tile.mbt`;
+/// unsupported prediction combinations are rejected there before writing pixels.
 
 ///|
 /// Motion vector joints (AV1 §6.10.18): which of the two components is nonzero.
@@ -206,6 +206,9 @@ pub(all) struct Av1InterBlock {
   avail_l : Bool
   mut skip : Int
   mut skip_mode : Bool
+  mut segment_ref : Int
+  mut segment_skip : Bool
+  mut segment_global : Bool
   mut is_inter : Bool
   mut y_mode : Int
   mut ref_frame : Int
@@ -274,6 +277,9 @@ fn av1_inter_block(
     avail_l,
     skip: 0,
     skip_mode: false,
+    segment_ref: -1,
+    segment_skip: false,
+    segment_global: false,
     is_inter: false,
     y_mode: 0,
     ref_frame: av1_intra_frame,
@@ -323,6 +329,14 @@ fn av1_read_is_inter(
     block.is_inter = true
     return true
   }
+  if block.segment_ref >= 0 {
+    block.is_inter = block.segment_ref != av1_intra_frame
+    return true
+  }
+  if block.segment_global {
+    block.is_inter = true
+    return true
+  }
   let left = av1_field_reference(info.field, block.mi_row, block.mi_col - 1)
   let above = av1_field_reference(info.field, block.mi_row - 1, block.mi_col)
   let left_intra = left <= av1_intra_frame
@@ -357,7 +371,12 @@ fn av1_read_skip_mode(
   block : Av1InterBlock,
 ) -> Bool {
   block.skip_mode = false
-  if !info.skip_mode_present || block.block_width < 8 || block.block_height < 8 {
+  if block.segment_skip ||
+    block.segment_global ||
+    block.segment_ref >= 0 ||
+    !info.skip_mode_present ||
+    block.block_width < 8 ||
+    block.block_height < 8 {
     return true
   }
   let mut ctx = 0
@@ -508,6 +527,14 @@ fn av1_read_ref_frames(
   // A compound block codes two reference names; a single one keeps the second
   // at NONE, which is what its neighbours and the predictor read.
   block.ref_frame1 = av1_none_frame
+  if block.segment_ref >= 0 {
+    block.ref_frame = block.segment_ref
+    return true
+  }
+  if block.segment_skip || block.segment_global {
+    block.ref_frame = av1_last_frame
+    return true
+  }
   if info.reference_select && block.width4 >= 2 && block.height4 >= 2 {
     if decoder.symbol(info.cdfs.comp_mode[av1_comp_mode_ctx(info, block)]) != 0 {
       return av1_read_compound_refs(decoder, info, block)
@@ -651,7 +678,9 @@ fn av1_read_compound_refs(
   }
   // `comp_ref_type` zero asks for the unidirectional pair, one for the
   // bidirectional one (AV1 §5.11.23).
-  let dir = decoder.symbol(info.cdfs.comp_ref_type[av1_comp_ref_type_ctx(info, block)])
+  let dir = decoder.symbol(
+    info.cdfs.comp_ref_type[av1_comp_ref_type_ctx(info, block)],
+  )
   if dir == 0 {
     // Unidirectional: both names point the same way.
     let forward = counts(av1_last_frame) +
@@ -750,7 +779,11 @@ fn av1_read_compound_refs(
     if p1 < 0 {
       return false
     }
-    block.ref_frame1 = if p1 == 1 { av1_alt_ref2_frame } else { av1_bwd_ref_frame }
+    block.ref_frame1 = if p1 == 1 {
+      av1_alt_ref2_frame
+    } else {
+      av1_bwd_ref_frame
+    }
   } else {
     block.ref_frame1 = av1_alt_ref_frame
   }
@@ -808,7 +841,11 @@ fn av1_read_inter_mode(
   stack : Av1MvStack,
 ) -> Bool {
   if block.skip_mode {
-    block.y_mode = av1_mode_nearest_mv
+    block.y_mode = av1_mode_nearest_nearest_mv
+    return true
+  }
+  if block.segment_skip || block.segment_global {
+    block.y_mode = av1_mode_global_mv
     return true
   }
   if block.ref_frame1 > av1_intra_frame {
@@ -1164,16 +1201,18 @@ fn av1_has_overlappable_candidates(
 
 ///|
 /// read_motion_mode( isCompound ) (AV1 §5.11.27). Returns false when the block
-/// selects a mode this decoder cannot reconstruct, so the frame is refused whole
-/// instead of being decoded as a prefix of itself. LOCALWARP needs a warp model
-/// this configuration never reaches, so only the OBMC branch matters here.
+/// selects an invalid symbol. Only single-reference, non-interintra blocks can
+/// choose OBMC or LOCALWARP; compound and skip-mode blocks imply SIMPLE.
 fn av1_read_motion_mode(
   decoder : Av1SymbolDecoder,
   info : Av1InterInfo,
   block : Av1InterBlock,
+  have_top_right? : Bool = true,
 ) -> Bool {
   block.motion_mode = 0
-  if block.skip_mode || !info.frame.is_motion_mode_switchable {
+  if block.skip_mode ||
+    block.ref_frame1 > av1_intra_frame ||
+    !info.frame.is_motion_mode_switchable {
     return true
   }
   // An interintra block keeps one vector, so the motion-mode symbol is gone
@@ -1190,23 +1229,9 @@ fn av1_read_motion_mode(
     return true
   }
   if info.frame.force_integer_mv == 0 &&
-    (
-      block.y_mode == av1_mode_global_mv ||
-      block.y_mode == av1_mode_global_global_mv
-    ) {
-    if av1_gm_type(info, block.ref_frame) > av1_gm_translation {
-      // A compound block needs one warp prediction per list and this block
-      // stage blends its two lists together, so the frame is refused rather
-      // than decoded with only half of its prediction warped.
-      if block.ref_frame1 > av1_intra_frame {
-        return false
-      }
-      return true
-    }
-    if block.y_mode == av1_mode_global_global_mv &&
-      av1_gm_type(info, block.ref_frame1) > av1_gm_translation {
-      return false
-    }
+    block.y_mode == av1_mode_global_mv &&
+    av1_gm_type(info, block.ref_frame) > av1_gm_translation {
+    return true
   }
   // A single-reference block names NONE as its second reference, so the
   // compound and intra-second-reference early exits do not apply to it.
@@ -1217,12 +1242,8 @@ fn av1_read_motion_mode(
   if size_index < 0 || size_index >= info.cdfs.use_obmc.length() {
     return false
   }
-  // Which of the two symbol shapes this block codes is decided by the
-  // matching-reference masks, not by `find_warp_samples`' count: the spec
-  // (§5.11.27) reads NumSamples, but libdav1d's `read_motion_mode` takes the
-  // warp branch exactly when `find_matching_ref` produced a bit, and the two
-  // answers differ - a block can have warp candidates the matching masks skip.
-  // dav1d is the reference decoder, so its rule is the one implemented here.
+  // A matching, already decoded neighbour permits the three-symbol warp row.
+  // Keep the top-right candidate within both tile and partition boundaries.
   let (top_mask, left_mask) = av1_warp_matching_masks(
     info.field,
     block.mi_row,
@@ -1234,6 +1255,8 @@ fn av1_read_motion_mode(
     block.avail_l,
     block.avail_u,
     block.ref_frame,
+    have_top_right=have_top_right &&
+      block.mi_col + block.width4 < info.tile_col_end,
   )
   if info.frame.force_integer_mv == 0 &&
     (top_mask != 0L || left_mask != 0L) &&
@@ -1267,6 +1290,8 @@ fn av1_read_motion_mode(
           block.ref_frame,
           block.mv_row,
           block.mv_col,
+          have_top_right=have_top_right &&
+            block.mi_col + block.width4 < info.tile_col_end,
         ) {
         Some(model) => [model]
         None => []
@@ -1302,6 +1327,14 @@ fn av1_read_interp_filter(
   info : Av1InterInfo,
   block : Av1InterBlock,
 ) -> Unit {
+  // Skip mode and local warp do not code interpolation filters. Their ordinary
+  // motion-compensation fallback always uses REGULAR, regardless of neighbours
+  // or the frame's fixed interpolation filter.
+  if block.skip_mode || block.motion_mode == 2 {
+    block.interp_vertical = av1_interp_eighttap
+    block.interp_horizontal = av1_interp_eighttap
+    return
+  }
   if info.interpolation_filter != av1_interp_switchable {
     block.interp_vertical = info.interpolation_filter
     block.interp_horizontal = info.interpolation_filter
@@ -1326,23 +1359,6 @@ fn av1_read_interp_filter(
   } else {
     vertical
   }
-  if !needs && block.motion_mode == 2 {
-    // A LOCALWARP block reads neither filter symbol, so its prediction falls
-    // back to the plain motion-compensation kernel when its warp model turns
-    // out to be identity - and the filter that kernel uses is the one the
-    // previous block decoded with, exactly as libdav1d's per-tile block struct
-    // leaves it. The block directly above is that block in raster order.
-    let field = info.field
-    let above = if block.avail_u {
-      (block.mi_row - 1) * field.cols + block.mi_col
-    } else {
-      -1
-    }
-    if above >= 0 && above < field.cols * field.rows {
-      block.interp_vertical = field.interp_v[above]
-      block.interp_horizontal = field.interp_h[above]
-    }
-  }
 }
 
 ///|
@@ -1354,7 +1370,10 @@ fn av1_needs_interp_filter(info : Av1InterInfo, block : Av1InterBlock) -> Bool {
   } else {
     block.block_height
   }
-  if smaller < 8 || block.skip_mode {
+  if block.skip_mode {
+    return false
+  }
+  if smaller < 8 {
     return true
   }
   // A LOCALWARP block is filtered by the warp grid itself, one filter per
@@ -1481,6 +1500,7 @@ fn av1_inter_block_motion(
   decoder : Av1SymbolDecoder,
   info : Av1InterInfo,
   block : Av1InterBlock,
+  have_top_right? : Bool = true,
 ) -> Bool {
   if !av1_read_ref_frames(decoder, info, block) {
     return false
@@ -1505,10 +1525,7 @@ fn av1_inter_block_motion(
       block.ref_frame1 > av1_intra_frame,
     ) {
     Some(value) => value
-    None =>
-    {
-      return false
-    }
+    None => return false
   }
   if !av1_read_inter_mode(decoder, info, block, stack) {
     return false
@@ -1522,7 +1539,7 @@ fn av1_inter_block_motion(
   if !av1_read_interintra_mode(decoder, info, block) {
     return false
   }
-  if !av1_read_motion_mode(decoder, info, block) {
+  if !av1_read_motion_mode(decoder, info, block, have_top_right~) {
     return false
   }
   if !av1_read_compound_type(decoder, info, block) {
@@ -1551,7 +1568,9 @@ fn av1_read_interintra_mode(
   if !(block.width4 >= 2 &&
     block.height4 >= 2 &&
     block.width4 <= 8 &&
-    block.height4 <= 8) {
+    block.height4 <= 8 &&
+    block.width4 <= block.height4 * 2 &&
+    block.height4 <= block.width4 * 2) {
     return true
   }
   let group = av1_ymode_size_context(block.width4 * 4, block.height4 * 4)
@@ -1578,7 +1597,9 @@ fn av1_read_interintra_mode(
   if wedge_ctx < 0 || wedge_ctx >= info.cdfs.wedge_inter_intra.length() {
     return false
   }
-  block.wedge_interintra = decoder.symbol(info.cdfs.wedge_inter_intra[wedge_ctx])
+  block.wedge_interintra = decoder.symbol(
+    info.cdfs.wedge_inter_intra[wedge_ctx],
+  )
   if block.wedge_interintra != 0 {
     if !av1_wedge_shape_ok(block.width4 * 4, block.height4 * 4) {
       return false
@@ -1591,6 +1612,7 @@ fn av1_read_interintra_mode(
   true
 }
 
+///|
 /// The intra-variant blend weights (AV1 §7.11.3.17 `ii_weights_1d`,
 /// go-av1 `decode/interintra_tables.go`): the intra share along one axis,
 /// scaled by the block's larger dimension.
@@ -1662,6 +1684,9 @@ fn av1_read_compound_type(
   block.compound_type = av1_compound_average
   block.compound_idx = 1
   block.comp_group_idx = 0
+  if block.skip_mode {
+    return true
+  }
   if info.enable_masked_compound {
     // `comp_group_idx` asks for a masked blend, so the next symbol is the
     // wedge/difference one and not the jnt-comp one.
@@ -1672,7 +1697,8 @@ fn av1_read_compound_type(
     let group = decoder.symbol(info.cdfs.comp_group_idx[ctx])
     block.comp_group_idx = group
     if group != 0 {
-      let size = match av1_intra_block_index(block.width4 * 4, block.height4 * 4) {
+      let size = match
+        av1_intra_block_index(block.width4 * 4, block.height4 * 4) {
         Some(index) => index
         None => return false
       }
@@ -1720,7 +1746,13 @@ fn av1_read_compound_type(
 
 ///|
 /// One per-MI grid's value at a position, zero outside the coded extent.
-fn av1_field_grid(grid : Array[Int], cols : Int, rows : Int, row : Int, col : Int) -> Int {
+fn av1_field_grid(
+  grid : Array[Int],
+  cols : Int,
+  rows : Int,
+  row : Int,
+  col : Int,
+) -> Int {
   if row < 0 || col < 0 || row >= rows || col >= cols {
     0
   } else {
@@ -1741,7 +1773,14 @@ fn av1_comp_group_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
         ctx = ctx + 3
       }
     } else {
-      ctx = ctx + av1_field_grid(field.comp_group_idxs, field.cols, field.rows, block.mi_row - 1, block.mi_col)
+      ctx = ctx +
+        av1_field_grid(
+          field.comp_group_idxs,
+          field.cols,
+          field.rows,
+          block.mi_row - 1,
+          block.mi_col,
+        )
     }
   }
   if block.avail_l {
@@ -1751,10 +1790,23 @@ fn av1_comp_group_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
         ctx = ctx + 3
       }
     } else {
-      ctx = ctx + av1_field_grid(field.comp_group_idxs, field.cols, field.rows, block.mi_row, block.mi_col - 1)
+      ctx = ctx +
+        av1_field_grid(
+          field.comp_group_idxs,
+          field.cols,
+          field.rows,
+          block.mi_row,
+          block.mi_col - 1,
+        )
     }
   }
-  ctx
+  // Two single ALTREF neighbours contribute three each; AV1 §9.3.4
+  // saturates this sum to the final one of the six comp_group_idx rows.
+  if ctx > 5 {
+    5
+  } else {
+    ctx
+  }
 }
 
 ///|
@@ -1776,7 +1828,14 @@ fn av1_compound_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
         ctx = ctx + 1
       }
     } else {
-      ctx = ctx + av1_field_grid(field.compound_idxs, field.cols, field.rows, block.mi_row - 1, block.mi_col)
+      ctx = ctx +
+        av1_field_grid(
+          field.compound_idxs,
+          field.cols,
+          field.rows,
+          block.mi_row - 1,
+          block.mi_col,
+        )
     }
   }
   if block.avail_l {
@@ -1786,7 +1845,14 @@ fn av1_compound_idx_ctx(info : Av1InterInfo, block : Av1InterBlock) -> Int {
         ctx = ctx + 1
       }
     } else {
-      ctx = ctx + av1_field_grid(field.compound_idxs, field.cols, field.rows, block.mi_row, block.mi_col - 1)
+      ctx = ctx +
+        av1_field_grid(
+          field.compound_idxs,
+          field.cols,
+          field.rows,
+          block.mi_row,
+          block.mi_col - 1,
+        )
     }
   }
   ctx
@@ -1805,12 +1871,22 @@ fn av1_clipped_distance(info : Av1InterInfo, name : Int) -> Int {
 ///|
 /// The distance-weighted blend weights (AV1 §7.11.3.15), from the two reference
 /// names' clipped distances and the quantized weight tables.
-fn av1_distance_weights(info : Av1InterInfo, ref0 : Int, ref1 : Int) -> (Int, Int) {
+fn av1_distance_weights(
+  info : Av1InterInfo,
+  ref0 : Int,
+  ref1 : Int,
+) -> (Int, Int) {
   let av1_quant_dist_weight : Array[Array[Int]] = [
-    [2, 3], [2, 5], [2, 7], [1, 31],
+    [2, 3],
+    [2, 5],
+    [2, 7],
+    [1, 31],
   ]
   let av1_quant_dist_lookup : Array[Array[Int]] = [
-    [9, 7], [11, 5], [12, 4], [13, 3],
+    [9, 7],
+    [11, 5],
+    [12, 4],
+    [13, 3],
   ]
   if ref0 < 0 || ref0 >= info.ref_distances.length() {
     return (av1_quant_dist_lookup[3][0], av1_quant_dist_lookup[3][1])
@@ -1822,7 +1898,10 @@ fn av1_distance_weights(info : Av1InterInfo, ref0 : Int, ref1 : Int) -> (Int, In
   let d1 = info.ref_distances[ref0]
   let order = if d0 <= d1 { 1 } else { 0 }
   if d0 == 0 || d1 == 0 {
-    return (av1_quant_dist_lookup[3][order], av1_quant_dist_lookup[3][1 - order])
+    return (
+      av1_quant_dist_lookup[3][order],
+      av1_quant_dist_lookup[3][1 - order],
+    )
   }
   let mut i = 0
   while i < 3 {
@@ -1843,9 +1922,12 @@ fn av1_distance_weights(info : Av1InterInfo, ref0 : Int, ref1 : Int) -> (Int, In
 ///|
 /// Each reference name's clipped distance from this frame's order hint
 /// (AV1 §7.11.3.15's `dist[ref]`), computed once per frame.
-fn av1_ref_distances(sequence : Av1SequenceInfo, header : Av1FrameHeaderInfo) -> Array[Int] {
+fn av1_ref_distances(
+  sequence : Av1SequenceInfo,
+  header : Av1FrameHeaderInfo,
+) -> Array[Int] {
   let distances = Array::make(av1_num_ref_frames, 0)
-  for name in av1_last_frame..=av1_alt_ref_frame {
+  for name in av1_last_frame..<=av1_alt_ref_frame {
     let hint = header.order_hints[name]
     let raw = av1_relative_dist(sequence, hint, header.order_hint)
     let clipped = if raw < 0 { -raw } else { raw }

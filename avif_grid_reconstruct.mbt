@@ -1,3 +1,4 @@
+///|
 /// Compose decoded grid tiles into one RGBA image.
 ///
 /// Tile bytes are decoded by the caller through the normal AV1 path. This
@@ -9,11 +10,18 @@ pub fn avif_reconstruct_grid(
   output_height : Int,
   tiles : Array[Image],
 ) -> Image? {
-  if rows <= 0 || columns <= 0 || output_width <= 0 || output_height <= 0 ||
-    rows > 256 || columns > 256 || tiles.length() != rows * columns {
+  if rows <= 0 ||
+    columns <= 0 ||
+    output_width <= 0 ||
+    output_height <= 0 ||
+    rows > 256 ||
+    columns > 256 ||
+    tiles.length() != rows * columns {
     return None
   }
-  if output_width > MAX_IMAGE_PIXELS / output_height { return None }
+  if output_width > MAX_IMAGE_PIXELS / output_height {
+    return None
+  }
   let first = tiles[0]
   if first.width <= 0 || first.height <= 0 {
     return None
@@ -25,7 +33,9 @@ pub fn avif_reconstruct_grid(
     return None
   }
   for tile in tiles {
-    if tile.width != first.width || tile.height != first.height { return None }
+    if tile.width != first.width || tile.height != first.height {
+      return None
+    }
   }
   let out = Image::new(output_width, output_height)
   for index in 0..<tiles.length() {
@@ -60,6 +70,7 @@ pub fn avif_reconstruct_grid(
   Some(out)
 }
 
+///|
 /// Decode ordered AV1 grid tile samples and compose them into one image.
 /// The samples must be in row-major grid order; unsupported tile syntax
 /// rejects the whole image instead of returning a partial reconstruction.
@@ -70,7 +81,10 @@ pub fn avif_decode_grid_tiles(
   output_height : Int,
   samples : Array[Array[Byte]],
 ) -> Image? {
-  if rows <= 0 || columns <= 0 || rows > 256 || columns > 256 ||
+  if rows <= 0 ||
+    columns <= 0 ||
+    rows > 256 ||
+    columns > 256 ||
     samples.length() != rows * columns {
     return None
   }
@@ -85,6 +99,7 @@ pub fn avif_decode_grid_tiles(
   avif_reconstruct_grid(rows, columns, output_width, output_height, images)
 }
 
+///|
 /// Decode a grid directly from a BMFF buffer and its parsed descriptor.
 /// Each tile may contain one or more iloc extents; extents are concatenated
 /// before passing the sample to the pure AV1 decoder.
@@ -93,11 +108,24 @@ pub fn avif_decode_grid(
   descriptor : AvifGridDescriptor,
 ) -> Image? {
   match avif_decode_grid_frame(data, descriptor) {
-    Some(frame) => av1_frame_to_rgba(frame)
+    Some(frame) => {
+      let colored = match avif_grid_descriptor(data) {
+        Some(primary) if primary.item_id == descriptor.item_id => {
+          let container = match avif_container_parse(data) {
+            Some(value) => value
+            None => return None
+          }
+          avif_frame_apply_color(frame, container)
+        }
+        _ => frame
+      }
+      av1_frame_to_rgba(colored)
+    }
     None => None
   }
 }
 
+///|
 /// Decode and compose a grid directly from a BMFF buffer.  This convenience
 /// entrypoint performs descriptor extraction and pixel reconstruction as one
 /// operation, so callers cannot accidentally skip the `dimg` ordering or
@@ -107,7 +135,9 @@ pub fn avif_decode_grid_auto(data : Array[Byte]) -> Image? {
     Some(value) => value
     None => return None
   }
-  if !avif_grid_properties_match(data, descriptor) { return None }
+  if !avif_grid_properties_match(data, descriptor) {
+    return None
+  }
   avif_decode_grid(data, descriptor)
 }
 

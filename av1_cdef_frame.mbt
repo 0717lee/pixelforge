@@ -200,6 +200,10 @@ fn av1_cdef_filter_frame(
           damping: config.damping + shift - 1,
           direction: if primary_uv == 0 {
             0
+          } else if sub_x == 1 && sub_y == 0 {
+            // CDEF maps luma directions to the horizontally subsampled
+            // 4:2:2 chroma grid (dav1d cdef_apply_tmpl.c uv_dirs[1]).
+            [7, 0, 2, 4, 5, 6, 6, 6][direction]
           } else {
             direction
           },

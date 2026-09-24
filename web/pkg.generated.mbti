@@ -1,8 +1,16 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "0717lee/pixelforge/web"
 
+import {
+  "0717lee/pixelforge",
+}
+
 // Values
 pub fn apply_filter(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
+
+pub fn decode_avif_animation(FixedArray[Byte]) -> @pixelforge.AvifAnimationPixels?
+
+pub fn decode_avif_rgba(FixedArray[Byte]) -> @pixelforge.Image?
 
 pub fn encode_png(FixedArray[Byte], Int, Int) -> FixedArray[Byte]
 

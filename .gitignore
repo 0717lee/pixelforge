@@ -9,3 +9,4 @@ _screenshots/
 项目申报书*.md
 申报*.md
 *.pdf
+__pycache__/

@@ -93,3 +93,41 @@ test "motion field estimation keeps the grid shape of the current frame" {
     assert_eq(grid.mv_cols[slot].length(), 64)
   }
 }
+
+///|
+test "motion field estimation excludes LAST when its ALTREF matches current GOLDEN" {
+  let sequence = mfe_test_sequence()
+  let base = av1_mc_test_frame(Array::make(64 * 64, 100), 64, 64, 32, 32, 8, 0)
+  let saved_hints = Array::make(8, 0)
+  let vectors = Array::make(16 * 16 * 2, 0)
+  for unit in 0..<(16 * 16) {
+    vectors[unit * 2] = 8
+    vectors[unit * 2 + 1] = 16
+  }
+  let last : Av1RefFrame = {
+    ..base,
+    frame_type: av1_inter_frame,
+    order_hint: 1,
+    mi_cols: 16,
+    mi_rows: 16,
+    mf_refs: Array::make(16 * 16, av1_last_frame),
+    mf_mvs: vectors,
+    saved_order_hints: saved_hints,
+  }
+  let refs : Array[Av1RefFrame?] = Array::make(8, None)
+  refs[av1_last_frame] = Some(last)
+  let hints = Array::make(8, 0)
+  hints[av1_last_frame] = 1
+  let excluded = av1_motion_field_estimation(sequence, 2, hints, refs, 16, 16)
+  for row in excluded.mv_rows {
+    for value in row {
+      assert_eq(value, av1_mv_invalid)
+    }
+  }
+  // Changing only the ALTREF-of-LAST identity makes the same saved vectors
+  // eligible; the source reference for their projection still has hint zero.
+  saved_hints[av1_alt_ref_frame] = 3
+  let included = av1_motion_field_estimation(sequence, 2, hints, refs, 16, 16)
+  assert_eq(included.mv_rows[0][0], 8)
+  assert_eq(included.mv_cols[0][0], 16)
+}

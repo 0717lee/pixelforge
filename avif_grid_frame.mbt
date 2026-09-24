@@ -22,6 +22,13 @@ fn avif_decode_grid_frame(
   if width > MAX_IMAGE_PIXELS / height {
     return None
   }
+  // The extent API also accepts raw concatenated samples. When the input is
+  // an AVIF grid, preserve each coded item's selectors and actual ispe size.
+  let container_grid = avif_grid_descriptor_for_item(
+      data,
+      Some(descriptor.item_id),
+    )
+    is Some(_)
   let decode_cell = fn(tile : AvifGridTile) -> Av1FramePlanes? {
     let sample : Array[Byte] = []
     for extent in tile.extents {
@@ -38,7 +45,28 @@ fn avif_decode_grid_frame(
     if sample.length() == 0 {
       return None
     }
-    av1_decode_frame_planes(sample, allow_monochrome=true)
+    if !container_grid {
+      return av1_decode_frame_planes(sample, allow_monochrome=true)
+    }
+    let (cell_width, cell_height, operating_point, spatial_layer) = match
+      avif_item_decode_config(data, tile.item_id) {
+      Some(value) => value
+      None => return None
+    }
+    let frame = match
+      av1_decode_frame_planes(
+        sample,
+        allow_monochrome=true,
+        operating_point~,
+        spatial_layer~,
+      ) {
+      Some(value) => value
+      None => return None
+    }
+    if frame.width != cell_width || frame.height != cell_height {
+      return None
+    }
+    Some(frame)
   }
   let first = match decode_cell(descriptor.tiles[0]) {
     Some(value) => value
@@ -59,13 +87,22 @@ fn avif_decode_grid_frame(
     (height - 1) / first.height != rows - 1 {
     return None
   }
+  if first.sub_x < 0 || first.sub_x > 1 || first.sub_y < 0 || first.sub_y > 1 {
+    return None
+  }
+  // Only subsampled axes require aligned cell and output boundaries. 4:2:2
+  // has no vertical restriction; 4:4:4 may crop either output axis to odd size.
   if plane_count == 3 &&
-    ((first.width | first.height | width | height) & 1) != 0 {
+    (
+      ((first.width | width) & ((1 << first.sub_x) - 1)) != 0 ||
+      ((first.height | height) & ((1 << first.sub_y) - 1)) != 0
+    ) {
     return None
   }
   let planes : Array[Array[Int]] = Array::makei(plane_count, fn(plane) {
-    let divisor = if plane == 0 { 1 } else { 2 }
-    Array::make(width / divisor * (height / divisor), 0)
+    let divisor_x = if plane == 0 { 1 } else { 1 << first.sub_x }
+    let divisor_y = if plane == 0 { 1 } else { 1 << first.sub_y }
+    Array::make(width / divisor_x * (height / divisor_y), 0)
   })
   for index in 0..<descriptor.tiles.length() {
     let frame = if index == 0 {
@@ -81,7 +118,11 @@ fn avif_decode_grid_frame(
       frame.bit_depth != first.bit_depth ||
       frame.planes.length() != plane_count ||
       frame.full_range != first.full_range ||
-      frame.matrix_coefficients != first.matrix_coefficients {
+      frame.matrix_coefficients != first.matrix_coefficients ||
+      frame.color_primaries != first.color_primaries ||
+      frame.transfer_characteristics != first.transfer_characteristics ||
+      frame.sub_x != first.sub_x ||
+      frame.sub_y != first.sub_y {
       return None
     }
     let ox = index % columns * first.width
@@ -119,6 +160,8 @@ fn avif_decode_grid_frame(
     bit_depth: first.bit_depth,
     full_range: first.full_range,
     matrix_coefficients: first.matrix_coefficients,
+    color_primaries: first.color_primaries,
+    transfer_characteristics: first.transfer_characteristics,
     sub_x: first.sub_x,
     sub_y: first.sub_y,
     planes,

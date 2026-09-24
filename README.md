@@ -4,10 +4,12 @@
 
 [English](README.en.md) | 简体中文
 
+**AVIF/AV1 状态（2026-09-24）**：完整纯 MoonBit 解码主线已实现；native、JavaScript、wasm-gc 各 1546 项测试通过，独立像素对照、CLI、Playground 主线程/Worker 与生成产物验证通过。实现范围、颜色约定、复现命令和对应提交的 CI 记录见 [开发交接](HANDOFF.md)。
+
 > 一个纯 [MoonBit](https://www.moonbitlang.cn/) 实现的图像处理库，附带一个在浏览器里实时运行的 Playground。
 > 后端无关的核心库可编译到 **JavaScript / WebAssembly (wasm-gc & 线性内存 wasm) / native**。
 >
-> **稳定 API 里程碑已发布**：GitHub 保留 `v1.0.0` 作为稳定版标记；当前 MoonBit 包版本为 `0.14.0`（mooncakes.io 要求主版本号为 0）。公开 API 在 0.x 系列中保持兼容，破坏性变更会记录在 CHANGELOG。
+> **版本与接口**：GitHub 保留 `v1.0.0` 稳定版标记；当前源码包版本为 `0.18.0`，以 `moon.mod` 为准。本轮扩展了 AV1 帧头、序列和参考状态记录；手工构造公开结构的代码需按最新 [接口文件](pkg.generated.mbti) 补充字段，兼容性变化见 [CHANGELOG](CHANGELOG.md)。
 
 ![PixelForge 浏览器 Playground](assets/playground-original.png)
 
@@ -27,8 +29,10 @@
 - **流式遍历**：`for_each_tile()` / `for_each_row()` 提供不复制像素缓冲的分块与逐行访问；需要独立图像时再调用 tile 的 `copy()`。
 - **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 编码/解码（单帧 GIF89a 编码、变长 LZW、交错、透明索引）、QOI、BMP 与 TIFF（多条带、分块、PackBits/LZW/Deflate、Predictor=2、有限 BigTIFF）解码；JPEG 编解码、WebP Lossless 编解码和 JS 目标 AVIF 编码通过纯 MoonBit/`mizchi/image` 适配。
 - **WebP Lossless**：纯 MoonBit VP8L 解码覆盖 LZ77、色彩缓存、空间变化 Huffman 分组，以及 Predictor、Cross-Color、Subtract Green 和 Color Indexing 变换。
-- **AVIF/AV1 解码**：纯 MoonBit 路径支持 8/10/12-bit 的 4:2:0、4:2:2 与 4:4:4 及单色、跨 superblock 的共享熵状态、单/多 tile、4–128 像素轴长的全部 22 种方形与矩形分块、DCT/ADST 残差、`tx_mode_select` 和 4×4 WHT 无损重建。已接入 DC、带角度增量的八种方向预测、SMOOTH 系列、PAETH、五种 filter-intra、2–8 色调色板和 CfL 色度预测，以及跨 tile 的整帧去块滤波和 CDEF 方向搜索、强度选择与滤波。帧级水平超分辨率（superres）按规范解码：use_superres 与 9–16 的 coded 分母解析后，熵编码宽度与显示宽度分离，去块与 CDEF 之后用固定 8-tap 相位卷积在原始位深上放大完整平面；CodedLossless 与 AllLossless 在实际缩放时保持区分。真实 libaom 样本及构造的符合语法的码流由 dav1d 独立验证原始位深 YUV，再核对公开 RGBA 入口；覆盖小块色度归属、横纵 tile 接缝、奇数尺寸裁剪、superres 分母 9–16 和 q0 屏幕内容/环路恢复语法门。单色灰度与辅助 alpha 已复用该路径，高位深透明度按 UNORM 四舍五入到 8 位，并由实际 alpha 容器核对。方向预测包含按分区顺序确定的参考边缘、边缘滤波与上采样。去块滤波保留原始位深并先于 CDEF 执行，superres 紧随 CDEF 之后；环路恢复已按规范完整落地：帧头语法（各平面 lr_type 与单位尺寸）、配置校验与单位网格布局贯穿全部解码入口，pre-superblock 熵读取填充 per-tile LR 状态，deblock 行在内部条带边界快照并由源视图按 top/bottom 配对与帧边重复供给，Wiener/SGR 标量滤波在 CDEF+superres 之后的放大帧上按原生位深应用——由 dav1d 像素真值逐样本锁定（9539/9539 一致，其中 9429 个样本受滤波改变）。通用帧头语法（非 reduced-still 前缀、参考帧列表与序提示、全局运动与 skip mode）、八槽原生位深参考帧存储与 `update_reference_map`、以及 8-tap 亚像素运动补偿核（含参考缩放、双滤波与 8/10/12-bit 中间舍入）已落地，并由 general 码流的关键帧与 dav1d 逐样本一致验证（帧头字段逐项对齐 FFmpeg `trace_headers`）。参考帧熵上下文继承（primary_ref_frame 命名槽位时装载该槽保存的熵状态）已接入生产解码路径：inter_cdf_inherit_64x64 的 Y/U/V 对 dav1d 真值为 [0, 0, 0]。阶段 C 已解除 coded_lossless（见 inter_lossless_64x64 样本）、is_motion_mode_switchable/OBMC（两个 overlap pass 均已实现且有独立覆盖，见 inter_obmc_64x64 样本）、allow_screen_content_tools（inter 帧 intra 块的 palette 语法与索引图预测已接入，见 inter_palette_64x64 样本）与 allow_warped_motion/三符号 motion_mode（find_warp_samples 已实现并独立覆盖，见 inter_warped_64x64 样本）与 use_ref_frame_mvs/时间运动矢量（motion_field_estimation 接到帧头读取处、find_mv_stack 在 near 加权与 corner 扫描之间跑 §7.10.2.5 的时间扫描，见 inter_temporalmv_64x64 样本；五者 Y/U/V 对 dav1d 真值均为 [0,0,0]）；单参考 compound 语法（距离加权/差异加权混合与 interintra 混合，见 inter_compound_64x64、inter_distcomp_64x64、inter_diffwtd_64x64、inter_interintra_64x64 样本）、三帧序列上的 skip mode（见 inter_skipmode_64x64 样本）与平移型全局运动（见 inter_globalmv_64x64 样本）也已解除。旋转缩放/仿射型全局运动模型此前也列为不支持，目前已解除（warped prediction 网格已接入，见 inter_globalmv_rotzoom_64x64 样本，Y/U/V 对 dav1d 真值为 [0,0,0]）。segmentation 也已落到 encoder 真正会写的程度：`segment_id`（skip 与 CDEF index 之间、`get_cur_frame_segid` 的邻块上下文、`neg_deinterleave` 反折叠）与 `SEG_LVL_ALT_Q`（块的 quantizer index，喂反量化与 lossless 判定）都已接入，`inter_segmentation_64x64` 是仓库里第一条真正写段地图的流（`--aq-mode=2`），两个帧 Y/U/V 对 dav1d 为 [0,0,0]。逐超级块的 quantizer 增量（`delta_q_params`）也已接入：`inter_deltaq_64x64` 是第一条发它的流（`--deltaq-mode=2`），每个超级块开头读一个增量符号、累加进该 SB 的 quantizer index，反量化按 SB 走（系数 CDF 行仍是每 tile 一次，与 libdav1d 一致），两个帧 [0,0,0]。仍未支持：`delta_lf_present`（需要逐 SB 的去块强度表）、不带自身 feature 数据的段地图更新（feature 要从 primary ref 继承）、temporal 段预测，以及其余 7 个 feature level（四档 loop filter 强度、强制参考帧、强制 skip、强制 globalmv）。LOCALWARP 本身也已样本闭合：inter_localwarp_64x64 是仓库里第一条真正选中 `motion_mode=2` 的流（由 inter_warped_64x64 翻一个瓦片位得到，libaom 自己从不为这些块写 LOCALWARP），其 inter 帧三个平面对 dav1d 为 [0,0,0]，且整帧 721 个 msac 符号的取值与 range 与 libdav1d 逐字一致。inter_cdf_inherit_64x64 是一条一致性非法的流（inter 帧 tile payload 仅 11 字节、继承解码越读 1000+ 位，libaom 按规范 §8.2 拒绝而 dav1d 1.2.1 宽容解出），现已按继承开启的路径逐样本闭合为 [0, 0, 0]：VERT/HORZ 系数扫描分支互换加上越读守卫移除（MSAC 的 symbol_max_bits 允许为负、读越界处补零，与 libdav1d 一致），差异历史与定位过程见 HANDOFF.md 补充四十七；该样本仍作为回归围栏保留。
-- **AVIF 容器与合成**：校验主图项、`iloc` 数据范围、辅助 alpha 的 `auxl`/`auxC` 关系、`av1C`/`ispe`/`nclx` 和 AV1 OBU；`avif_decode_rgba` 可自动合成受支持的 monochrome alpha 样本及 alpha 网格，支持主图与 alpha 分别采用 grid 或 av01 的组合。`avif_decode` 和 `avif_decode_grid_auto` 按主图项与 `dimg` 顺序自动解码网格，校验格子尺寸、输出覆盖和色度对齐；`avif_decode_animation` 和 `avif_animation_frame_at` 提供受支持样本的动画帧解码与时间选择。`av1_decode_partition_leaves` 是独立分区探针，实际 tile 解码会按语法顺序交错处理分区与块内数据。
+- **AV1 原生重建**：纯 MoonBit 支持 8/10/12-bit、单色与 4:2:0/4:2:2/4:4:4，处理方形/矩形分区、多 superblock、多 tile、完整系数与整数逆变换、方向/SMOOTH/PAETH/filter-intra/CfL/调色板预测、无损和 intrabc。量化矩阵、各项 segmentation feature 与地图继承、逐 SB delta-Q/delta-LF，以及去块、CDEF、superres、Wiener/SGR 和 film grain 已接入原生位深管线。
+- **AV1 帧间与呈现状态**：维护参考像素、运动候选、CDF 和 segment 地图，处理亚像素/缩放参考、compound、wedge、OBMC、局部与全局 warp；装配独立 frame-header/tile-group OBU，并处理隐藏参考帧、show-existing、film-grain 继承和 operating-point 层选择。状态化接口按 temporal unit 返回呈现结果。
+- **AVIF 容器与合成**：公开入口解析主图、`av1C`/`ispe`/`nclx`、数据范围和 alpha 关联，在原生位深组装网格后转换为 RGBA；支持主图与 alpha 的 av01/grid 组合。动画颜色与辅助 alpha 轨道分别保留解码状态，并按时间戳、时长和关联关系合成。具体组合与独立参考见 [验收样本矩阵](HANDOFF.md#7-参考样本与跨机器复现)。
+- **AVIF 透明度与浏览器接线**：静态 item 和动画 track 的 `prem` 关系输出统一的 straight RGBA（非预乘），保留高位深反预乘所需精度。Playground 主线程和 Worker 使用纯 MoonBit 核心解码静态/动画 AVIF；透明动画预览与 PNG 导出已在禁用宿主图片解码的浏览器中验证。AVIF 编码仍为浏览器专用。
 - **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
 - **格式探测**：`detect_image_format()` 与 `image_metadata()` 可在不解码像素的情况下识别 PNG/GIF/QOI/BMP/JPEG/WebP/AVIF/TIFF，并读取常见容器的尺寸与 GIF 动画标记。
 - **仿射变换**：`Affine` 矩阵（旋转/平移/缩放/错切 + 复合 + 求逆），逆映射双线性采样；任意角度 `rotate(degrees)`。
@@ -53,6 +57,22 @@
 - **纯 MoonBit 核心处理**：图像处理算子使用 `moonbitlang/core`；部分格式适配使用 `mizchi/image`，native CLI 的文件模式使用官方 `moonbitlang/x/fs`。
 - **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
 - **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，GIF 保持动画预览，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
+
+### AVIF/AV1 公共入口与颜色约定
+
+| 用途 | 入口 |
+| --- | --- |
+| AVIF 主图及辅助 alpha/grid | `avif_decode_rgba(data)`；仅主图使用 `avif_decode(data)` |
+| AVIF 动画及时间选择 | `avif_decode_animation(data)`、`avif_animation_frame_at(...)` |
+| 原始 AV1 单张呈现 | `av1_decode(data)` |
+| 跨 temporal unit 的 AV1 状态 | `av1_video_decoder()`、`av1_video_decode_temporal_unit(decoder, data)` |
+| 容器与序列信息 | `avif_container_parse(data)`、`av1_sequence_info(data)` |
+
+`av1_video_decode_temporal_unit` 返回每个 temporal unit 的选定呈现，保留隐藏帧的参考更新；合法但没有显示帧的单元返回 `Some([])`。原始 AV1 默认选择 OP0 中该单元实际出现的最高空间层，单图接口返回首个呈现。AVIF 还须服从 essential `a1op`/`lsel` 的 operating-point/空间层选择，`ispe` 校验所选呈现尺寸而非固定等于 sequence 最大尺寸；这部分接线与最终回归状态见 HANDOFF。
+
+颜色转换覆盖 AV1 定义的 CICP 矩阵 0–14（3 为保留值），并让 nclx 补充码流中未指定的颜色字段、保留范围标志。输出采用源 primaries、源 transfer 的非线性 RGB，色度最近邻复制，最后裁剪并舍入为 RGBA8；未指定矩阵 2 使用 BT.601 默认值。XYZ primaries 明确转换为 BT.709/sRGB，不做色适应或 HDR 色调映射。需要 primaries/transfer 的矩阵会验证必要元数据。
+
+[14 个颜色参考样本](tests/fixtures/av1-color/README.md)保留独立原生 YUV 和 RGBA。PQ 样本有四个通道因 zimg 的 float32 运算跨过 8 位舍入边界：测试同时限定其与 zimg 相差不超过 1，并严格核对独立 80 位 H.273 金值；其余通道严格匹配 zimg，不能将该 PQ RGBA 声称为逐字节一致。
 
 ## 🆚 与 MoonBit 生态中其他图像库的关系
 
@@ -198,7 +218,7 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 
 ### 错误与边界
 
-- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode`、`avif_decode` 对格式错误或不支持的输入返回 `None`；AVIF 尚未接入的编码工具和帧间语法同样拒绝输出，避免生成错误像素。浏览器 Playground 继续通过 `web/codecs.js` 提供浏览器支持的 WebP/AVIF 解码。
+- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode`、`avif_decode` 对格式错误或不支持的输入返回 `None`。Playground 的 AVIF 路径本轮接入纯 MoonBit 静态/动画解码绑定，验证时须确认宿主 AVIF 解码不可用仍能显示；浏览器专用的 AVIF 编码能力单独保留。
 - `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
 - 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
 - Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。
@@ -244,12 +264,17 @@ let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
 
 ## ✅ 测试
 
-```bash
-moon test                 # 默认后端（wasm-gc）
-moon test --target js     # js 后端
+```sh
+moon check
+moon test --target js
+moon test --target wasm-gc
+moon test --target native
+node scripts/build-web.mjs --check
+node verify-wasm.mjs
+moon run --target native cmd/cli -- --help
 ```
 
-测试覆盖每个滤镜、变换、绘图原语、合成模式、字体、分析算法与编解码器，并包含畸形输入和尺寸边界；期望值均为手工推导（脉冲响应、平场不变性、已知边缘、直方图重映射、编码字节精确长度、无损往返、CRC-32/Adler-32 公开参考向量、手工汇编的 DEFLATE 与 GIF LZW 位流等），在 wasm-gc、js 与 native 后端下均通过；GitHub Actions 持续集成。
+测试覆盖图像处理、编解码、异常输入与尺寸边界。AV1/AVIF 测试使用仓库内嵌的独立 dav1d/libavif/原版 C 参考，普通测试不需要这些外部编解码器。参考依赖、只读 `--check` 命令和验证结果见 [HANDOFF](HANDOFF.md)。修改核心后先运行 `moon info`，用 `node scripts/build-web.mjs` 更新产物，再执行复现检查及 `node scripts/check-browser-codecs.mjs`；后者验证发布绑定和实际 Worker 的独立像素与错误路径。
 
 ## 📮 发布到 mooncakes.io
 

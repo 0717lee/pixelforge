@@ -153,10 +153,10 @@ test "superres disabled header retains intrabc bit and omits all lossless LR" {
 }
 
 ///|
-test "superres header rejects dimensions without per plane growth or valid bounds" {
+test "superres header rejects dimensions outside valid bounds" {
   let lr_fields = av1_superres_header_test_lr_fields([0, 0, 0], [], -1)
   let payload = av1_superres_header_test_payload(true, false, lr_fields)
-  for width in [0, 1, 2, 65537, 2147483647] {
+  for width in [0, -1, 65537, 2147483647] {
     assert_true(
       av1_parse_stage1_frame(
         payload,
@@ -165,12 +165,34 @@ test "superres header rejects dimensions without per plane growth or valid bound
       is None,
     )
   }
-  assert_true(
-    av1_parse_stage1_frame(
-      payload,
-      av1_superres_header_test_sequence(1, true),
-      allow_monochrome=true,
-    )
-    is None,
-  )
+}
+
+///|
+test "small active superres keeps clamped dimensions and coded tool gates" {
+  for monochrome in [false, true] {
+    let lr_fields = if monochrome {
+      av1_superres_header_test_lr_fields([0], [], -1)
+    } else {
+      av1_superres_header_test_lr_fields([0, 0, 0], [], -1)
+    }
+    let payload = av1_superres_header_test_payload(true, monochrome, lr_fields)
+    for item in [(1, 1), (2, 2), (8, 8), (16, 16), (17, 16), (24, 16)] {
+      let (width, coded) = item
+      let header = av1_parse_stage1_frame(
+        payload,
+        av1_superres_header_test_sequence(width, monochrome),
+        allow_monochrome=true,
+      ).unwrap()
+      assert_eq(
+        (header.frame_width, header.upscaled_width, header.superres_denom),
+        (coded, width, 16),
+      )
+      // Active superres omits intrabc and retains LR syntax even when its
+      // minimum-width clamp makes coded and display dimensions equal.
+      assert_false(header.allow_intrabc)
+      assert_true(header.restoration is Some(_))
+      assert_true(header.coded_lossless && header.reduced_tx_set)
+      assert_eq(header.tile_payload, [b'\xa5'])
+    }
+  }
 }

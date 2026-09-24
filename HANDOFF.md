@@ -1,12 +1,8 @@
 # PixelForge 开发交接
 
-更新日期：2026-09-23（第 84 次推进）。适用对象：首次接手本项目的开发者、维护者或代码代理。本文从项目目标、代码基线到验收步骤提供完整入口，不需要先阅读聊天记录或取得原作者的临时文件。除外部链接外，文件路径均相对仓库根目录。
+更新日期：2026-09-24。本文供首次接手的开发者、维护者或代码代理使用；文件路径均相对仓库根目录，不需要聊天记录或原开发者的临时目录。
 
-**当前结论（2026-09-23，第 84 次推进）：AVIF/AV1 像素解码主线已完成。** 四个阶段全部闭合：阶段 B（`inter_cdf_inherit_64x64` 继承路径对 dav1d [0,0,0]）、阶段 C（inter 帧间工具门的剩余部分——LOCALWARP、旋转缩放/仿射全局运动、segmentation 的 `segment_id` + `SEG_LVL_ALT_Q`、`delta_q_params` 的逐超级块 quantizer 增量——全部解除且有逐样本外部核验）、阶段 D（AVIF 容器与三帧以上参考状态变化的动画）、阶段 E（证据/文档/产物/CI 一致性收口）。18 个 fixture 的 `--check` 全绿，三个 `moon test` 目标 1266/1266，`moon check` 0 errors，Web 产物可复现、WASM 验证与 CLI 冒烟通过。仍被明确拒绝且不会静默错解码的工具：`delta_lf_present`（缺逐 SB 去块强度表）、segmentation 其余 7 个 feature level（loop filter 四档/强制参考帧/强制 skip/强制 globalmv）、`using_qmatrix`、masked/wedge compound、`allow_intrabc`——每一项的拒绝理由写在各次推进补充与 `av1_frame_header.mbt` 的门里。本文按时间倒序记录每次推进的取证与修复，最新的一次在最上面。
-
-以下第 5 段是这一路的历史记录（阶段 B 的收敛过程），保留以便复现诊断方法：
-
-**当前结论：AVIF/AV1 解码主线尚未完成。第 4 节两项交付问题已解决（Web 产物重建、CLI 示例补 `--target native`）；参考帧熵上下文继承的快照/保存/装载机制已落地并被隔离测试验证。第十四次推进取得三项决定性证据（补充四十七）：(1) **生产配置（不继承）下我方对 `inter_cdf_inherit_64x64` 的 inter 帧输出与 dav1d 对未补丁孪生流 `inter_minimal_64x64` 的输出逐样本相同**，围栏值 `[3992,842,928]` 就是 dav1d 自身"开补丁 vs 不开补丁"的纯继承效应而非我方错误，阶段 B 剩余工作严格收敛为"让继承开启的输出等于 dav1d 开补丁的输出"；(2) 继承开启并放开越读守卫后，分歧定位到 **inter 帧第一个 luma 叶（32x32, tx_ctx=3, eob=41）扫描位置 k=31 的 `coeff_base`**（我方 level 2、黄金 level 1），chroma 块 (0,0) 已完全正确；(3) **所有被继承的系数 CDF 行经规范默认值 + 关键帧实际符号序列复算逐位精确**（`base[3][21]`/`base[3][22]`/`base_eob[3][1]`/`eob` 四行全部吻合），行值假设被彻底排除。第四至八次推进把分歧定位到第一块 32x32 luma 变换扫描位置 k=31 的 `coeff_base`（base ctx 22 行）；第九次推进取得 dav1d 源码、建成 MSAC 状态级取证工具、并用独立 Python 模型证明关键帧第一叶在给定状态下与规范逐位一致；第十、十一次推进取得 aomenc/dav1d 1.2.1/FFmpeg 三件套、可逐字节复现 fixture 并建成参数化 bisection 流程；**查明该 fixture 是“用默认 CDF 编码、再补丁开启继承”的流，且 `symbol_max_bits >= -14` 守卫是最小样本的唯一阻塞**（放开后 7 类输入全部 `[0,0,0]`），剩余分歧隔离到关键帧色度（仅周期 3 纹理触发），详见第 10 节。**
+**当前状态：完整纯 MoonBit AVIF/AV1 解码主线已实现，本地验收通过。** native、JS、wasm-gc 各 1546 项测试通过，公开入口、独立像素、CLI 与浏览器主线程/Worker 路径均已验证；正在提交并执行对应版本的远端 CI。第 1 节是最终目标，第 2–7 节记录当前实现与证据，后面的历史归档只描述当时状态。
 
 ## 1. 最终目标
 
@@ -39,212 +35,135 @@
 
 本目标的范围是完整解码主线。修复单个 CDF 问题、完成一个阶段或获得全绿单测后，仍须按本表检查后续阶段。
 
-## 2. 取得正确的代码版本
+## 2. 代码基线与当前实现
 
-项目仓库：[0717lee/pixelforge](https://github.com/0717lee/pixelforge)。MoonBit 包名 `0717lee/pixelforge`，当前源码的 [moon.mod](moon.mod) 版本为 `0.18.0`；版本号本身不代表上述目标已验收。
+仓库为 [0717lee/pixelforge](https://github.com/0717lee/pixelforge)，包名 `0717lee/pixelforge`，源码版本见 [moon.mod](moon.mod)，当前为 `0.18.0`。本轮实现从 `main` 的 `c9f54ba827cdf7255ff2a681e0adeaa2601d474b` 开始；该旧基线不包含下面的修复。复验时使用包含本文当前状态、源码和参考样本的同一提交，先核对 `git rev-parse HEAD` 与 `git status --short`。本轮没有创建新版本 tag 或执行 mooncakes 发布。
 
-本交接依据的本地分支为 `main`，基线提交为：
+当前契约仍是第 1 节完整解码目标。下表记录源码路径及明确标注的接线工作，不替代第 4 节最终验证，也不把构造样本冒充原始编码器输出。
 
-```text
-eee85ffd9e2af2c9ee32d88bd62d327d6e5de16a
-```
-
-2026-09-20 只读查询到远端 `main` 为 `0694838eb10ba7d2844f62bc774e0fdd417e1f8d`，本地基线超前 266 个提交。因此，**仅克隆该次查询时的远端 main 无法取得本交接的完整代码**。交付方必须同时提供含上述基线的分支、Git bundle 或完整仓库副本，并移交需要保留的未提交差异。接收方核对：
-
-```sh
-git rev-parse HEAD
-git status --short
-git log -5 --oneline
-```
-
-收到完整工作树时不要用 reset/checkout 覆盖其未提交工作。本文件可随仓库一起传递；不要求接收方拥有原开发者的个人目录、代理技能包或对话历史。
-
-### 本地差异快照
-
-下面是添加本交接文件及 README 导航之前的审查快照，后续以 `git status` 为准：80 个已跟踪文件存在未提交差异，78 修改、2 删除，暂存区为空。
-
-| 类别 | 数量 | 2026-09-20 审查结果 |
-| --- | ---: | --- |
-| MoonBit 源码与测试 | 72 | HEAD 与工作区分别经同版 `moonfmt -` 规范化，72/72 输出一致；没有剩余逻辑差异 |
-| 生成接口 `.mbti` | 4 | 仅末尾空行变化，接口未改变 |
-| `moon.mod` | 1 | 原有 import 段前移，依赖版本不变 |
-| `cmd/cli/moon.pkg` | 1 | 新增 `supported_targets = "native"`，属于目标范围变化 |
-| `web/dist` | 2 | 删除 `web.js`、`wasmcore.wasm`，导致下述交付阻塞 |
-
-不要根据大型数组格式化产生的 diff 行数估算新增功能。当前工作树中的格式化与已提交主线功能是两件事。
-
-**（2026-09-21 第十二次推进后的快照）**：`git status` 为 **20 个已跟踪文件修改 + 2 个未跟踪**（`HANDOFF.md`、[av1_frame_cdfs.mbt](av1_frame_cdfs.mbt)），暂存区为空。第十二次推进按 AGENTS.md 跑了 `moon info && moon fmt`：`moon info` 未改变任何 `.mbti`；`moon fmt` 把 9 个本就已修改的 `.mbt`（`av1_alpha_decode` / `av1_frame_map` / `av1_frame_planes` / `av1_inter_mode` / `av1_inter_tile` / `av1_intra_tile` / `av1_mc_oracle_wbtest` / `av1_tile_decode` / `webp_transform_test`）连同之前未格式化的约 70 个无关文件一起重排，无关文件的格式化已用 `git checkout --` 全部回退，上述 9 个文件保留了格式化结果（语义不变，`git diff -w` 与格式化前一致）。本轮另修复了 [av1_msac.mbt](av1_msac.mbt) 与 [av1_coeff_decode.mbt](av1_coeff_decode.mbt) 的 CRLF 行尾残留（HEAD 为 LF）并移除两处上次遗留的死插桩（`av1_msac_trace`/`av1_msac_trace_on`、`av1_coeff_dump`/`av1_coeff_dump_on`），这两个文件现已与 HEAD 无差异。
-
-## 3. 环境与可直接运行的检查
-
-命令均从仓库根目录执行，适用于安装好工具的 Windows、Linux 或 macOS。正常检查不需要重新编码 fixture，也不依赖私有临时文件。
-
-| 工具 | 用途与要求 |
+| 实现范围 | 主要入口 |
 | --- | --- |
-| Git | 取得和核对完整代码、样本与变更 |
-| MoonBit | 安装 [.github/workflows/ci.yml](.github/workflows/ci.yml) 中 `MOONBIT_VERSION` 固定的编译器，目前为 `0.10.11+6ff76a5f9`；对应本次实测 Moon CLI 为 `0.1.20260827` |
-| Node.js | JS 测试、Web 构建和 WASM 验证；本次实测为 `v24.12.0` |
-| 平台 C 编译工具链 | MoonBit native 编译；按 MoonBit 对本平台的要求安装 |
-| Python、aomenc、dav1d、FFmpeg | 仅在重新生成/核验外部参考样本时需要，见第 8 节 |
+| 8/10/12-bit、单色与 4:2:0/4:2:2/4:4:4，完整分区/系数/逆变换、预测、palette/CfL、无损及 intrabc | [av1_intra_tile.mbt](av1_intra_tile.mbt)、[av1_intrabc.mbt](av1_intrabc.mbt) |
+| 全部 segmentation feature、地图/feature 继承与 temporal prediction、qmatrix、delta-Q/delta-LF | [av1_segmentation.mbt](av1_segmentation.mbt)、[av1_qmatrix.mbt](av1_qmatrix.mbt)、[av1_frame_header.mbt](av1_frame_header.mbt) |
+| 去块、CDEF、各采样格式 superres、Wiener/SGR、film-grain 更新/继承 | [av1_frame_planes.mbt](av1_frame_planes.mbt)、[av1_restoration_filter.mbt](av1_restoration_filter.mbt)、[av1_film_grain.mbt](av1_film_grain.mbt) |
+| 帧间参考/CDF/temporal MV、compound/wedge/skip/interintra、OBMC、缩放参考及 local/global warp | [av1_inter_tile.mbt](av1_inter_tile.mbt)、[av1_frame_map.mbt](av1_frame_map.mbt)、[av1_warp_model.mbt](av1_warp_model.mbt) |
+| 独立 frame-header/tile-group、隐藏帧、show-existing、32-bit decoder-model 时间语法、operating-point/layer 呈现及容器 `a1op`/`lsel` | [av1_obu_frames.mbt](av1_obu_frames.mbt)、[av1_video_decode.mbt](av1_video_decode.mbt)、[avif_container.mbt](avif_container.mbt) |
+| 主图/alpha/grid、动画双轨状态与时间合成、item/track nclx、完整 CICP 转换 | [av1_tile_decode.mbt](av1_tile_decode.mbt)、[avif_grid_animation.mbt](avif_grid_animation.mbt)、[av1_color_metadata.mbt](av1_color_metadata.mbt)、[av1_color_math.mbt](av1_color_math.mbt) |
+| 静态 item / 动画 track 的 `prem` 关联与 straight RGBA 输出 | [av1_alpha_decode.mbt](av1_alpha_decode.mbt)、[avif_grid_animation.mbt](avif_grid_animation.mbt) |
+| Playground 主线程/Worker 静态、动画 AVIF 的纯 MoonBit 解码绑定 | [web/codecs.js](web/codecs.js)、[web/bindings.mbt](web/bindings.mbt)；不依赖宿主 AVIF 解码，AVIF 编码仍为浏览器专用 |
 
-已有完整代码后运行：
+既有审查修复全部保留，包括指定 context-update tile、完整 CDF 保存/恢复、segment lossless、tile-local 坐标与 warp 采样规则。真实组合样本进一步闭合了 12-bit SGR 乘积溢出、4:2:2 CDEF 方向、OBMC 邻居上限与窄色度块、跨 tile 变换继承及 superres 实际尺寸/边缘写入。没有修改既有外部像素金值来消除差异。
+
+## 3. 构建与交付验证命令
+
+在仓库根目录执行。编译器版本以 [.github/workflows/ci.yml](.github/workflows/ci.yml) 的 `MOONBIT_VERSION` 为准；native 目标需要平台 C 编译工具链。普通测试使用仓库内嵌参考，不需要外部 AV1 解码器或 `_refs`。
 
 ```sh
 moon version --all
 node --version
 moon update
+moon info
 moon check
-moon test --target wasm-gc
 moon test --target js
+moon test --target wasm-gc
 moon test --target native
+node scripts/build-web.mjs
 node scripts/build-web.mjs --check
+node scripts/check-browser-codecs.mjs
 node verify-wasm.mjs
 moon run --target native cmd/cli -- --help
+moon run --target native cmd/cli -- convert --from avif --to qoi --input tests/fixtures/avif-grid/color_2x2_12bit.avif --output output.qoi
 git diff --check
 ```
 
-`moon update` 解析 [moon.mod](moon.mod) 中的注册表依赖。安装步骤和编译器版本以 CI 为准；[CONTRIBUTING.md](CONTRIBUTING.md) 中较旧的 CLI 日期不能替代编译器版本。
+先用 `moon info` 同步 [pkg.generated.mbti](pkg.generated.mbti)，只格式化修改的文件或块，再更新 Web 产物。CLI 参数以 [CLI 文档](cmd/cli/README.md) 和 `--help` 为准；浏览器/worker 仍须按实际上传、显示、处理和导出流程冒烟。不要通过更新像素快照替代外部真值。
 
-要修复当前缺失/过期 Web 产物，额外执行下面的**生成操作**，检查并保留生成文件，再重复校验：
+## 4. 本轮验证记录
+
+以下为 2026-09-24 最终实现的实测结果。普通测试使用已提交的独立参考；生成器验证与解码器本身的像素验证分开记录。
+
+| 检查 | 最新最终结果 |
+| --- | --- |
+| 工具版本 | Moon `0.1.20260827`，moonc `0.10.11+6ff76a5f9`，Node `24.12.0`；编译器与 CI 固定版本相同 |
+| 已知失败样本，含双 tile 四帧组合与 `inter_cdf_inherit_64x64` | 原生 Y/U/V 全部零差异；保留原码流及完整独立真值 |
+| AVIF 实际尺寸、`a1op`/`lsel` | 15 项：8 个合法主图/grid 样本完整像素一致，7 项无效选择/尺寸拒绝 |
+| 静态/动画 `prem` 与 straight RGBA | 17 组 libavif 样本及 3 个精度边界通过；包括 identity/YCgCo Float32 舍入、低 alpha、轨道重排、XYZ 转换顺序 |
+| `moon info` / `moon fmt` / `moon check` | 退出码 0；接口已同步；check 为 72 warnings、0 errors，遗留告警主要为未使用声明及保留字 |
+| `moon test --target js` | 1546/1546，退出码 0 |
+| `moon test --target wasm-gc` | 1546/1546，退出码 0 |
+| `moon test --target native` | 1546/1546，退出码 0 |
+| Web 产物及 WASM | `build-web`、`build-web --check`、`verify-wasm` 均通过；JS 与线性内存 WASM 产物已同步 |
+| 发布绑定、主线程、实际 Worker | `check-browser-codecs.mjs` 通过：8/10/12-bit grid、alpha 动画、高位深 prem 静态/动画、时序和错误路径；禁用宿主解码后逐字节匹配独立 RGBA |
+| native CLI | AVIF→QOI：12-bit 4:2:2/4:4:4 网格及 10-bit identity prem 图，分别 38024/38412/1024 个 RGBA 字节与独立真值完全一致；帮助及两个 CI demo 通过 |
+| Playwright 浏览器 | 主线程/Worker 上传、JS/WASM 反色、12-bit prem 动画循环三帧及 PNG 导出通过；宿主解码调用数为 0，PNG 用 Pillow 独立解码后逐字节一致 |
+| 参考与差异检查 | 新增生成器的只读 `--check` 全部通过，包括 22 条未修改编码器输出、570 个矩阵/223200 权重/504 个反量化案例；本地链接及 `git diff --check` 通过 |
+| GitHub CI | 本地等价检查已通过；提交推送后填写对应运行链接。工作流已加入发布绑定及 Worker 的独立像素检查 |
+
+`inter_cdf_inherit_64x64` 的原 OBU 与独立真值保留，断言仍为 `[0,0,0]`。它是熵尾部不合规、由 dav1d 宽容解码的历史回归；合法工具组合的证据来自第 7 节的新旧真实编码流，不能用该样本替代。
+
+## 5. 公开入口、接口变化与颜色约定
+
+| 用途 | 入口 |
+| --- | --- |
+| AVIF 主图与 alpha/grid 合成 | `avif_decode_rgba`；仅主图为 `avif_decode` |
+| AVIF 动画及时间选择 | `avif_decode_animation`、`avif_animation_frame_at` |
+| 原始 AV1 单图 | `av1_decode` |
+| 连续 AV1 temporal unit | `av1_video_decoder`、`av1_video_decode_temporal_unit` |
+| 容器/序列信息与完整接口 | `avif_container_parse`、`av1_sequence_info`、[pkg.generated.mbti](pkg.generated.mbti) |
+
+状态化批量入口按 temporal unit 返回选定呈现，保留隐藏帧的参考更新；合法但无显示帧的输入返回 `Some([])`，单图便捷接口返回首个呈现。无容器选择的原始 AV1 默认使用 OP0 及该单元实际出现的最高空间层；AVIF 的 `a1op`/`lsel` 实际控制 operating point/空间层，主图、alpha 和 grid 单元共用该路径。`ispe` 校验选定帧的实际尺寸，允许 sequence 最大尺寸更大。
+
+本轮扩展了 `Av1SequenceInfo`、`Av1FrameHeaderInfo` 和参考状态等公开记录，新增 `Av1QuantMatrix` 与颜色转换可选元数据；手工构造记录的调用方需按最新接口补字段，不能只补旧文档中的 `context_update_tile_id`。
+
+CICP 转换覆盖 AV1 矩阵 0–14（3 保留），nclx 按字段补充码流中值为 2 的未指定颜色信息，并保留 full-range 标志。输出为源 primaries/transfer 的非线性 RGB，色度最近邻复制，最后裁剪、舍入到 RGBA8；矩阵 2 使用 BT.601 默认。XYZ primaries 明确转换到 BT.709/sRGB；不做色适应或 HDR 色调映射。依赖 primaries/transfer 的矩阵校验必要元数据，原生 YUV 重建不依赖 RGB 转换能力。
+
+AVIF 合成输出约定为 straight RGBA（非预乘）：静态 item 或动画 track 的 `prem` 关系声明颜色已预乘时，需在输出前解除预乘，保持 alpha 及时间关联正确。Playground 的静态和动画 AVIF 均接入 MoonBit 纯核心绑定；浏览器原生 AVIF 解码不能补足或替代该路径。AVIF 编码仍为浏览器专用能力。这两项接线的最终状态与 Playwright 证据见第 4、6 节。
+
+[颜色样本说明](tests/fixtures/av1-color/README.md)记录了 14 条真实流。PQ 的四个通道受 zimg float32 算术影响跨过 8-bit 舍入边界；[manifest](tests/fixtures/av1-color/manifest.json)保存坐标、两套数值和独立 80 位 H.273 计算。测试对这四通道严格断言高精度金值，其余通道严格匹配 zimg，同时限定与 zimg 的最大差为 1。原生 YUV 仍零容差，不能声称该 PQ RGBA 与 zimg 逐字节一致。
+
+## 6. 交付状态与后续维护
+
+本轮已关闭第 1 节范围内的已知实现缺口与像素分歧。本地验收完成，剩余交付步骤是提交、推送并确认同一实现版本的 GitHub CI；不再以历史归档中的旧阻塞安排重复实现。
+
+后续若收到新的合法码流失败，应保存原始文件、独立解码器版本和原生真值，定位最早分歧后补回归。保留现有精度和拒绝边界，不扩大容差或跳过像素。发布新 tag、调整包版本和 mooncakes 发布是独立发布操作，本轮未执行。
+
+## 7. 参考样本与跨机器复现
+
+| 参考组 | 覆盖与证据 |
+| --- | --- |
+| [av1-mainline](tests/fixtures/av1-mainline/README.md) | 原始 libaom qmatrix/intrabc/delta-LF/segmentation/wedge/global-warp 与六组四帧默认工具组合；逐帧原生 YUV、header/symbol trace |
+| [segmentation tools](tests/fixtures/av1-segmentation-tools/README.md)、[compound temporal](tests/fixtures/av1-compound-temporal/README.md) | 明确标注的构造码流、强制参考/skip/globalmv、四档 ALT_LF；原版 C 运动候选真值 |
+| [OBU/presentation](tests/fixtures/av1-obu-assembly/README.md)、[header state](tests/fixtures/av1-header-state/README.md) | 拆分 tile group、隐藏帧/show-existing、layer/timing、参考尺寸及 frame-ID 状态 |
+| [color](tests/fixtures/av1-color/README.md)、[superres sampling](tests/fixtures/av1-superres-sampling/README.md) | CICP/nclx、8/10/12-bit 范围与特殊矩阵、4:2:2/4:4:4 缩放几何 |
+| [grid sampling/color](tests/fixtures/avif-grid-sampling-color/README.md)、[animation alpha](tests/fixtures/avif-animation-alpha/README.md) | 原生 grid 拼接、item/track nclx、独立 alpha 状态、轨道重排与时间同步 |
+| [AVIF selection](tests/fixtures/avif-layer-selection/README.md)、[premultiplied alpha](tests/fixtures/avif-premultiplied-alpha/README.md) | 完整容器的实际尺寸/选层与静态、动画反预乘；独立 libavif 原生样本和完整 RGBA |
+| [全部参考目录](tests/fixtures)、[第三方声明](THIRD_PARTY_NOTICES.md) | 既有变换、预测、去块/CDEF/恢复滤波、film grain、AVIF alpha/grid/inter 回归；每组 manifest 标明来源、工具版本、命令及哈希 |
+
+以下示例从仓库根目录执行；`/path/to/...` 是工具安装位置占位符，不是项目的私人依赖。实际版本及生成范围以对应 README/manifest 为准。
 
 ```sh
-node scripts/build-web.mjs
-node scripts/build-web.mjs --check
-node verify-wasm.mjs
+python scripts/generate-av1-mainline-reference.py --check --trace-dav1d /path/to/debug/dav1d
+python scripts/generate-av1-segmentation-tools-reference.py --check --trace-dav1d /path/to/debug/dav1d
+python scripts/generate-av1-obu-reference.py --check
+python scripts/generate-av1-superres-sampling-reference.py --check
+python scripts/generate-av1-color-reference.py --check --libavif /path/to/avif.dll
+python scripts/generate-av1-qmatrix.py --check
+python scripts/generate-av1-sgr-reference.py --check
+python scripts/generate-avif-grid-sampling-color-reference.py --check
+python scripts/generate-avif-animation-alpha-reference.py --check
+python scripts/generate-avif-layer-selection-reference.py --check
+python scripts/generate-avif-premultiplied-alpha-reference.py --check --libavif /path/to/avif.dll
 ```
 
-## 4. 最近一次实测结果与阻塞
+主线编码参考需要 Python、aomenc/dav1d/FFmpeg、`moonfmt`，并按主线 README 构建只记录符号的 dav1d tracer；色彩生成使用版本校验的 libavif 0.11.1。qmatrix/SGR 的原版 C oracle 另需 C 编译器，支持 `--cc` 和 `--source-dir`，缺失源码按固定版本下载并校验 SHA-256。grid/animation-alpha 的 `--check` 仅读取已有产物及哈希，不加载编解码库；其重新生成才需要 libavif。
 
-以下结果来自 2026-09-20、上述基线及差异快照。它们不是任意后续 checkout 的保证，接手后应重跑第 3 节。
+上述新生成器的 `--check` 使用临时目录或只读哈希核验，不改写仓库真值。部分历史生成器仍会在 `--check` 时写 input/trace 等文件，运行前阅读该组说明，并在隔离副本使用。普通 Moon 测试不依赖这些外部工具；任何构造码流的接受证据都必须来自独立解码器，不能只证明本项目 writer/reader 自洽。
 
-| 检查 | 结果 |
-| --- | --- |
-| `moon check` | 通过，64 warnings / 0 errors；存在既有未使用表与辅助函数警告 |
-| JS / wasm-gc / native 全量测试 | 各 **1255/1255** 通过（2026-09-23 第六十一次推进后） |
-| Web 产物复现检查 | ~~失败~~ **已解决（2026-09-20 二次接手）**：重建后 `--check` 两个文件均 OK |
-| WASM 集成验证 | ~~失败~~ **已解决**：`node verify-wasm.mjs` 全部 PASS |
-| 默认目标 CLI help | 失败：默认 wasm-gc 不受当前 CLI 支持（native-only 定位，见 P2） |
-| 明确 `--target native` 的 CLI help | 通过 |
-| `git diff --check` | 通过 |
+---
 
-**P1：恢复 Web 产物。** ~~[web/playground.js](web/playground.js) 与 [web/worker.js](web/worker.js) 仍导入 `dist/web.js`、加载 `dist/wasmcore.wasm`；[构建校验](scripts/build-web.mjs) 和 [WASM 验证](verify-wasm.mjs) 也需要它们。按第 3 节生成并核验。~~ **已完成**：按第 3 节重建并通过两项校验（见第 10 节）。
+# 历史诊断记录（归档，不代表当前状态）
 
-**P2：同步 CLI 目标与示例。** ~~[cmd/cli/moon.pkg](cmd/cli/moon.pkg) 已限制 native，但 [CLI README](cmd/cli/README.md) 的 hex 示例仍省略目标参数。~~ **已完成**：native-only 定位确认（默认目标实测报错），README 的 hex 示例已补 `--target native`，CLI 文件模式冒烟通过。若今后恢复跨目标 hex 能力，应同时实现并验证对应目标。
-
-## 5. 主线已完成到哪里
-
-现有代码和参考样本已覆盖高位深帧内重建、方向预测、filter-intra、调色板、去块、CDEF、superres、Wiener/SGR、alpha/grid 以及部分动画路径。通用帧头、八槽参考帧、亚像素运动补偿和受限单参考 inter 也已有实现。完整差异与来源分别见 [CHANGELOG](CHANGELOG.md) 和 [fixture 目录](tests/fixtures)。不能用已有样本推断所有合法工具组合均已完成。
-
-inter fixture 的预期定义分两处：生成器输出的八个在
-[scripts/emit-av1-inter-test.py](scripts/emit-av1-inter-test.py) 的 `SPECS`，其余由
-[scripts/generate-av1-inter-reference.py](scripts/generate-av1-inter-reference.py)
-生成并在 [av1_inter_reference_wbtest.mbt](av1_inter_reference_wbtest.mbt) 末尾手工维护
-（另有若干独立生成器脚本：lossless/obmc/screen/palette/warped/temporalmv）。
-
-| 状态 | 样本 |
-| --- | --- |
-| inter 帧原生样本精确 | `inter_minimal_64x64`、`inter_still_64x64`、`inter_shift_64x64`、`inter_edge_64x16`、`inter_lf_delta_64x64`、`inter_primary_ref_64x64`、`inter_cdf_inherit_64x64`（`[0,0,0]`）、`inter_lossless_64x64`、`inter_obmc_64x64`、`inter_screen_content_64x64`、`inter_palette_64x64`、`inter_warped_64x64`、`inter_temporalmv_64x64` |
-| inter 工具门已闭合且逐样本精确 | `inter_compound_64x64`、`inter_distcomp_64x64`、`inter_diffwtd_64x64`、`inter_interintra_64x64`、`inter_globalmv_64x64`（平移型全局运动） |
-| 三帧序列 | `inter_skipmode_64x64`：三个时间单元逐一精确，第三帧靠 skip mode 同时引用前两帧 |
-| 所有开关全开的 general 码流 | `general_inter_64x64`：compound / overlapped / warped motion / temporal MV 全部实现，逐样本精确 |
-| 仍拒绝的组合 | 仓库内没有 fixture 选中 LOCALWARP、ROTZOOM/AFFINE 全局运动或启用的 segmentation feature；一旦选中，`av1_read_motion_mode` 或帧门会整帧拒绝 |
-
-2026-09-22 第四十三次推进后，八个 inter 样本全部达到像素精确（含 `inter_cdf_inherit_64x64`），`av1_cdf_load_enabled` 已启用并被该样本的 `[0,0,0]` 围栏钉住；全绿测试自此等价于阶段 B 的 inter 验收。根因与复现方法见第 10 节第四十三次推进（含插桩 dav1d 的构建与使用）。
-
-第九次推进（2026-09-21）后的定位：该样本的第一个分歧符号是 inter 帧第一块 32x32 luma 变换扫描位置 k=31（坐标 (3,4)）的 `coeff_base`（base ctx 22 行），我们解出 level 2、dav1d 黄金为 1（k=32 的 level 2 双方一致）。关键帧第一叶已被独立 Python 模型证明在给定状态下与规范逐位一致，因此剩余根因在该叶之前 7 个符号的 CDF 行/上下文选择；具体入口见第 10 节第九次推进。
-
-第十次推进（2026-09-21）**修正了对该样本性质的理解**：它是 `inter_minimal_64x64` 的帧头补丁——`primary_ref_frame` 由 7（PRIMARY_REF_NONE）改为 0，而 bitstream 的 inter 帧符号是 libaom **用默认 CDF 编的**。dav1d 1.2.1 解同一条流时开/不开补丁的第 1 帧相差 3996/6144 个样本（全在 luma），证明“继承解码”在这条流上本来就会解出另一张图。因此本样本的验收含义是**逐符号复现 dav1d 的继承解码**。第十次推进还把失败隔离到一个 49 字节最小样本（全平两帧），并证实：关键帧全平 + inter 帧带图案时继承开启仍能 `[0,0,0]` 精确——**继承机制本身工作正常**。详见第 10 节第十次推进。
-
-第十一次推进（2026-09-21）**把阻塞项收敛为一个具体守卫**：在参数化 bisection 流程（同一 `MINIMAL_FLAGS` + 同一补丁，golden 取 dav1d 对开补丁码流的解码）下，放开 `symbol_max_bits >= -14` 后 7 类输入全部 `[0,0,0]`（全平同图、全平+图案、`shift`、平滑 luma+纹理色度、纹理 luma+平滑色度、周期 2/4/5/6/7 色度），**只剩周期 3 色度纹理与仓库 `ramp` 两个样本失败**（分别 `[0,504,0]` 与 `[4029,464,708]`）。失败样本的 inter 帧 tile payload 分别只有 23 与 11 字节，继承解码越读到 `max_bits ≈ -122` 与 `-1046`，因此该守卫是闭合阶段 B 必须先处理的前置项（它来自规范 §8.2 `exit_symbol` 的位流一致性要求，dav1d 不执行；放开会影响 3 个依赖它拒绝截断输入的既有测试，需用符号数上界等不变量替代）。周期 3 样本的符号级取证已把分歧定位到 **inter 帧块2 的 U 平面 txb_skip 读**（我们解出 0=有色度残差，dav1d 解出 1=跳过；dav1d 开补丁输出的 U/V 与关键帧完全相同可证），且所用 CDF 行值已逐步手算验证正确，故根因是**关键帧色度系数段存在不改变像素的符号差异**（周期 3 纹理每块约 276 个 base 符号）。详见第 10 节第十一次推进。
-
-第十二次推进（2026-09-21）**排除了三类根因并把分歧收敛到一个具体变换叶**：用 Python 逐字移植 dav1d 1.2.1 的 `msac.c` 与 [av1_msac.mbt](av1_msac.mbt) 对拍 **1600 万个符号零分歧**（含深度越读补位），并证明适配速率公式 `3+(count>15)+(count>31)+min(floor(log2 n),2)` 与 dav1d 的 `4+(count>>4)+(n_symbols>2)` 完全等价（按字面代入 dav1d 公式会让 253 个测试失败、关键帧也从 `[0,0,0]` 变 `[3035,733,723]`，已回退）——算术、补位、适配速率都不是根因。同时清除了上次遗留的 CRLF 行尾与两处死插桩，`git diff --check` 恢复通过。周期 3 样本在"守卫放开 + 继承开启"下的真实结果是 **`[0, 488, 0]`**（Y/V 全对，只有 U 平面错，且从第 16 行起全错）；打开系数级 trace 后确认 inter 帧只有 3 个带残差的叶，其中 **32x16 色度（U）叶（`eob=245`）是整帧最后一个带残差的读**，分歧就在它内部或它之前的状态。所有继承色度 CDF 行（`eob512`/`extra`/`base_eob`/`base`）从默认值到 inter 帧读取时的适配链已用 dav1d 的更新规则逐步手算验证**逐项相等**，关键帧两个色度叶的 `(c,p,ctx)` 序列 248 项完全相同。⇒ 根因是**某个不改变像素的符号读取与 dav1d 不同**（头号嫌疑 `eob` 类符号）。详见第 10 节第十二次推进。
-
-第十三次推进（2026-09-21）**用强制符号实验把分歧点推到色度叶之前**：对色度叶的 `eob512` 读（状态 `r=51012, v=2051`，行 `[6819,…,2]`）强制符号 0..9 各跑一次，U 错误数为 510/507/504/504/507/512/504/505/**488**/479——无一归零且自然值 8 不突出，结合该行链已验证，说明**进入色度叶的 MSAC 状态与 dav1d 不同**（色度叶是 inter 帧最后一个带残差的读，其后只有 V 叶 1 个 `all_zero`）。同时实测色度叶内 `eob512` 读与第一个系数读之间只有 1 个 `extra` 符号 + 6 个 eob 细化 bool（状态已记录在案）。另一收获：inter 帧的 luma 叶 1、2（32x32，eob 55/28）与关键帧对应叶的 `(c,p,ctx,value)` 序列 55 项中 54 项相同、仅 DC 不同（15 vs 11）——这是 CDF 继承的预期效果，证明**继承到的 luma 行是对的**；并用 `signdc` 行计数与 `base[3][22]` 默认值双向确认 luma/色度系数表没有串表。⇒ 根因是 inter 帧 luma/块级符号里一个**不改变像素的读**（头号仍是 4 个 luma 叶的 `eob`）。详见第 10 节第十三次推进。
-
-根 [README](README.md) / [English README](README.en.md) 的 inter 缺口描述和包版本说明落后于代码；接手时以这里列出的源码、生成器预期、实测和最新提交交叉核对，最终同步两份说明。
-
-## 6. 后续实施顺序
-
-| 阶段 | 工作 | 阶段验收 |
-| --- | --- | --- |
-| A：恢复交付基线 | 处理第 4 节两项问题，保留原有工作，确认共享代码版本完整 | Web/WASM 校验通过，CLI 示例可运行，工作树差异来源清楚（**已完成**，见第 10 节） |
-| B：参考帧熵状态 | 实现系数及非系数 CDF 的快照、按引用恢复、tile/frame 更新门及生命周期 | `inter_cdf_inherit` 对原 dav1d 真值变为 `[0,0,0]`，其余六个精确 inter 样本保持精确，所有目标通过（**机制已落地并隔离验证，样本未闭合**，见第 10 节） |
-| C：帧间工具与覆盖 | 补齐仍被工具门拒绝的合法路径，扩展 MV、混合块、参考更新及多 tile 证据 | 每个解除的门有真实重建和外部像素核验；不存在只删除拒绝条件而未解码对应语法的情况 |
-| D：完整容器与动画集成 | 将完善后的帧间路径接入实际 AVIF 动画、alpha/grid 组合与公开入口；加入三帧以上参考状态变化 | 每帧原生样本/alpha、RGBA 约定、顺序和时间信息均验证，CLI 与 API 可运行 |
-| E：最终验收与交付 | 对照第 1 节逐项补证据，同步中英文文档、产物、CI 和交付版本 | 第 1 节所有条件满足，已知错误清零，给出可获取的提交/版本和验证记录 |
-
-阶段内验收通过后继续下一阶段。若出现工具或数据阻塞，记录准确命令、错误、已验证边界及解除条件；不要将阶段完成写成主线完成。
-
-### B 阶段的直接切入点
-
-- [av1_frame_map.mbt](av1_frame_map.mbt)：`Av1RefFrame`、`av1_frame_map_update`；当前保存图像及部分帧状态，缺少完整熵上下文快照。
-- [av1_inter_mode.mbt](av1_inter_mode.mbt)：tile 状态仍从 `av1_inter_cdfs()` 的默认分布初始化。
-- [av1_frame_header.mbt](av1_frame_header.mbt)、[av1_frame_planes.mbt](av1_frame_planes.mbt)、[av1_intra_tile.mbt](av1_intra_tile.mbt)：核对 primary reference、CDF 更新门、frame-end 更新门、选定 tile 与 refresh flags 的保存/加载时机；避免跨帧共用可变 CDF 数组造成状态污染。
-- [inter fixture 说明](tests/fixtures/av1-inter/README.md) 与测试中的 `assert_eq(bad, [3992, 842, 928])`：用同一 OBU 和真值推进至零差异，不能修改 goldens 掩盖错误。
-- **（2026-09-21 第十二、十三次推进）已排除的根因**：MSAC 算术/越读补位、CDF 适配速率（均与 dav1d 1.2.1 对拍/等价证明）；色度叶的 `eob512` 读及其行值（强制符号 0..9 全扫描无一归零）；luma/色度系数表串表（已双向确认分离）。剩余分歧已定位到**进入 inter 帧最后一个 32x16 色度（U）叶之前的 MSAC 状态**（该叶 `eob=245`，Y/V 全对、U 错 488/1024 且从第 16 行起），而 Y 像素全对说明肇事者是一个**不改变像素的读**。直接入口：给 `symbol()` 加符号计数器强制，从 inter 帧第一个符号起对半二分；或对 4 个 luma 叶的 `eob` 读逐个强制为相邻 `eob_pt`。同时准备用符号数上界替换 `-14` 越读守卫（放开后实测 4 个既有测试失败）。
-
-### C、D 阶段的已知缺口
-
-- [av1_inter_tile.mbt](av1_inter_tile.mbt) 的当前检查拒绝 compound、switchable motion、warped、temporal MV、skip mode、intrabc、screen content、coded lossless、非 identity 全局运动等；segmentation 还在帧头拒绝。逐项检查实际调用路径。
-- **（2026-09-21 移除）矩形 `Coeff_Base_Ctx_Offset` 不需要修**：第八次推进记录的“19 组索引错误”经逐格枚举证明是误报，现有实现与 go-av1 权威表零差异（详见第 10 节第八次推进条目下的更正）。阶段 C 不需为此引入 TX_SIZE 全序。
-- MV 外部样本只覆盖 magnitude class 1、4。class 0/2/3 可用现有工具设计小于 2 像素非整数位移、约 6/12 像素非周期源；class 5–10 受当前编码器搜索范围限制。详细证据见 inter fixture README。
-- 去块尚需混合 intra/inter 的 chroma block 样本固定 step 4.b、未命中的引用行及 chroma edge widening。
-- 当前 fixture 说明中的 `load_previous` 块邻居上下文在单 tile 条件下被当前帧覆盖，不应重复列为单 tile 待补样本；temporal `ref_frame_mvs` 是另一机制，多 tile 路径需单独核验。
-- 动画不能仅验证帧数或时间戳。公开入口包括 `avif_decode_rgba`、`avif_decode_grid_auto`、`avif_decode_animation`、`avif_decode_animation_frame` 和 `avif_decode_animation_samples`；签名见 [pkg.generated.mbti](pkg.generated.mbti)。
-
-## 7. 最近关键提交
-
-| 提交 | 接手时要理解的内容 |
-| --- | --- |
-| `eee85ff` | 保存 inherited CDF 的已知错误计数，明确下一项正确性目标 |
-| `714b92c` | 两字节帧头补丁触达 primary reference 分支，冻结 CDF 的证据边界 |
-| `a8b3675` | 去块强度使用边缘所属引用与模式 |
-| `42b34e0` | NEARMV 可取第二个候选 |
-| `36e3f68` | MV magnitude 位索引修复 |
-
-使用 `git show <提交>` 查看完整实现；这里不重复已有 diff。
-
-## 8. 参考样本与跨机器复现
-
-日常测试使用已提交的样本和嵌入式白盒测试。`inter_cdf_inherit_64x64.obu`、对应 `.reference.yuv`、manifest、trace 和测试都属于交接代码的一部分；不需要原作者的临时日志才能定位问题。
-
-重新生成参考样本时：
-
-1. 阅读相应 fixture README、manifest 与生成器，保留原始 OBU、参考像素及哈希；记录真实工具版本与完整命令。
-2. inter 工具链最近核对为 aomenc/libaom `3.6.0`、dav1d `1.2.1`，脚本使用 FFmpeg `9.0.1` 的 `trace_headers`。不同构建可能产生不同编码字节，不能用“版本号相同”替代 OBU/像素比对。
-3. [generate-av1-inter-reference.py](scripts/generate-av1-inter-reference.py) 的 `AOMENC`、`DAV1D`、`FFMPEG` 三个常量**在 2026-09-21 的本机上就是可用路径**（`D:\ProgramData\anaconda3\Library\bin\aomenc.EXE` / `dav1d.EXE`、WinGet 的 `ffmpeg-9.0.1-full_build-shared`），其中 `dav1d --version` 报 **1.2.1**，正是产出黄金真值的版本；用同一 `MINIMAL_FLAGS` 重编码 `ramp` 并施加同一补丁可得与提交件逐字节相同的 OBU 与 `.reference.yuv`（已 `cmp` 验证）。若换机器仍可按第 8 节末尾的 Python 入口用 `shutil.which` 覆盖这三个常量。这是生成工具的现有限制，不是解码库的运行时依赖。
-4. [craft_av1_fixture.py](scripts/craft_av1_fixture.py) 的部分构造工具依赖本地 `_refs/go-av1/cdf`。如果要使用，应依据源码和 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) 获取对应参考源并锁定修订；不要假定收到的代码副本包含该缓存。普通 `moon test` 不需要重跑它。
-5. 在隔离副本运行生成器。[generate-av1-inter-reference.py](scripts/generate-av1-inter-reference.py) 的 `--check` 仍写 input/trace；[generate-av1-restoration-frame-reference.py](scripts/generate-av1-restoration-frame-reference.py) 当前注册了 `--check` 却未解析参数，仍会生成并改写测试。不能把所有 `--check` 都当成只读。
-6. 构造码流必须由独立解码器核验；只证明本项目 writer 与 reader 自洽不能替代外部像素证据。既有记录中，上述旧编码器构建出现三帧以上编码崩溃和约 ±32 像素 MV 搜索限制；这是特定构建的观察，后续多帧/大 MV 需更换或重新验证工具构建。
-
-在**隔离代码副本的根目录**，将 `aomenc`、`dav1d`、`ffmpeg` 放入 PATH 后，可用以下命令核验 inter 样本。PowerShell 和常用 POSIX shell 均可传入这段 Python；它按上面的说明会重编码并写 fixture 工作文件，不能在需要保持只读的副本中运行。
-
-```sh
-python -c "
-import importlib.util
-import shutil
-import sys
-script = 'scripts/generate-av1-inter-reference.py'
-spec = importlib.util.spec_from_file_location('inter_reference', script)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-for field, executable in [('AOMENC', 'aomenc'), ('DAV1D', 'dav1d'), ('FFMPEG', 'ffmpeg')]:
-    path = shutil.which(executable)
-    if path is None:
-        raise SystemExit('Missing executable: ' + executable)
-    setattr(module, field, path)
-sys.argv = [script, '--check']
-module.main()
-"
-```
-
-二进制 fixture 保持原始 bytes，遵守 [.gitattributes](.gitattributes)。Python 源码读写明确指定 UTF-8。单文件格式化使用 `moonfmt -w FILE`；`moon fmt PATH` 不能当作只格式化该文件的保证。
-
-## 9. 接手记录与可选辅助方式
-
-每完成一个阶段，在本文件更新：代码 revision、实现范围、独立样本、实际命令与退出结果、剩余缺口、下一阶段入口。保留“已实现”“已由外部真值验证”“已知错误”之间的区分；不要只更新测试数量。
-
-如使用代码代理，可选用 `systematic-debugging`、`verification-before-completion`、`code-quality-review` 和 `handoff` 对应的排错、验证、审查与交接方法。它们不是构建依赖；未安装任何代理技能的开发者也可以按本文命令和源码入口完成工作。
+以下保留过去的取证、阶段结论和命令。其中个人目录、临时目录、旧测试数、旧阻塞与“主线完成”声明只描述当时的记录；接手时以本文第 1–7 节及当前源码为准。
 
 ## 10. 2026-09-20 第二至第十三次接手记录（阶段 A 完成，阶段 B 机制已验证、剩余分歧隔离到关键帧色度周期 3 纹理；强制符号实验通道已证不可用，相关结论挂起）
 

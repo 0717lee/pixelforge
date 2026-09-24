@@ -487,14 +487,18 @@ fn av1_coeff_br_ctx_square(
 }
 
 ///|
-/// Apply dequantisation while retaining the full Int64 product until clip.
+/// AV1 7.12.3 masks the magnitude of the full product to 24 bits before
+/// division and clipping. Int64 retains the product before that specified
+/// mask, including high-bit-depth quantizers scaled by a quantization matrix.
 fn av1_dequant_clip(
   value : Int,
   q : Int,
   denom : Int64,
   bit_depth : Int,
 ) -> Int {
-  let scaled = value.to_int64() * q.to_int64() / denom
+  let product = value.to_int64() * q.to_int64()
+  let magnitude = (if product < 0L { -product } else { product }) & 0xFFFFFFL
+  let scaled = (if product < 0L { -magnitude } else { magnitude }) / denom
   let limit = 1 << (7 + bit_depth)
   let clipped = if scaled < (-limit).to_int64() {
     (-limit).to_int64()
@@ -532,9 +536,16 @@ fn av1_decode_coeffs_leaf_with_decoder(
   /// which is the correct value only when every delta is zero.
   dc_q_idx? : Int = -1,
   ac_q_idx? : Int = -1,
+  quant_matrix? : Av1QuantMatrix? = None,
+  plane? : Int = 0,
+  tx_type? : Av1TxType = Av1TxDctDct,
+  lossless? : Bool = false,
 ) -> Av1LeafCoeffs? {
   if base_q_idx < 0 ||
     base_q_idx > 255 ||
+    plane < 0 ||
+    plane > 2 ||
+    !av1_quant_matrix_valid(quant_matrix) ||
     (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) ||
     (
       context.tx_ctx != 0 &&
@@ -803,46 +814,24 @@ fn av1_decode_coeffs_leaf_with_decoder(
   let ac_index = if ac_q_idx < 0 { base_q_idx } else { ac_q_idx }
   let dc_q = av1_dc_quant(bit_depth, dc_index)
   let ac_q = av1_ac_quant(bit_depth, ac_index)
-  // Spec dequant denominator (7.12.1): 4 for 64-wide/high transforms, 2 for
-  // 32x32 and the 32/16 rectangles, 1 for every other size (4x4, 8x8, 16x16).
-  let denom : Int64 = if context.tx_ctx == 4 {
-    4L
-  } else if context.tx_ctx == 3 {
-    2L
-  } else {
-    1L
-  }
+  let denom = av1_dequant_denom(side, actual_height)
+  let qm_level = av1_qmatrix_level(quant_matrix, plane, tx_type, lossless)
   let out : Array[Int] = Array::make(side * actual_height, 0)
-  if rectangular {
-    for i in 0..<area {
-      let q = if i == 0 { dc_q } else { ac_q }
-      // The coded coefficient domain is 32x32 for 64x32/32x64.  Place it
-      // in the top-left of the full transform plane and leave the expanded
-      // tail zero-filled, matching the AV1 adjusted-transform layout.
-      let row = i / domain_width
-      let col = i - row * domain_width
-      out[row * side + col] = av1_dequant_clip(quant[i], q, denom, bit_depth)
-    }
-  } else if large {
-    for i in 0..<1024 {
-      let q = if i == 0 { dc_q } else { ac_q }
-      out[(i >> 5) * side + (i & 31)] = av1_dequant_clip(
-        quant[i],
+  for i in 0..<area {
+    let q = if i == 0 { dc_q } else { ac_q }
+    let q2 = if qm_level == 15 {
+      q
+    } else {
+      av1_qmatrix_quant(
         q,
-        denom,
-        bit_depth,
+        av1_qmatrix_weight(qm_level, plane, side, actual_height, i),
       )
     }
-  } else {
-    for i in 0..<area {
-      let q = if i == 0 { dc_q } else { ac_q }
-      out[i / domain * side + i % domain] = av1_dequant_clip(
-        quant[i],
-        q,
-        denom,
-        bit_depth,
-      )
-    }
+    // Place the adjusted domain in the top-left of the full transform plane;
+    // coefficients past row/column 31 remain zero for 64-dimensional sizes.
+    let row = i / domain_width
+    let col = i % domain_width
+    out[row * side + col] = av1_dequant_clip(quant[i], q2, denom, bit_depth)
   }
   Some({ coeffs: out, cul_level, dc_category, })
 }
@@ -897,10 +886,13 @@ fn av1_decode_coeffs_small_with_decoder(
 }
 
 ///|
-/// High-bit-depth dequantisation must clip after the full product, without a
-/// 24-bit wraparound.  This value exceeds 2^24 and would previously decode to
-/// a small unrelated coefficient.
-test "dequantisation clips Int64 product for high bit depth" {
-  assert_eq(av1_dequant_clip(1 << 24, 2, 1L, 12), 524287)
-  assert_eq(av1_dequant_clip(-(1 << 24), 2, 1L, 12), -524288)
+/// The coefficient syntax allows a 20-bit magnitude. Preserve the full
+/// product, then apply AV1's explicit 24-bit mask, denominator and clipping.
+test "dequantisation masks the Int64 product before high bit depth clipping" {
+  assert_eq(av1_dequant_clip(1 << 19, 32, 1L, 12), 0)
+  assert_eq(av1_dequant_clip(-(1 << 19), 32, 1L, 12), 0)
+  assert_eq(av1_dequant_clip((1 << 19) + 1, 32, 2L, 12), 16)
+  assert_eq(av1_dequant_clip(-((1 << 19) + 1), 32, 2L, 12), -16)
+  assert_eq(av1_dequant_clip(1 << 18, 4, 1L, 12), 524287)
+  assert_eq(av1_dequant_clip(-(1 << 18), 4, 1L, 12), -524288)
 }

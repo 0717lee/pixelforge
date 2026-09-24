@@ -11,19 +11,23 @@
 /// `primary_ref_frame`.
 ///
 /// Table order (capture, restore and defaults keep this order):
-///   0..5    partition trees w8, w16, w32, w64, w128
-///   5..44   intra tile state: skip, y_mode, uv_cfl, uv_no_cfl, angle_delta,
+///   0..4    partition trees w8, w16, w32, w64, w128
+///   5..45   intra tile state: skip, y_mode, uv_cfl, uv_no_cfl, angle_delta,
 ///           cfl_sign, cfl_alpha, palette_y_mode, palette_uv_mode,
 ///           palette_y_size, palette_uv_size, palette_y_index, palette_uv_index,
 ///           filter_intra, filter_intra_mode_cdf, txb_skip, tx_set1, tx_set2,
 ///           luma eob, eob512, eob_small, extra, base_eob, base, br, sign,
 ///           chroma eob, eob512, eob_small, extra, base_eob, base, br, sign,
 ///           vartx, tx_depth 8/16/32/64, seg_id, delta_q
-///   44..65  inter mode rows: single_ref, new_mv, zero_mv, ref_mv, drl_mode,
+///   46..66  inter mode rows: single_ref, new_mv, zero_mv, ref_mv, drl_mode,
 ///           is_inter, skip_mode, interp_filter, y_mode, tx_type_set1, set2,
 ///           set3, mv_joint, mv_sign, mv_class, mv_class0_bit, mv_class0_fr,
 ///           mv_class0_hp, mv_bit, mv_fr, mv_hp
-///   65..68  loop restoration selectors: switchable, wiener, sgr
+///   67..81  inter tools: use_obmc, motion_mode, comp_mode, comp_ref_type,
+///           compound_mode, compound_idx, comp_group_idx, uni_comp_ref,
+///           comp_ref, comp_bwd_ref, compound_type, inter_intra,
+///           inter_intra_mode, wedge_inter_intra, wedge_index
+///   82..84  loop restoration selectors: switchable, wiener, sgr
 ///
 /// Each table keeps the shape its default constructor produces, so a restored
 /// snapshot is shape-identical to the defaults a tile would otherwise start
@@ -50,7 +54,7 @@ let av1_cdf_partition_count : Int = 5
 let av1_cdf_intra_count : Int = 41
 
 ///|
-let av1_cdf_inter_count : Int = 21
+let av1_cdf_inter_count : Int = 36
 
 ///|
 let av1_cdf_lr_count : Int = 3
@@ -394,6 +398,15 @@ fn av1_intra_cdfs_restore(
   av1_cdf_rows_into2(state.seg_id, tables[index])
   index = index + 1
   av1_cdf_row_into1(state.delta_q, tables[index])
+  let extra = av1_cdf_lr_base + av1_cdf_lr_count
+  if tables.length() >= extra + 3 {
+    av1_cdf_rows_into2(state.seg_pred_cdfs, tables[extra])
+    av1_cdf_rows_into2(state.delta_lf_cdfs, tables[extra + 1])
+    if state.intrabc is Some(copy_state) {
+      av1_cdf_row_into1(copy_state.use_cdf, tables[extra + 2])
+      ignore(av1_inter_cdfs_restore(copy_state.info.cdfs, snapshot))
+    }
+  }
 }
 
 ///|
@@ -432,6 +445,21 @@ fn av1_inter_cdfs_capture(cdfs : Av1InterCdfs) -> Array[Array[Array[Int]]] {
     av1_cdf_rows_of4(cdfs.mv_bit),
     av1_cdf_rows_of3(cdfs.mv_fr),
     av1_cdf_rows_of3(cdfs.mv_hp),
+    av1_cdf_rows_copy(cdfs.use_obmc),
+    av1_cdf_rows_copy(cdfs.motion_mode),
+    av1_cdf_rows_copy(cdfs.comp_mode),
+    av1_cdf_rows_copy(cdfs.comp_ref_type),
+    av1_cdf_rows_copy(cdfs.compound_mode),
+    av1_cdf_rows_copy(cdfs.compound_idx),
+    av1_cdf_rows_copy(cdfs.comp_group_idx),
+    av1_cdf_rows_of3(cdfs.uni_comp_ref),
+    av1_cdf_rows_of3(cdfs.comp_ref),
+    av1_cdf_rows_of3(cdfs.comp_bwd_ref),
+    av1_cdf_rows_copy(cdfs.compound_type),
+    av1_cdf_rows_copy(cdfs.inter_intra),
+    av1_cdf_rows_copy(cdfs.inter_intra_mode),
+    av1_cdf_rows_copy(cdfs.wedge_inter_intra),
+    av1_cdf_rows_copy(cdfs.wedge_index),
   ]
 }
 
@@ -486,6 +514,36 @@ fn av1_inter_cdfs_restore(
   av1_cdf_rows_into3(cdfs.mv_fr, tables[index])
   index = index + 1
   av1_cdf_rows_into3(cdfs.mv_hp, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.use_obmc, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.motion_mode, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.comp_mode, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.comp_ref_type, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.compound_mode, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.compound_idx, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.comp_group_idx, tables[index])
+  index = index + 1
+  av1_cdf_rows_into3(cdfs.uni_comp_ref, tables[index])
+  index = index + 1
+  av1_cdf_rows_into3(cdfs.comp_ref, tables[index])
+  index = index + 1
+  av1_cdf_rows_into3(cdfs.comp_bwd_ref, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.compound_type, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.inter_intra, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.inter_intra_mode, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.wedge_inter_intra, tables[index])
+  index = index + 1
+  av1_cdf_rows_into2(cdfs.wedge_index, tables[index])
   cdfs
 }
 
@@ -501,10 +559,11 @@ fn av1_inter_cdfs_of(snapshot : Av1FrameCdfs?) -> Av1InterCdfs {
 }
 
 ///|
-/// The loop-restoration selector rows. Their normative defaults come from the
-/// same tables a tile state would start from.
+/// The loop-restoration selector rows. A frame without restoration units still
+/// inherits these probabilities; omitting the live LR state must not reset them.
 fn av1_lr_cdfs_capture(
   state : Av1RestorationTileState?,
+  inherited? : Av1FrameCdfs? = None,
 ) -> Array[Array[Array[Int]]] {
   match state {
     Some(value) =>
@@ -513,7 +572,18 @@ fn av1_lr_cdfs_capture(
         av1_cdf_row_of(value.cdf_wiener),
         av1_cdf_row_of(value.cdf_sgr),
       ]
-    None => av1_lr_cdfs_capture(Some(av1_restoration_tile_state_new(1)))
+    None => {
+      match inherited {
+        Some(snapshot) =>
+          if snapshot.tables.length() >= av1_cdf_lr_base + av1_cdf_lr_count {
+            return Array::makei(av1_cdf_lr_count, fn(i) {
+              av1_cdf_rows_copy(snapshot.tables[av1_cdf_lr_base + i])
+            })
+          }
+        None => ()
+      }
+      av1_lr_cdfs_capture(Some(av1_restoration_tile_state_new(1)))
+    }
   }
 }
 
@@ -539,17 +609,52 @@ fn av1_frame_cdfs_capture(
   state : Av1IntraState,
   partition : Av1PartitionCdfState,
   lr : Av1RestorationTileState?,
+  inherited? : Av1FrameCdfs? = None,
 ) -> Av1FrameCdfs {
   let inter = match state.inter {
     Some(info) => info.cdfs
-    None => av1_inter_cdfs()
+    None =>
+      match state.intrabc {
+        Some(copy_state) => copy_state.info.cdfs
+        None => av1_inter_cdfs()
+      }
+  }
+  let extra = av1_cdf_lr_base + av1_cdf_lr_count
+  let use_intrabc = match state.intrabc {
+    Some(copy_state) => av1_cdf_row_of(copy_state.use_cdf)
+    None =>
+      match inherited {
+        Some(previous) =>
+          if previous.tables.length() >= extra + 3 {
+            av1_cdf_rows_copy(previous.tables[extra + 2])
+          } else {
+            [[30531, 32768, 0]]
+          }
+        None => [[30531, 32768, 0]]
+      }
   }
   {
     tables: av1_cdf_tables_concat([
       av1_partition_cdfs_capture(partition),
       av1_intra_cdfs_capture(state),
       av1_inter_cdfs_capture(inter),
-      av1_lr_cdfs_capture(lr),
+      av1_lr_cdfs_capture(lr, inherited~),
+      [
+        av1_cdf_rows_copy(state.seg_pred_cdfs),
+        av1_cdf_rows_copy(state.delta_lf_cdfs),
+        use_intrabc,
+      ],
     ]),
   }
+}
+
+///|
+/// The complete context of a frame with PRIMARY_REF_NONE. Coefficient defaults
+/// use this frame's base quantizer even if frame-end adaptation is disabled.
+fn av1_frame_cdfs_default(base_q_idx : Int) -> Av1FrameCdfs {
+  av1_frame_cdfs_capture(
+    av1_intra_state(8, 8, base_q_idx, 8, false, false, false, false),
+    av1_partition_cdf_state(),
+    None,
+  )
 }

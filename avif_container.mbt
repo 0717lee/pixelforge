@@ -19,9 +19,14 @@ pub struct AvifContainer {
   // A grid inherits this configuration from its validated coded cells.
   av1c : Array[Byte]
   payload : Array[Byte]
+  /// Layer selection for the primary coded item; absent properties select
+  /// operating point zero and its highest presented spatial layer.
+  operating_point : Int
+  spatial_layer : Int?
   nclx_primaries : Int?
   nclx_transfer : Int?
   nclx_matrix : Int?
+  nclx_full_range : Bool?
 }
 
 ///|
@@ -53,6 +58,7 @@ priv struct Prop {
   p : Int
   t : Int
   m : Int
+  full_range : Bool
 }
 
 ///|
@@ -96,6 +102,12 @@ let t_nclx = 0x6E636C78
 
 ///|
 let t_auxc = 0x61757843
+
+///|
+let t_a1op = 0x61316F70
+
+///|
+let t_lsel = 0x6C73656C
 
 ///|
 let t_av01 = 0x61763031
@@ -313,6 +325,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       raise AvifError::Invalid
     }
     let it = items[pi]
+    let (operating_point, spatial_layer) = avif_layer_selection(props, it.props)
     let mut w = 0
     let mut h = 0
     let mut depth = 8
@@ -323,6 +336,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
     let mut np : Int? = None
     let mut nt : Int? = None
     let mut nm : Int? = None
+    let mut nr : Bool? = None
     for ai in it.props {
       if ai <= 0 || ai > props.length() {
         raise AvifError::Invalid
@@ -344,6 +358,7 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
         np = Some(q.p)
         nt = Some(q.t)
         nm = Some(q.m)
+        nr = Some(q.full_range)
       }
     }
     if it.typ == 0x67726964 {
@@ -415,10 +430,117 @@ pub fn avif_container_parse(data : Array[Byte]) -> AvifContainer? {
       has_alpha: avif_alpha_descriptor_checked(data) is Some(_),
       av1c: av1.unwrap(),
       payload,
+      operating_point,
+      spatial_layer,
       nclx_primaries: np,
       nclx_transfer: nt,
       nclx_matrix: nm,
+      nclx_full_range: nr,
     })
+  } catch {
+    _ => None
+  }
+}
+
+///|
+/// Parse AVIF 2.3.2's descriptive operating-point and layer selectors.
+/// lsel is a two-byte property, not a FullBox; 0xffff means no fixed layer.
+fn avif_layer_selection(
+  properties : Array[Prop],
+  associations : Array[Int],
+) -> (Int, Int?) raise AvifError {
+  let mut operating_point = 0
+  let mut spatial_layer : Int? = None
+  let mut seen_op = false
+  let mut seen_layer = false
+  for index in associations {
+    if index <= 0 || index > properties.length() {
+      raise AvifError::Invalid
+    }
+    let property = properties[index - 1]
+    if property.kind == t_a1op {
+      if seen_op ||
+        property.data.length() != 1 ||
+        property.data[0].to_int() > 31 {
+        raise AvifError::Invalid
+      }
+      seen_op = true
+      operating_point = property.data[0].to_int()
+    } else if property.kind == t_lsel {
+      if seen_layer || property.data.length() != 2 {
+        raise AvifError::Invalid
+      }
+      seen_layer = true
+      let layer = property.data[0].to_int() * 256 + property.data[1].to_int()
+      if layer != 65535 {
+        if layer > 3 {
+          raise AvifError::Invalid
+        }
+        spatial_layer = Some(layer)
+      }
+    }
+  }
+  (operating_point, spatial_layer)
+}
+
+///|
+/// Resolve selectors on a coded color, alpha, or grid-cell item. Metadata
+/// readers share this with the primary container parser so no entry point
+/// can silently decode an associated essential selector as the default.
+fn avif_item_layer_selection(data : Array[Byte], item_id : Int) -> (Int, Int?)? {
+  match avif_item_decode_config(data, item_id) {
+    Some((_, _, operating_point, spatial_layer)) =>
+      Some((operating_point, spatial_layer))
+    None => None
+  }
+}
+
+///|
+fn avif_item_decode_config(
+  data : Array[Byte],
+  item_id : Int,
+) -> (Int, Int, Int, Int?)? {
+  try {
+    let boxes : Array[Box] = []
+    walk(data, 0, data.length(), -1, boxes)
+    let meta = match find_box(boxes, -1, t_meta) {
+      Some(value) => value
+      None => return None
+    }
+    let iprp = find_box(boxes, idx_box(boxes, meta.start), t_iprp)
+    let items : Array[Item] = [
+      {
+        id: item_id,
+        typ: t_av01,
+        method_id: 0,
+        base: 0,
+        offs: [],
+        lens: [],
+        props: [],
+      },
+    ]
+    parse_ipma(data, boxes, iprp, items)
+    let props = parse_props(data, boxes, iprp)
+    let (operating_point, spatial_layer) = avif_layer_selection(
+      props,
+      items[0].props,
+    )
+    let mut width = 0
+    let mut height = 0
+    for index in items[0].props {
+      let prop = props[index - 1]
+      if prop.kind == t_ispe {
+        if width != 0 || prop.width <= 0 || prop.height <= 0 {
+          return None
+        }
+        width = prop.width
+        height = prop.height
+      }
+    }
+    if width == 0 {
+      return None
+    }
+    Some((width, height, operating_point, spatial_layer))
   } catch {
     _ => None
   }
@@ -579,8 +701,9 @@ fn parse_props(
         p: 0,
         t: 0,
         m: 0,
+        full_range: false,
       })
-    } else if b.typ == t_av1c {
+    } else if b.typ == t_av1c || b.typ == t_a1op || b.typ == t_lsel {
       out.push({
         kind: b.typ,
         width: 0,
@@ -589,10 +712,9 @@ fn parse_props(
         p: 0,
         t: 0,
         m: 0,
+        full_range: false,
       })
-    } else if b.typ == t_colr &&
-      b.end - b.payload >= 11 &&
-      u32(d, b.payload, b.end) == t_nclx {
+    } else if b.typ == t_colr && u32(d, b.payload, b.end) == t_nclx {
       out.push({
         kind: b.typ,
         width: 0,
@@ -601,11 +723,36 @@ fn parse_props(
         p: u16(d, b.payload + 4, b.end),
         t: u16(d, b.payload + 6, b.end),
         m: u16(d, b.payload + 8, b.end),
+        full_range: (u8(d, b.payload + 10, b.end) & 0x80) != 0,
       })
     } else if b.typ == t_auxc {
-      out.push({ kind: b.typ, width: 0, height: 0, data: [], p: 0, t: 0, m: 0, })
+      out.push({
+        kind: b.typ,
+        width: 0,
+        height: 0,
+        data: [],
+        p: 0,
+        t: 0,
+        m: 0,
+        full_range: false,
+      })
     } else {
-      out.push({ kind: b.typ, width: 0, height: 0, data: [], p: 0, t: 0, m: 0, })
+      // ICC ('prof'/'rICC') is not an nclx declaration. Keep its property
+      // index without inventing zero-valued CICP fields or a range flag.
+      out.push({
+        kind: if b.typ == t_colr {
+          0
+        } else {
+          b.typ
+        },
+        width: 0,
+        height: 0,
+        data: [],
+        p: 0,
+        t: 0,
+        m: 0,
+        full_range: false,
+      })
     }
   }
   out

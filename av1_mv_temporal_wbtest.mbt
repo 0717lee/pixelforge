@@ -263,18 +263,18 @@ test "temporal scan refuses a frame that carries no grid" {
 }
 
 ///|
-test "temporal scan refuses a compound block" {
-  // The second list of the temporal sample process is not implemented, and
-  // compound prediction is refused with reference_select at the frame gate, so
-  // the scan reports the refusal instead of dropping half the candidates.
+test "temporal scan skips a compound cell missing its second reference projection" {
   let grid = av1_temporal_test_grid(8, 8, [(2, 2, (24, -16))])
   let stack = av1_mv_stack_new()
+  let block = av1_temporal_test_block(4, 4, 2, 2)
+  block.refs[1] = av1_alt_ref_frame
   let ok = av1_temporal_scan(
     stack,
-    av1_temporal_test_block(4, 4, 2, 2),
+    block,
     av1_temporal_test_frame(Some(grid), true, 0),
     true,
   )
-  assert_eq(ok, false)
+  assert_eq(ok, true)
   assert_eq(stack.count, 0)
+  assert_eq(stack.zero_mv_context, 1)
 }

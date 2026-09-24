@@ -1,0 +1,13 @@
+poc=0,y=0,x=0,bl=2,ctx=0,bp=3: r=35872
+poc=0,y=0,x=0,bl=3,ctx=0,bp=0: r=34152
+Post-skip[0]: r=33018
+Post-y-cf-blk[tx=2,txtp=0,eob=50]: r=48648
+poc=0,y=0,x=4,bl=3,ctx=0,bp=0: r=36630
+Post-skip[0]: r=35482
+Post-y-cf-blk[tx=2,txtp=0,eob=60]: r=63240
+poc=0,y=4,x=0,bl=3,ctx=0,bp=0: r=59714
+Post-skip[0]: r=57963
+Post-y-cf-blk[tx=2,txtp=0,eob=60]: r=33800
+poc=0,y=4,x=4,bl=3,ctx=0,bp=0: r=43254
+Post-skip[0]: r=42074
+Post-y-cf-blk[tx=2,txtp=0,eob=60]: r=58120

@@ -134,7 +134,7 @@ fn av1_ref_plane_stride(reference : Av1RefFrame, plane : Int) -> Int {
   if plane == 0 {
     reference.coded_width
   } else {
-    (reference.coded_width + 1) >> reference.sub_x
+    (reference.coded_width + reference.sub_x) >> reference.sub_x
   }
 }
 
@@ -250,9 +250,9 @@ fn av1_motion_compensate(request : Av1MotionRequest) -> Array[Int] {
 }
 
 ///|
-/// Write an unclipped prediction into a plane, replicating the frame edges the
-/// way the reference reader does. Used by the block stage once the mode tree
-/// can ask for it.
+/// Store the prediction's intersection with the allocated MI-padded plane.
+/// Edge coding blocks retain their nominal size even when only part lies in
+/// the frame; clipping the destination must not change the prediction stride.
 fn av1_motion_store(
   plane : Array[Int],
   plane_stride : Int,
@@ -263,8 +263,24 @@ fn av1_motion_store(
   origin_y : Int,
   limit : Int,
 ) -> Unit {
-  for row in 0..<height {
-    for column in 0..<width {
+  if plane_stride <= 0 || width <= 0 || height <= 0 {
+    return
+  }
+  let plane_height = plane.length() / plane_stride
+  let first_row = if origin_y < 0 { -origin_y } else { 0 }
+  let first_column = if origin_x < 0 { -origin_x } else { 0 }
+  let rows = if height < plane_height - origin_y {
+    height
+  } else {
+    plane_height - origin_y
+  }
+  let columns = if width < plane_stride - origin_x {
+    width
+  } else {
+    plane_stride - origin_x
+  }
+  for row in first_row..<rows {
+    for column in first_column..<columns {
       plane[(origin_y + row) * plane_stride + origin_x + column] = av1_mc_clip(
         0,
         limit,

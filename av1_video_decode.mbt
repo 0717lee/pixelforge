@@ -20,32 +20,67 @@ pub fn av1_video_decoder() -> Av1VideoDecoder {
 }
 
 ///|
-/// Decode the next temporal unit and return the image its first frame presents.
-/// A unit without its own sequence header reuses the one already latched, and an
-/// inter unit reads the reference buffer the earlier units filled, so a sequence
-/// only decodes in order. A unit that needs a tool the block stage cannot act on
-/// is refused whole rather than presented partially.
+/// Decode a temporal unit and return its first displayed image. All frames in
+/// the unit update the reference map. Use av1_video_decode_temporal_unit to
+/// receive one presentation per temporal unit, including show-existing. OP0's
+/// highest spatial layer actually present is selected independently per unit.
 pub fn av1_video_decode_frame(
   decoder : Av1VideoDecoder,
   data : Array[Byte],
   allow_monochrome? : Bool = false,
 ) -> Image? {
-  let sequence = match av1_sequence_info(data) {
-    Some(value) => value
-    None =>
-      match decoder.sequence {
-        Some(value) => value
-        None => return None
-      }
-  }
-  decoder.sequence = Some(sequence)
-  let frames = av1_obu_payloads(data, 6)
-  if frames.length() == 0 {
-    return None
-  }
   match
-    av1_decode_frame_planes(data, allow_monochrome~, map=decoder.map, sequence~) {
-    Some(planes) => av1_frame_to_rgba(planes)
+    av1_video_decode_temporal_unit_planes(decoder, data, allow_monochrome~) {
+    Some(frames) =>
+      if frames.is_empty() {
+        None
+      } else {
+        av1_frame_to_rgba(frames[0])
+      }
+    None => None
+  }
+}
+
+///|
+/// Decode temporal units in bitstream order, selecting the highest spatial
+/// layer actually present in OP0 for each unit. Input may contain several
+/// TD-delimited units; an ISOBMFF sample implicitly ends its single unit.
+/// Some([]) denotes a valid unit containing only hidden frames or metadata;
+/// None denotes malformed syntax or a missing reference.
+pub fn av1_video_decode_temporal_unit(
+  decoder : Av1VideoDecoder,
+  data : Array[Byte],
+  allow_monochrome? : Bool = false,
+) -> Array[Image]? {
+  let frames = match
+    av1_video_decode_temporal_unit_planes(decoder, data, allow_monochrome~) {
+    Some(value) => value
+    None => return None
+  }
+  let images : Array[Image] = []
+  for frame in frames {
+    match av1_frame_to_rgba(frame) {
+      Some(image) => images.push(image)
+      None => return None
+    }
+  }
+  Some(images)
+}
+
+///|
+/// Native display samples are retained for alpha-track UNORM conversion and
+/// container composition; no intermediate eight-bit RGB conversion is needed.
+fn av1_video_decode_temporal_unit_planes(
+  decoder : Av1VideoDecoder,
+  data : Array[Byte],
+  allow_monochrome? : Bool = false,
+) -> Array[Av1FramePlanes]? {
+  match
+    av1_decode_obu_planes(data, decoder.map, decoder.sequence, allow_monochrome) {
+    Some((sequence, displayed)) => {
+      decoder.sequence = Some(sequence)
+      Some(displayed)
+    }
     None => None
   }
 }

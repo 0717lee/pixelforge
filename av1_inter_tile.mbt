@@ -1,7 +1,7 @@
 ///|
 /// Inter-frame block reconstruction: the tile leaf that mounts the inter syntax
 /// of `av1_inter_mode.mbt` onto the existing partition walk, and turns it into
-/// samples (AV1 §5.11.17 through §5.11.37).
+/// samples (AV1 搂5.11.17 through 搂5.11.37).
 ///
 /// The partition tree itself is shared with intra frames, so only the leaf
 /// changes. An inter frame's intra blocks reuse the intra reading with the
@@ -13,14 +13,14 @@
 /// reference, then add the residual.
 
 ///|
-/// Transform extents a coding block may reach (AV1 §5.11.15, Max_Tx_Size_Rect):
+/// Transform extents a coding block may reach (AV1 搂5.11.15, Max_Tx_Size_Rect):
 /// each axis is capped at 64 samples.
 fn av1_max_rect_tx(width : Int, height : Int) -> (Int, Int) {
   (if width > 64 { 64 } else { width }, if height > 64 { 64 } else { height })
 }
 
 ///|
-/// Split_Tx_Size (AV1 §5.11.15): halve the long axis, or both axes when the
+/// Split_Tx_Size (AV1 搂5.11.15): halve the long axis, or both axes when the
 /// transform is square.
 fn av1_tx_split(width : Int, height : Int) -> (Int, Int) {
   if width > height {
@@ -33,7 +33,7 @@ fn av1_tx_split(width : Int, height : Int) -> (Int, Int) {
 }
 
 ///|
-/// get_tx_size( plane, txSz ) for a chroma plane (AV1 §5.11.35): the chroma
+/// get_tx_size( plane, txSz ) for a chroma plane (AV1 搂5.11.35): the chroma
 /// residual block's own maximum, with any 64-sample axis folded back to 32.
 fn av1_chroma_tx_size(width : Int, height : Int, lossless : Bool) -> (Int, Int) {
   if lossless {
@@ -54,7 +54,7 @@ fn av1_chroma_tx_size(width : Int, height : Int, lossless : Bool) -> (Int, Int) 
 }
 
 ///|
-/// The residual block size of one plane (AV1 §5.11.36, get_plane_residual_size
+/// The residual block size of one plane (AV1 搂5.11.36, get_plane_residual_size
 /// over the Subsampled_Size table). A residual block is never narrower or
 /// shorter than four samples.
 fn av1_plane_residual_size(
@@ -73,7 +73,7 @@ fn av1_plane_residual_size(
 }
 
 ///|
-/// get_tx_set for an inter block (AV1 §5.11.48). Sets 1 to 3 replace the two
+/// get_tx_set for an inter block (AV1 搂5.11.48). Sets 1 to 3 replace the two
 /// intra sets; 0 means the transform type is fixed to DCT_DCT.
 fn av1_inter_tx_set(width : Int, height : Int, reduced : Bool) -> Int {
   let larger = if width > height { width } else { height }
@@ -92,7 +92,7 @@ fn av1_inter_tx_set(width : Int, height : Int, reduced : Bool) -> Int {
 }
 
 ///|
-/// Tx_Type_Inter_Inv_Set1..3 (AV1 §5.11.47): the decoded index back to a
+/// Tx_Type_Inter_Inv_Set1..3 (AV1 搂5.11.47): the decoded index back to a
 /// transform type. Set 1 keeps the plain DCT_DCT in the middle of its range -
 /// index 7, between the four colour variants and the mixed pairs - exactly as
 /// libaom's `tx_type_inter_inv_set1` and libdav1d's `dav1d_tx_types_per_set`
@@ -145,21 +145,27 @@ fn av1_inter_tx_set_symbols(set : Int) -> Int {
 }
 
 ///|
-/// is_tx_type_in_set for an inter block (AV1 §5.11.47): a chroma transform may
+/// is_tx_type_in_set for an inter block (AV1 搂5.11.47): a chroma transform may
 /// only reuse a luma type its own set contains.
 fn av1_inter_tx_type_in_set(set : Int, tx_type : Av1TxType) -> Bool {
+  // Set 3 contains exactly DCT_DCT and IDTX. In particular, a 32-pixel
+  // chroma axis cannot inherit a one-dimensional luma transform: that would
+  // select the wrong EOB/scan CDFs as well as the wrong inverse transform.
+  if set == 3 {
+    return tx_type is Av1TxDctDct || tx_type is Av1TxIdentityIdentity
+  }
   match tx_type {
     Av1TxDctDct => true
     Av1TxVerticalAdst
     | Av1TxHorizontalAdst
     | Av1TxVerticalFlipadst
     | Av1TxHorizontalFlipadst => set == 1
-    _ => set == 1 || set == 2 || set == 3
+    _ => set == 1 || set == 2
   }
 }
 
 ///|
-/// Spec TX_TYPES index of a transform type (AV1 §6.10.4). The MoonBit enum
+/// Spec TX_TYPES index of a transform type (AV1 搂6.10.4). The MoonBit enum
 /// carries three extra identity combinations, so the mapping is explicit.
 fn av1_tx_type_code(tx_type : Av1TxType) -> Int {
   match tx_type {
@@ -207,7 +213,7 @@ fn av1_tx_type_of_code(code : Int) -> Av1TxType {
 }
 
 ///|
-/// TxTypes[ y4 ][ x4 ] over one transform's luma footprint (AV1 §5.11.47), which
+/// TxTypes[ y4 ][ x4 ] over one transform's luma footprint (AV1 搂5.11.47), which
 /// is what a chroma transform of the same block reads back.
 fn av1_inter_record_tx_types(
   field : Av1MotionField,
@@ -228,7 +234,7 @@ fn av1_inter_record_tx_types(
 }
 
 ///|
-/// transform_type( x4, y4, txSz ) for an inter block (AV1 §5.11.47). The type is
+/// transform_type( x4, y4, txSz ) for an inter block (AV1 搂5.11.47). The type is
 /// only coded when the transform set offers a choice and the quantizer is not
 /// zero; otherwise it is DCT_DCT, but it is still recorded for chroma.
 fn av1_inter_luma_tx_type(
@@ -242,8 +248,18 @@ fn av1_inter_luma_tx_type(
 ) -> Av1TxType {
   let set = av1_inter_tx_set(width, height, state.reduced_tx_set)
   let sqr = av1_msac_floor_log2(if width < height { width } else { height }) - 2
-  if set == 0 || state.seg_lossless {
-    av1_inter_record_tx_types(info.field, x4, y4, width, height, Av1TxDctDct)
+  // Transform origins are tile-local; the motion field spans the whole frame.
+  let frame_x4 = info.tile_col_start + x4
+  let frame_y4 = info.tile_row_start + y4
+  if set == 0 || state.seg_syntax_q_idx == 0 {
+    av1_inter_record_tx_types(
+      info.field,
+      frame_x4,
+      frame_y4,
+      width,
+      height,
+      Av1TxDctDct,
+    )
     return Av1TxDctDct
   }
   let cdfs = info.cdfs
@@ -264,13 +280,20 @@ fn av1_inter_luma_tx_type(
     return Av1TxDctDct
   }
   let tx_type = av1_inter_tx_type_of(set, index)
-  av1_inter_record_tx_types(info.field, x4, y4, width, height, tx_type)
+  av1_inter_record_tx_types(
+    info.field,
+    frame_x4,
+    frame_y4,
+    width,
+    height,
+    tx_type,
+  )
   tx_type
 }
 
 ///|
 /// compute_tx_type( plane, txSz, blockX, blockY ) for the chroma planes of an
-/// inter block (AV1 §5.11.47): inherit the luma type at the transform's own
+/// inter block (AV1 搂5.11.47): inherit the luma type at the transform's own
 /// origin, falling back to DCT_DCT when it is outside the chroma set.
 fn av1_inter_chroma_tx_type(
   state : Av1IntraState,
@@ -286,18 +309,10 @@ fn av1_inter_chroma_tx_type(
     return Av1TxDctDct
   }
   let field = info.field
-  let x4 = x / 4
-  let y4 = y / 4
-  let luma_col = if x4 << state.sub_x < current.mi_col {
-    current.mi_col
-  } else {
-    x4 << state.sub_x
-  }
-  let luma_row = if y4 << state.sub_y < current.mi_row {
-    current.mi_row
-  } else {
-    y4 << state.sub_y
-  }
+  let x4 = info.tile_col_start + ((x / 4) << state.sub_x)
+  let y4 = info.tile_row_start + ((y / 4) << state.sub_y)
+  let luma_col = if x4 < current.mi_col { current.mi_col } else { x4 }
+  let luma_row = if y4 < current.mi_row { current.mi_row } else { y4 }
   if luma_row >= field.rows || luma_col >= field.cols {
     return Av1TxDctDct
   }
@@ -311,7 +326,7 @@ fn av1_inter_chroma_tx_type(
 }
 
 ///|
-/// read_var_tx_size( row, col, txSz, depth ) (AV1 §5.11.16). Positions are frame
+/// read_var_tx_size( row, col, txSz, depth ) (AV1 搂5.11.16). Positions are frame
 /// MI units; leaves are collected in the order the tree is read, which is the
 /// order their coefficients appear in the bitstream.
 fn av1_read_var_tx_size(
@@ -364,11 +379,9 @@ fn av1_read_var_tx_size(
   }
   let width4 = tx_width / 4
   let height4 = tx_height / 4
-  // A node whose size class is 8x8 or smaller does not subdivide even when the
-  // split symbol says otherwise: the symbol is still read, so the entropy stays
-  // in step, but the node stays a leaf (libdav1d's `t_dim->max > TX_8X8`).
-  let can_split = (if tx_width > tx_height { tx_width } else { tx_height }) > 8
-  if split == 1 && can_split {
+  // Splitting an 8x8, 4x8 or 8x4 node produces 4x4 leaves. Those children
+  // consume no further split symbols, as handled by the 4x4 base case above.
+  if split == 1 {
     let (sub_width, sub_height) = av1_tx_split(tx_width, tx_height)
     for i = 0; i < height4; i = i + sub_height / 4 {
       for j = 0; j < width4; j = j + sub_width / 4 {
@@ -403,7 +416,7 @@ fn av1_read_var_tx_size(
 }
 
 ///|
-/// read_block_tx_size( ) (AV1 §5.11.15). A non-skipped inter block under
+/// read_block_tx_size( ) (AV1 搂5.11.15). A non-skipped inter block under
 /// TX_MODE_SELECT reads the variable transform tree; everything else reads at
 /// most one tx_depth symbol. The luma result is also recorded into the frame's
 /// motion field, because later blocks measure their neighbours against it.
@@ -490,7 +503,7 @@ fn av1_read_block_tx_size(
 }
 
 ///|
-/// tx_depth context (AV1 §9.3.4). An inter neighbour reports its own block size
+/// tx_depth context (AV1 搂9.3.4). An inter neighbour reports its own block size
 /// whether or not it was skipped, and an unavailable edge reports zero rather
 /// than the 64 the transform-tree contexts use.
 fn av1_tx_depth_ctx(
@@ -525,7 +538,7 @@ fn av1_tx_depth_ctx(
 }
 
 ///|
-/// compute_prediction( ) for a single-reference block (AV1 §7.11.3.1). Each plane
+/// compute_prediction( ) for a single-reference block (AV1 搂7.11.3.1). Each plane
 /// is interpolated from the reference named by the motion field at the plane's
 /// own sample grid, so a chroma block that is merged with its neighbour reads the
 /// neighbour's vector rather than its own.
@@ -537,7 +550,7 @@ fn av1_inter_predict(
 ) -> Bool {
   let field = info.field
   // Only the block that owns the chroma samples of a merged group predicts
-  // them; the other one has no chroma syntax at all (AV1 §5.11.17).
+  // them; the other one has no chroma syntax at all (AV1 搂5.11.17).
   let plane_count = if av1_intra_has_chroma(state, tile_block) { 3 } else { 1 }
   let mut diffwtd_luma : Array[Int] = []
   for plane in 0..<plane_count {
@@ -560,16 +573,20 @@ fn av1_inter_predict(
     // A LOCALWARP block with a representable model skips the whole
     // motion-compensation path: each 8x8 chunk of the plane is filtered
     // through the model itself, so there is no single subpel phase to filter
-    // at and no filter symbol to read (AV1 §7.11.3.8). The warp filter works on
+    // at and no filter symbol to read (AV1 搂7.11.3.8). The warp filter works on
     // 8-pixel chunks, so libdav1d only routes a plane through it when that
     // plane's own block is at least 8x8 samples; a smaller chroma block
     // predicts through the ordinary motion-compensation path at the block's own
     // vector and the eight-tap regular filter it reads no symbol for.
     if block.motion_mode == 2 &&
       block.warp.length() == 1 &&
-      pred_w >= 8 && pred_h >= 8 {
+      pred_w >= 8 &&
+      pred_h >= 8 {
       let reference = match
-        av1_inter_reference(info, field.refs[(block.mi_row * field.cols + block.mi_col) * 2]) {
+        av1_inter_reference(
+          info,
+          field.refs[(block.mi_row * field.cols + block.mi_col) * 2],
+        ) {
         Some(value) => value
         None => return false
       }
@@ -598,9 +615,11 @@ fn av1_inter_predict(
     }
     // A GLOBAL(Global)MV block whose reference carries a non-identity
     // frame-level model predicts through that model per pixel, exactly as a
-    // LOCALWARP block does (AV1 §7.11.3.8). A compound block needs this for
-    // each of its lists at once, so it is refused one level up instead.
+    // LOCALWARP block does (AV1 搂7.11.3.8). Compound lists select their own
+    // model below and retain the fractional precision needed by the blend.
     if block.motion_mode != 2 &&
+      pred_w >= 8 &&
+      pred_h >= 8 &&
       block.y_mode == av1_mode_global_mv &&
       block.ref_frame1 <= av1_intra_frame &&
       av1_gm_type(info, block.ref_frame) > av1_gm_translation &&
@@ -662,8 +681,8 @@ fn av1_inter_predict(
         // filters; only the compound one needs a second request.
         let single_request : Av1MotionRequest = {
           reference,
-          frame_width: info.mi_cols * 4,
-          frame_height: info.mi_rows * 4,
+          frame_width: info.frame.frame_width,
+          frame_height: info.frame.frame_height,
           plane,
           x: base_x + x,
           y: base_y + y,
@@ -671,33 +690,47 @@ fn av1_inter_predict(
           height: pred_h,
           mv_row: field.mv_rows[unit],
           mv_col: field.mv_cols[unit],
-          filter_vertical: field.interp_v[(cand_row + r) * field.cols + cand_col + c],
-          filter_horizontal: field.interp_h[(cand_row + r) * field.cols + cand_col + c],
+          filter_vertical: field.interp_v[(cand_row + r) * field.cols +
+          cand_col +
+          c],
+          filter_horizontal: field.interp_h[(cand_row + r) * field.cols +
+          cand_col +
+          c],
           compound: false,
         }
         let prediction = if block.interintra != 0 {
           // An interintra block mixes the motion-compensated prediction with an
-          // intra one of this block's neighbourhood (AV1 §7.11.3.10). The intra
+          // intra one of this block's neighbourhood (AV1 搂7.11.3.10). The intra
           // edges come from the reconstructed neighbourhood, and the weight is
           // either the mode-variant ramp or a wedge mask.
           let inter = av1_motion_compensate(single_request)
-          let px = base_x + x
-          let py = base_y + y
+          let px = base_x + x - (info.tile_col_start >> sub_x) * 4
+          let py = base_y + y - (info.tile_row_start >> sub_y) * 4
+          let have_above = block.avail_u && py > 0
+          let have_left = block.avail_l && px > 0
           let above : Array[Int] = []
           let left : Array[Int] = []
-          if py > 0 {
+          if have_above {
             for i in 0..<pred_w {
-              let col = if px + i < target.width { px + i } else { target.width - 1 }
+              let col = if px + i < target.width {
+                px + i
+              } else {
+                target.width - 1
+              }
               above.push(target.pixels[(py - 1) * target.width + col])
             }
           }
-          if px > 0 {
+          if have_left {
             for i in 0..<pred_h {
-              let row = if py + i < target.height { py + i } else { target.height - 1 }
+              let row = if py + i < target.height {
+                py + i
+              } else {
+                target.height - 1
+              }
               left.push(target.pixels[row * target.width + px - 1])
             }
           }
-          let corner = if px > 0 && py > 0 {
+          let corner = if have_left && have_above {
             target.pixels[(py - 1) * target.width + px - 1]
           } else {
             1 << (state.bit_depth - 1)
@@ -711,26 +744,31 @@ fn av1_inter_predict(
               left,
               corner,
               state.bit_depth,
-              have_above=py > 0,
-              have_left=px > 0,
+              have_above~,
+              have_left~,
             ) {
             Some(value) => value
             None => return false
           }
           let weights = if block.wedge_interintra == 0 {
             // The intra-variant ramp: the intra share along one axis, scaled by
-            // the block's larger dimension (AV1 §7.11.3.17).
+            // the block's larger dimension (AV1 搂7.11.3.17).
             let big = if pred_w < pred_h { pred_h } else { pred_w }
             let scale = 128 / big
             let built = Array::make(pred_w * pred_h, 0)
             for i in 0..<pred_h {
               for j in 0..<pred_w {
-                built[i * pred_w + j] = av1_ii_weight(block.interintra_mode, i, j, scale)
+                built[i * pred_w + j] = av1_ii_weight(
+                  block.interintra_mode,
+                  i,
+                  j,
+                  scale,
+                )
               }
             }
             built
           } else {
-            // The wedge mask on this plane's grid (AV1 §7.11.3.11, §7.11.3.14).
+            // The wedge mask on this plane's grid (AV1 搂7.11.3.11, 搂7.11.3.14).
             // An interintra wedge always codes a zero sign.
             let mask = av1_wedge_plane_mask(
               block.block_width,
@@ -750,8 +788,14 @@ fn av1_inter_predict(
           for k in 0..<blended.length() {
             let m = weights[k]
             // `interPostRound` is zero for a single-reference block, so the
-            // motion-compensated prediction blends unrounded (AV1 §7.11.3.14).
-            let p0 = if inter[k] < 0 { 0 } else if inter[k] > hi { hi } else { inter[k] }
+            // motion-compensated prediction blends unrounded (AV1 搂7.11.3.14).
+            let p0 = if inter[k] < 0 {
+              0
+            } else if inter[k] > hi {
+              hi
+            } else {
+              inter[k]
+            }
             let v = (m * intra[k] + (64 - m) * p0 + 32) >> 6
             blended[k] = if v < 0 { 0 } else if v > hi { hi } else { v }
           }
@@ -759,7 +803,7 @@ fn av1_inter_predict(
         } else if second_name > av1_intra_frame {
           // A compound block interpolates both lists with the block's own
           // filters, and the intermediate results are combined one step later
-          // than a single-reference decode rounds them (AV1 §7.11.3.10,
+          // than a single-reference decode rounds them (AV1 搂7.11.3.10,
           // `interPostRound`).
           let filter_vertical = field.interp_v[(cand_row + r) * field.cols +
             cand_col +
@@ -769,8 +813,8 @@ fn av1_inter_predict(
             c]
           let first_request : Av1MotionRequest = {
             reference,
-            frame_width: info.mi_cols * 4,
-            frame_height: info.mi_rows * 4,
+            frame_width: info.frame.frame_width,
+            frame_height: info.frame.frame_height,
             plane,
             x: base_x + x,
             y: base_y + y,
@@ -788,8 +832,8 @@ fn av1_inter_predict(
           }
           let second_request : Av1MotionRequest = {
             reference: second_reference,
-            frame_width: info.mi_cols * 4,
-            frame_height: info.mi_rows * 4,
+            frame_width: info.frame.frame_width,
+            frame_height: info.frame.frame_height,
             plane,
             x: base_x + x,
             y: base_y + y,
@@ -801,23 +845,69 @@ fn av1_inter_predict(
             filter_horizontal,
             compound: true,
           }
-          let first = av1_motion_compensate(first_request)
-          let second = av1_motion_compensate(second_request)
+          // GLOBAL_GLOBALMV chooses independently for each reference. Scaled
+          // references and small chroma planes use ordinary MC, as do invalid
+          // shear models and frame headers forcing integer motion vectors.
+          let predictions : Array[Array[Int]] = []
+          for list in 0..<2 {
+            let request = if list == 0 { first_request } else { second_request }
+            let ref_name = if list == 0 { name } else { second_name }
+            let model = if av1_compound_both_global(block.y_mode) &&
+              info.frame.force_integer_mv == 0 &&
+              pred_w >= 8 &&
+              pred_h >= 8 &&
+              av1_gm_type(info, ref_name) > av1_gm_translation &&
+              request.reference.width == info.frame.frame_width &&
+              request.reference.height == info.frame.frame_height {
+              av1_warp_from_global_motion(info.frame.gm_params[ref_name])
+            } else {
+              None
+            }
+            predictions.push(
+              match model {
+                Some(model) =>
+                  av1_warp_predict(
+                    request.reference,
+                    model,
+                    plane,
+                    block.mi_col,
+                    block.mi_row,
+                    base_x + x,
+                    base_y + y,
+                    pred_w,
+                    pred_h,
+                    compound=true,
+                  )
+                None => av1_motion_compensate(request)
+              },
+            )
+          }
+          let first = predictions[0]
+          let second = predictions[1]
           let post = if state.bit_depth == 12 { 2 } else { 4 }
-                  let blended = Array::make(first.length(), 0)
+          let blended = Array::make(first.length(), 0)
           if block.compound_type == av1_compound_diffwtd ||
             block.compound_type == av1_compound_wedge {
             // A masked blend: per-sample weights pick how much of each list the
             // sample takes, and the weights come either from the difference
-            // between the two predictions (§7.11.3.12) or from the wedge table
-            // (§7.11.3.11). The two lists are then swapped when the mask's sign
-            // bit asks for the mirrored variant (§7.11.3.14).
+            // between the two predictions (搂7.11.3.12) or from the wedge table
+            // (搂7.11.3.11). The mask's sign selects the first list's share;
+            // its mirrored variant complements that share (搂7.11.3.14).
             let weights = if block.compound_type == av1_compound_diffwtd {
               // The weights come from the luma plane: chroma takes the
               // luma mask averaged down to its sample grid, the same way
-              // the wedge variant does (§7.11.3.14).
+              // the wedge variant does (搂7.11.3.14).
               if plane == 0 {
-                let built = av1_diffwtd_mask(first, second, pred_w, pred_h, 0, 0, block.mask_type, state.bit_depth)
+                let built = av1_diffwtd_mask(
+                  first,
+                  second,
+                  pred_w,
+                  pred_h,
+                  0,
+                  0,
+                  block.mask_type,
+                  state.bit_depth,
+                )
                 diffwtd_luma = built
                 built
               } else {
@@ -843,8 +933,10 @@ fn av1_inter_predict(
                 None => return false
               }
             }
-            let head = if block.mask_type == 0 { first } else { second }
-            let tail = if block.mask_type == 0 { second } else { first }
+            // Both mask builders already express the signed first-list share.
+            // Swapping the lists again would cancel a difference-mask sign.
+            let head = first
+            let tail = second
             let shift = 6 + post
             let bias = 32 << post
             for k in 0..<blended.length() {
@@ -853,12 +945,15 @@ fn av1_inter_predict(
             }
           } else if block.compound_type == av1_compound_distance {
             // The distance weighting scales each list's interpolation by its
-            // reference's order-hint distance (AV1 §7.11.3.15).
-            let (forward, backward) = av1_distance_weights(info, name, second_name)
+            // reference's order-hint distance (AV1 搂7.11.3.15).
+            let (forward, backward) = av1_distance_weights(
+              info, name, second_name,
+            )
             let shift = 4 + post
             let bias = 1 << (shift - 1)
             for k in 0..<blended.length() {
-              blended[k] = (forward * first[k] + backward * second[k] + bias) >> shift
+              blended[k] = (forward * first[k] + backward * second[k] + bias) >>
+                shift
             }
           } else {
             let shift = 1 + post
@@ -897,7 +992,7 @@ fn av1_inter_predict(
 }
 
 ///|
-/// The five OBMC blending ramps (AV1 §7.11.3.9). A strip picks the ramp whose
+/// The five OBMC blending ramps (AV1 搂7.11.3.9). A strip picks the ramp whose
 /// extent matches its own length, so an 8-sample strip and a 32-sample one
 /// reach full weight at different distances from the shared edge.
 let av1_obmc_masks : Array[Array[Int]] = [
@@ -928,7 +1023,7 @@ fn av1_obmc_mask(length : Int) -> Array[Int] {
 }
 
 ///|
-/// predict_overlap for one OBMC candidate (AV1 §7.11.3.9). The neighbour's own
+/// predict_overlap for one OBMC candidate (AV1 搂7.11.3.9). The neighbour's own
 /// vector and its own interpolation filter interpolate a strip of the reference,
 /// the strip is clipped to the sample range, and then it is blended into the
 /// prediction the block already wrote into the plane.
@@ -962,8 +1057,8 @@ fn av1_obmc_overlap(
   let pred_y = (y4 * 4) >> sub_y
   let request : Av1MotionRequest = {
     reference,
-    frame_width: info.mi_cols * 4,
-    frame_height: info.mi_rows * 4,
+    frame_width: info.frame.frame_width,
+    frame_height: info.frame.frame_height,
     plane,
     x: pred_x,
     y: pred_y,
@@ -994,7 +1089,7 @@ fn av1_obmc_overlap(
 }
 
 ///|
-/// overlapped_motion_compensation( ) for one plane (AV1 §7.11.3.9). The above
+/// overlapped_motion_compensation( ) for one plane (AV1 搂7.11.3.9). The above
 /// pass blends the top half of each column strip from the neighbours above and
 /// the left pass blends the left half of each row strip from the neighbours to
 /// the left. Both read the plane's current contents, so the two passes compose
@@ -1010,19 +1105,13 @@ fn av1_obmc_blend(
   let sub_y = if plane == 0 { 0 } else { state.sub_y }
   let w = block.block_width >> sub_x
   let h = block.block_height >> sub_y
-  let (residual_w, residual_h) = av1_plane_residual_size(
-    block.block_width,
-    block.block_height,
-    plane,
-    sub_x,
-    sub_y,
-  )
   let target = state.planes[plane]
   let tile_x = (info.tile_col_start >> sub_x) * 4
   let tile_y = (info.tile_row_start >> sub_y) * 4
   let limit = (1 << state.bit_depth) - 1
-  if block.avail_u && residual_w >= 8 && residual_h >= 8 {
-    let log2_width = av1_msac_floor_log2(block.block_width)
+  // Chroma above-OBMC is suppressed only for blocks whose width + height < 16.
+  if block.avail_u && (plane == 0 || w + h >= 16) {
+    let log2_width = av1_msac_floor_log2(block.width4)
     let n_limit = if 4 < log2_width { 4 } else { log2_width }
     let mut x4 = block.mi_col
     let mut count = 0
@@ -1069,7 +1158,7 @@ fn av1_obmc_blend(
     }
   }
   if block.avail_l {
-    let log2_height = av1_msac_floor_log2(block.block_height)
+    let log2_height = av1_msac_floor_log2(block.height4)
     let n_limit = if 4 < log2_height { 4 } else { log2_height }
     let mut y4 = block.mi_row
     let mut count = 0
@@ -1129,7 +1218,7 @@ fn av1_inter_reference(info : Av1InterInfo, name : Int) -> Av1RefFrame? {
 }
 
 ///|
-/// residual( ) for an inter block (AV1 §5.11.34). Prediction already filled the
+/// residual( ) for an inter block (AV1 搂5.11.34). Prediction already filled the
 /// block, so every transform only adds its residual. Luma follows the transform
 /// tree the block recorded; chroma keeps a uniform raster inside each 64-pixel
 /// chunk, and both share the intra path's transform decoding.
@@ -1264,7 +1353,7 @@ fn av1_inter_residual_raster(
 
 ///|
 /// intra_block_mode_info( ) for an intra block coded inside an inter frame
-/// (AV1 §5.11.27). The luma mode reads the size-group table rather than the
+/// (AV1 搂5.11.27). The luma mode reads the size-group table rather than the
 /// neighbour modes an intra frame would use, and the transform size comes from
 /// the same read_block_tx_size the inter branch uses.
 fn av1_intra_in_inter_block(
@@ -1294,7 +1383,7 @@ fn av1_intra_in_inter_block(
   let mut uv_mode = AV1_INTRA_DC
   if has_chroma {
     let cfl_allowed = if state.seg_lossless {
-      block.width <= 8 && block.height <= 8
+      block.width <= 4 << state.sub_x && block.height <= 4 << state.sub_y
     } else {
       block.width <= 32 && block.height <= 32
     }
@@ -1320,7 +1409,7 @@ fn av1_intra_in_inter_block(
     }
     uv_mode = mode
   }
-  // `palette_mode_info` (AV1 §5.11.21) sits between the uv mode and filter
+  // `palette_mode_info` (AV1 搂5.11.21) sits between the uv mode and filter
   // intra, exactly as in the intra-only block path.
   if !av1_palette_read_colors(
       decoder,
@@ -1334,7 +1423,7 @@ fn av1_intra_in_inter_block(
     ) {
     return false
   }
-  // `filter_intra_mode_info` requires PaletteSizeY == 0 (AV1 §5.11.29).
+  // `filter_intra_mode_info` requires PaletteSizeY == 0 (AV1 搂5.11.29).
   if state.enable_filter_intra &&
     y_mode == AV1_INTRA_DC &&
     state.palette.y_colors.is_empty() &&
@@ -1357,6 +1446,21 @@ fn av1_intra_in_inter_block(
     return false
   }
   inter.y_mode = y_mode
+  // Intra blocks still publish their reference pair and geometry. In
+  // particular, the unused second reference is NONE, not the empty motion
+  // field's zero: the next block's single/compound context reads that value.
+  av1_motion_field_store(
+    info.field,
+    inter.mi_row,
+    inter.mi_col,
+    inter.width4,
+    inter.height4,
+    y_mode,
+    [av1_intra_frame, av1_none_frame],
+    [0, 0],
+    [0, 0],
+    skip=inter.skip,
+  )
   let size = match av1_read_block_tx_size(decoder, state, info, inter) {
     Some(value) => value
     None => return false
@@ -1419,7 +1523,7 @@ fn av1_intra_record_modes(
 }
 
 ///|
-/// decode_block( ) for an inter frame (AV1 §5.11.17). The leaf replaces the
+/// decode_block( ) for an inter frame (AV1 搂5.11.17). The leaf replaces the
 /// intra one entirely: skip may be implied by skip_mode, the block may be intra,
 /// and an inter block's samples come from motion compensation rather than from
 /// its own neighbourhood.
@@ -1452,6 +1556,28 @@ fn av1_inter_tile_block(
     mi_row > info.tile_row_start,
     mi_col > info.tile_col_start,
   )
+  let mut seg_id = -1
+  if state.segmentation.seg_id_pre_skip || !state.segmentation.update_map {
+    seg_id = av1_read_segment_id(
+      decoder,
+      state,
+      y4,
+      x4,
+      current.avail_u,
+      current.avail_l,
+      0,
+      true,
+      width4=current.width4,
+      height4=current.height4,
+    )
+  }
+  current.segment_skip = av1_segment_feature(state.segmentation, seg_id, 6)
+  current.segment_global = av1_segment_feature(state.segmentation, seg_id, 7)
+  current.segment_ref = if av1_segment_feature(state.segmentation, seg_id, 5) {
+    state.segmentation.feature_data[seg_id][5]
+  } else {
+    -1
+  }
   if !av1_read_skip_mode(decoder, info, current) {
     return false
   }
@@ -1463,43 +1589,55 @@ fn av1_inter_tile_block(
     if x4 > 0 {
       skip_context = skip_context + state.skips[y4 * state.cols + x4 - 1]
     }
-    let skip = decoder.symbol(state.skip_cdfs[skip_context])
+    let skip = if current.segment_skip {
+      1
+    } else {
+      decoder.symbol(state.skip_cdfs[skip_context])
+    }
     if skip != 0 && skip != 1 {
       return false
     }
     current.skip = skip
   }
-  // `read_segment_id` sits between skip and the CDEF index (AV1 §5.11.13), and
+  // `read_segment_id` sits between skip and the CDEF index (AV1 搂5.11.13), and
   // the segment it names decides the block's quantizer index from here on. A
   // block that skip mode forced to skip takes the predicted id and codes no
   // symbol, which the reader itself applies. The gate one level up refuses a
   // frame whose features would read the symbol before skip, so the preskip
   // form cannot reach this decoder.
-  if state.segmentation.enabled && state.segmentation.seg_id_pre_skip {
-    return false
+  if !state.segmentation.seg_id_pre_skip && state.segmentation.update_map {
+    seg_id = av1_read_segment_id(
+      decoder,
+      state,
+      y4,
+      x4,
+      current.avail_u,
+      current.avail_l,
+      current.skip,
+      false,
+      width4=current.width4,
+      height4=current.height4,
+    )
   }
-  let seg_id = av1_read_segment_id(
-    decoder, state, current.mi_row, current.mi_col, current.avail_u, current.avail_l,
-    current.skip, false,
-  )
   if !av1_intra_cdef_index(decoder, state, block, current.skip) {
     return false
   }
-  // The superblock's quantizer delta follows the CDEF index (AV1 §6.10.10); a
+  // The superblock's quantizer delta follows the CDEF index (AV1 搂6.10.10); a
   // whole-superblock block that is skipped is the one case libdav1d does not
   // read it for.
   if av1_at_superblock_origin(state, current.mi_row, current.mi_col) &&
     !(current.skip == 1 &&
-      av1_superblock_block_is_whole(
-        block.width, block.height, state.superblock_size,
-      )) {
+    av1_superblock_block_is_whole(
+      block.width,
+      block.height,
+      state.superblock_size,
+    )) {
     av1_read_superblock_delta_q(decoder, state)
+    av1_read_superblock_delta_lf(decoder, state)
   }
   // The segment's ALT_Q builds on this superblock's index, so the block's
   // quantizer index is settled after the delta, not before it.
-  av1_seg_apply_block(
-    state, current.mi_row, current.mi_col, current.width4, current.height4, seg_id,
-  )
+  av1_seg_apply_block(state, y4, x4, current.width4, current.height4, seg_id)
   if !av1_read_is_inter(decoder, info, current) {
     return false
   }
@@ -1508,7 +1646,26 @@ fn av1_inter_tile_block(
       decoder, state, info, current, block, block_index, has_chroma,
     )
   }
-  if !av1_inter_block_motion(decoder, info, current) {
+  let have_top_right = match
+    av1_intra_edge_table(true, block_index, partition) {
+    Some(table) =>
+      av1_intra_has_top_right(
+        block.width,
+        block.height,
+        mi_row,
+        mi_col,
+        0,
+        0,
+        block.width,
+        0,
+        state.superblock_size,
+        current.avail_u,
+        mi_col + current.width4 < info.tile_col_end,
+        table,
+      )
+    None => false
+  }
+  if !av1_inter_block_motion(decoder, info, current, have_top_right~) {
     return false
   }
   // The specification writes the motion field before transform sizing and
@@ -1539,10 +1696,7 @@ fn av1_inter_tile_block(
   )
   let sized = match av1_read_block_tx_size(decoder, state, info, current) {
     Some(value) => value
-    None =>
-    {
-      return false
-    }
+    None => return false
   }
   let (tx_width, tx_height, roots) = sized
   state.current = Some(current)
@@ -1558,74 +1712,15 @@ fn av1_inter_tile_block(
 }
 
 ///|
-/// Which inter frames this decoder can reconstruct. Every tool left out here is
-/// a second motion vector, a blend or a per-block parameter that the block stage
-/// cannot yet act on; refusing the frame keeps the bitstream honest instead of
-/// decoding a prefix of it.
+/// Validate frame-level prerequisites for inter reconstruction. Warp eligibility
+/// is decided for each prediction and does not invalidate a legal frame.
 pub fn av1_inter_frame_supported(
   header : Av1FrameHeaderInfo,
   sequence : Av1SequenceInfo,
 ) -> Bool {
-  // `allow_intrabc` is deliberately absent: AV1 §6.8.2 reads that bit only
-  // under `if ( FrameIsIntra )`, so it is never set on an inter frame and the
-  // check could not fire. Intra block copy is refused one level up, where the
-  // frame is actually decoded (`av1_frame_planes`).
-  //
-  // `allow_screen_content_tools` used to be listed here too. On an inter frame
-  // it only derives `force_integer_mv`, which the MV reader already handles,
-  // plus the palette syntax of `intra_block_mode_info` for intra blocks inside
-  // the frame; both paths are implemented and pinned by
-  // `inter_screen_content_64x64` and `inter_palette_64x64`.
-  // `allow_warped_motion` used to be listed here. It is gone because the
-  // three-symbol `motion_mode` branch it selects is now read correctly:
-  // `find_warp_samples` decides the branch, and a block that picks LOCALWARP is
-  // refused by `av1_read_motion_mode` rather than decoded with a warp this
-  // decoder does not have. `inter_warped_64x64` pins both halves.
-  // `use_ref_frame_mvs` used to be listed here as well. It is gone because
-  // `motion_field_estimation` (§7.9.1) projects each reference's saved vectors
-  // onto this frame's 8x8 grid before the tiles are decoded, and
-  // `av1_temporal_scan` (§7.10.2.5) pushes them onto the candidate stack.
-  // `inter_temporalmv_64x64` pins the whole chain: with the scan disabled the
-  // same stream is refused rather than decoded.
-  //
-  // `enable_masked_compound` used to refuse the frame wholesale. It is gone
-  // now that `read_compound_type` reads `comp_group_idx`, `compound_type`,
-  // `wedge_index`/`wedge_sign` or `mask_type`, and the block stage can blend
-  // either a difference weighting (§7.11.3.12) or a wedge mask (§7.11.3.11).
-  // `inter_diffwtd_64x64` pins the difference weighting sample-exact against
-  // dav1d; the wedge variant's mask table is pinned against dav1d's generated
-  // `WedgeMasks` by `av1_wedge_mask_wbtest.mbt`.
-  //
-  // Global motion is read for every reference of an inter frame, and a
-  // translation model is a plain block motion vector: `av1_setup_global_mv`
-  // derives it and a GLOBAL(Global)MV block takes it from the stack, so those
-  // frames decode. A rotate-zoom or affine model drives the block through the
-  // per-pixel warp grid instead (see `av1_warp_predict`, which LOCALWARP also
-  // uses), so the model has to be representable by that grid: a pure shear is
-  // not, and neither is one whose coefficients the grid clips, which is what
-  // `av1_warp_shear_params` reports. `inter_globalmv_64x64` pins the
-  // translation form; the other forms need a stream that signals one.
-  if !header.frame_is_intra && header.tile_payload.is_empty() {
-    return false
-  }
-  for index in 0..<header.gm_type.length() {
-    let typ = header.gm_type[index]
-    if typ <= av1_gm_translation {
-      continue
-    }
-    // A translation model is a plain block motion vector. A rotate-zoom or
-    // affine model drives the block through the warp grid instead (see
-    // `av1_warp_predict`, which LOCALWARP also uses), which needs the model to
-    // be representable on that grid: `av1_warp_shear_params` reports the
-    // shears and the clipped coefficients that are not, and an integer-motion
-    // frame never takes the grid at all.
-    if header.force_integer_mv != 0 {
-      return false
-    }
-    let coefficients : Array[Int] = [0, 0, 0, 0]
-    if av1_warp_shear_params(header.gm_params[index], coefficients) {
-      return false
-    }
-  }
-  true
+  // AV1 7.11.3.1 derives useWarp per prediction. Integer-motion frames and
+  // legal global models failing the shear limits select ordinary MC; those
+  // conditions do not invalidate the frame. Both single and compound paths
+  // already apply that choice before their final rounding and blending.
+  header.frame_is_intra || !header.tile_payload.is_empty()
 }

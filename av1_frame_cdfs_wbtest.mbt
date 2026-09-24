@@ -94,10 +94,10 @@ test "the reset leaves the adapted probabilities in place" {
 }
 
 ///|
-test "a frame that cannot update its context keeps the previous one" {
-  // `disable_frame_end_update_cdf` leaves the frame context alone, so a slot
-  // refreshed by such a frame keeps the earlier (already counter-free)
-  // snapshot instead of this frame's rows. The patch in
+test "a frame that cannot update its context keeps its initial rows" {
+  // `disable_frame_end_update_cdf` saves the context this frame started with,
+  // selected from its primary reference or this frame's normative defaults,
+  // rather than this tile's adapted rows. The patch in
   // `inter_primary_ref_64x64` freezes its key frame this way, which is what
   // makes that fixture's inter frame inherit the defaults.
   let map = av1_frame_map()
@@ -126,6 +126,6 @@ test "a frame that cannot update its context keeps the previous one" {
       for counter in av1_cdf_test_counters(snapshot) {
         assert_eq(counter, 0)
       }
-    None => ()
+    None => fail("inter_primary_ref_64x64: frozen frame context missing")
   }
 }

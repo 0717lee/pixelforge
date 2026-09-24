@@ -158,12 +158,22 @@ pub fn av1_motion_field_estimation(
     w8,
     h8,
   }
-  // Projecting LAST is only a validity probe here; its output is discarded, so
-  // the call's effect on the grid does not matter, only whether the guard
-  // passes.
-  let _ = av1_project_mvs(
-    grid, sequence, av1_last_frame, -1, order_hint, order_hints, refs, mi_cols, mi_rows,
-  )
+  // An ALTREF-of-LAST that is this frame's GOLDEN identifies the overlay
+  // case: AV1 §7.9.1 excludes LAST's motion field from temporal projection.
+  // Only the boolean return of project_mvs is discarded; its grid writes are
+  // the operation's result and must not occur when useLast is false.
+  match av1_inter_reference_by_name(refs, av1_last_frame) {
+    Some(last) =>
+      if last.saved_order_hints.length() > av1_alt_ref_frame &&
+        last.saved_order_hints[av1_alt_ref_frame] !=
+        order_hints[av1_golden_frame] {
+        let _ = av1_project_mvs(
+          grid, sequence, av1_last_frame, -1, order_hint, order_hints, refs, mi_cols,
+          mi_rows,
+        )
+      }
+    None => ()
+  }
   let mut stamp = av1_mv_stack_stamp
   if av1_relative_dist(sequence, order_hints[av1_bwd_ref_frame], order_hint) > 0 {
     if av1_project_mvs(

@@ -232,7 +232,7 @@ fn avif_grid_properties_match(
       return false
     }
     let mut first : (Int, Int, Int, Bool)? = None
-    let mut color : (Bool, Int)? = None
+    let mut color : (Bool, Int, Int, Int, Bool, Bool)? = None
     for tile in descriptor.tiles {
       let ti = aux_item_index(items, tile.item_id)
       if ti < 0 {
@@ -240,16 +240,6 @@ fn avif_grid_properties_match(
       }
       let info = aux_image_info(items[ti], props)
       if info.0 < 64 || info.1 < 64 {
-        return false
-      }
-      // MIAF grids align both cell and output edges to chroma samples.
-      // The currently supported color sequence path is 4:2:0.
-      if !info.3 &&
-        (
-          (info.0 | info.1 | descriptor.output_width | descriptor.output_height) &
-          1
-        ) !=
-        0 {
         return false
       }
       match first {
@@ -266,16 +256,43 @@ fn avif_grid_properties_match(
         Some(value) => value
         None => return false
       }
-      if (
-          sequence.width,
-          sequence.height,
-          sequence.bit_depth,
-          sequence.monochrome,
-        ) !=
-        info {
+      if info.0 > sequence.width ||
+        info.1 > sequence.height ||
+        sequence.bit_depth != info.2 ||
+        sequence.monochrome != info.3 {
         return false
       }
-      let tile_color = (sequence.full_range, sequence.matrix_coefficients)
+      // MIAF aligns edges only along axes that are chroma-subsampled.
+      if !sequence.monochrome &&
+        (
+          (
+            sequence.subsampling_x &&
+            ((info.0 | descriptor.output_width) & 1) != 0
+          ) ||
+          (
+            sequence.subsampling_y &&
+            ((info.1 | descriptor.output_height) & 1) != 0
+          )
+        ) {
+        return false
+      }
+      for ai in items[ti].props {
+        if ai > 0 && props[ai - 1].kind == aux_t_av1c {
+          let flags = props[ai - 1].data[2].to_int()
+          if ((flags & 8) != 0) != sequence.subsampling_x ||
+            ((flags & 4) != 0) != sequence.subsampling_y {
+            return false
+          }
+        }
+      }
+      let tile_color = (
+        sequence.full_range,
+        sequence.matrix_coefficients,
+        sequence.color_primaries,
+        sequence.transfer_characteristics,
+        sequence.subsampling_x,
+        sequence.subsampling_y,
+      )
       match color {
         None => color = Some(tile_color)
         Some(previous) => if previous != tile_color { return false }

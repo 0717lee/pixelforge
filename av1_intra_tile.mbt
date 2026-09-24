@@ -1,3 +1,4 @@
+
 ///|
 /// One tile-local reconstructed plane and its coefficient neighbours. Pixels
 /// include the AV1 MI padding; the visible frame rectangle is cropped only
@@ -66,6 +67,8 @@ priv struct Av1IntraState {
   base_q_idx : Int
   /// Per-plane quantizer deltas; the dequant reads the plane's own index.
   quant_deltas : Av1QuantDeltas
+  quant_matrix : Av1QuantMatrix?
+  intrabc : Av1IntrabcState?
   /// Chroma subsampling shifts (0 or 1). Plane geometry, chroma block
   /// positions and the coefficient contexts all derive from them.
   sub_x : Int
@@ -94,6 +97,10 @@ priv struct Av1IntraState {
   /// what `get_cur_frame_segid` predicts the next block from, so it is written
   /// over the block's full 4x4 footprint exactly as `skips` is.
   seg_ids : Array[Int]
+  previous_seg_ids : Array[Int]
+  seg_pred_flags : Array[Int]
+  seg_pred_cdfs : Array[Array[Int]]
+  mut segment_id : Int
   /// The parsed `segmentation_params` of the frame being decoded; empty when
   /// the frame disabled segmentation.
   segmentation : Av1SegmentationParams
@@ -102,6 +109,9 @@ priv struct Av1IntraState {
   /// own q_category, as libdav1d's per-tile initialisation does; this index is
   /// the one the dequantisation reads.
   mut seg_q_idx : Int
+  /// Segment quantizer for syntax and LosslessArray: frame base plus ALT_Q,
+  /// deliberately ignoring this superblock's delta-Q (get_qindex(1, seg_id)).
+  mut seg_syntax_q_idx : Int
   /// This superblock's quantizer index: the frame's base index accumulated with
   /// the per-superblock `delta_q` symbols (AV1 §6.10.10), clipped as libdav1d's
   /// `last_qidx` is. Block indices build on it.
@@ -113,8 +123,13 @@ priv struct Av1IntraState {
   delta_q_res : Int
   /// The per-superblock `delta_q` symbol's row, adapted tile-wide.
   delta_q : Array[Int]
-  /// This block's lossless flag: the frame is lossless and this segment's
-  /// quantizer index is still zero.
+  delta_lf_present : Bool
+  delta_lf_res : Int
+  delta_lf_multi : Bool
+  delta_lf_cdfs : Array[Array[Int]]
+  sb_lf_deltas : Array[Int]
+  lf_deltas : Array[Int]
+  /// This segment's lossless flag, independent of the superblock delta-Q.
   mut seg_lossless : Bool
   /// Inter-frame block state, or None for an intra frame whose leaf reads the
   /// intra syntax directly.
@@ -170,6 +185,16 @@ fn av1_intra_state(
   /// quantizer delta and the log2 scale those deltas carry.
   delta_q_present? : Bool = false,
   delta_q_res? : Int = 0,
+  quant_matrix? : Av1QuantMatrix? = None,
+  allow_intrabc? : Bool = false,
+  frame_mi_cols? : Int = 0,
+  frame_mi_rows? : Int = 0,
+  tile_col? : Int = 0,
+  tile_row? : Int = 0,
+  previous_seg_ids? : Array[Int] = [],
+  delta_lf_present? : Bool = false,
+  delta_lf_res? : Int = 0,
+  delta_lf_multi? : Bool = false,
 ) -> Av1IntraState {
   let filter_intra : Array[Array[Int]] = []
   for
@@ -218,6 +243,29 @@ fn av1_intra_state(
     planes,
     base_q_idx,
     quant_deltas,
+    quant_matrix,
+    intrabc: if allow_intrabc {
+      Some(
+        av1_intrabc_state(
+          width,
+          height,
+          frame_mi_cols=if frame_mi_cols > 0 {
+            frame_mi_cols
+          } else {
+            width / 4
+          },
+          frame_mi_rows=if frame_mi_rows > 0 {
+            frame_mi_rows
+          } else {
+            height / 4
+          },
+          tile_col~,
+          tile_row~,
+        ),
+      )
+    } else {
+      None
+    },
     sub_x,
     sub_y,
     bit_depth,
@@ -237,15 +285,30 @@ fn av1_intra_state(
     vartx: av1_vartx_cdf_state(),
     seg_id: av1_seg_id_cdfs(),
     seg_ids: Array::make(width / 4 * (height / 4), 0),
+    previous_seg_ids,
+    seg_pred_flags: Array::make(width / 4 * (height / 4), 0),
+    seg_pred_cdfs: Array::makei(3, _ => [16384, 32768, 0]),
+    segment_id: 0,
     segmentation: match segmentation {
       Some(params) => params
       None => av1_segmentation_empty()
     },
     seg_q_idx: base_q_idx,
+    seg_syntax_q_idx: base_q_idx,
     sb_q_idx: base_q_idx,
-    delta_q_present: delta_q_present,
-    delta_q_res: delta_q_res,
+    delta_q_present,
+    delta_q_res,
     delta_q: av1_delta_q_cdf(),
+    delta_lf_present,
+    delta_lf_res,
+    delta_lf_multi,
+    delta_lf_cdfs: Array::makei(5, _ => av1_delta_q_cdf()),
+    sb_lf_deltas: [0, 0, 0, 0],
+    lf_deltas: if delta_lf_present {
+      Array::make(width / 4 * (height / 4) * 4, 0)
+    } else {
+      []
+    },
     seg_lossless: base_q_idx == 0 && av1_quant_deltas_lossless(quant_deltas),
     inter,
     current: None,
@@ -383,7 +446,7 @@ fn av1_at_superblock_origin(
   mi_col : Int,
 ) -> Bool {
   let sb_size = state.superblock_size
-  (mi_col * 4) % sb_size == 0 && (mi_row * 4) % sb_size == 0
+  mi_col * 4 % sb_size == 0 && mi_row * 4 % sb_size == 0
 }
 
 ///|
@@ -417,15 +480,42 @@ fn av1_read_segment_id(
   avail_l : Bool,
   skip : Int,
   preskip : Bool,
+  width4? : Int = 1,
+  height4? : Int = 1,
 ) -> Int {
   let params = state.segmentation
-  if !params.enabled || !params.update_map {
+  if !params.enabled {
     return -1
   }
-  if params.temporal_update {
-    // The temporal prediction reads the previous frame's segment map, which
-    // this decoder does not keep; such a frame is refused one level up.
-    return -1
+  if state.inter is Some(_) && !params.update_map {
+    return av1_segment_previous_id(state, mi_row, mi_col, width4, height4)
+  }
+  if state.inter is Some(_) && params.temporal_update {
+    let context = (if avail_u && mi_row > 0 {
+        state.seg_pred_flags[(mi_row - 1) * state.cols + mi_col]
+      } else {
+        0
+      }) +
+      (if avail_l && mi_col > 0 {
+        state.seg_pred_flags[mi_row * state.cols + mi_col - 1]
+      } else {
+        0
+      })
+    let predicted = if !preskip && skip == 1 {
+      0
+    } else {
+      decoder.symbol(state.seg_pred_cdfs[context])
+    }
+    for y in mi_row..<(mi_row + height4) {
+      for x in mi_col..<(mi_col + width4) {
+        if y < state.rows && x < state.cols {
+          state.seg_pred_flags[y * state.cols + x] = predicted
+        }
+      }
+    }
+    if predicted == 1 {
+      return av1_segment_previous_id(state, mi_row, mi_col, width4, height4)
+    }
   }
   // The predicted id and the context come from the same three neighbours:
   // above, left, and above-left of this block's top-left corner.
@@ -456,7 +546,11 @@ fn av1_read_segment_id(
     0
   }
   let predicted = if avail_u && avail_l {
-    if above == topleft { above } else { left }
+    if above == topleft {
+      above
+    } else {
+      left
+    }
   } else if avail_l {
     left
   } else if avail_u {
@@ -498,43 +592,28 @@ fn av1_seg_neg_deinterleave(diff : Int, ref : Int, max : Int) -> Int {
     } else {
       diff
     }
-  } else {
-    if diff <= 2 * (max - ref - 1) {
-      if (diff & 1) != 0 {
-        ref + ((diff + 1) >> 1)
-      } else {
-        ref - (diff >> 1)
-      }
+  } else if diff <= 2 * (max - ref - 1) {
+    if (diff & 1) != 0 {
+      ref + ((diff + 1) >> 1)
     } else {
-      max - (diff + 1)
+      ref - (diff >> 1)
     }
+  } else {
+    max - (diff + 1)
   }
 }
 
 ///|
-/// This block's quantizer index: the frame's base index plus the segment's
+/// This block's dequantizer index: the superblock's index plus the segment's
 /// ALT_Q feature, clamped to the 8-bit index range (AV1 §6.10.9).
 fn av1_seg_block_qindex(state : Av1IntraState, seg_id : Int) -> Int {
-  let params = state.segmentation
-  let base = state.sb_q_idx
-  if !params.enabled || seg_id < 0 || seg_id >= av1_segments {
-    return base
-  }
-  let delta = params.feature_data[seg_id][av1_seg_level_alt_q]
-  let value = base + delta
-  if value < 0 {
-    0
-  } else if value > 255 {
-    255
-  } else {
-    value
-  }
+  av1_segment_qindex(state.sb_q_idx, state.segmentation, seg_id)
 }
 
 ///|
 /// Apply this block's segment: its quantizer index, its lossless flag and the
-/// record later blocks predict their segment id from. Does nothing when the
-/// frame does not write the segment map.
+/// record later blocks predict their segment id from. Only the neighbour-map
+/// write depends on update_map; quantization always follows the active segment.
 fn av1_seg_apply_block(
   state : Av1IntraState,
   mi_row : Int,
@@ -543,14 +622,34 @@ fn av1_seg_apply_block(
   height4 : Int,
   seg_id : Int,
 ) -> Unit {
+  state.segment_id = if seg_id < 0 { 0 } else { seg_id }
+  if state.delta_lf_present {
+    for row in mi_row..<(mi_row + height4) {
+      for col in mi_col..<(mi_col + width4) {
+        if row >= 0 && row < state.rows && col >= 0 && col < state.cols {
+          for k in 0..<4 {
+            state.lf_deltas[(row * state.cols + col) * 4 + k] = state.sb_lf_deltas[k]
+          }
+        }
+      }
+    }
+  }
   if seg_id < 0 {
     state.seg_q_idx = state.sb_q_idx
-    state.seg_lossless = av1_frame_lossless_flag(state) && state.seg_q_idx == 0
+    state.seg_syntax_q_idx = state.base_q_idx
+    state.seg_lossless = state.seg_syntax_q_idx == 0 &&
+      av1_quant_deltas_lossless(state.quant_deltas)
     return
   }
   state.seg_q_idx = av1_seg_block_qindex(state, seg_id)
-  state.seg_lossless = av1_frame_lossless_flag(state) && state.seg_q_idx == 0
-  if state.segmentation.enabled && state.segmentation.update_map {
+  state.seg_syntax_q_idx = av1_segment_qindex(
+    state.base_q_idx,
+    state.segmentation,
+    seg_id,
+  )
+  state.seg_lossless = state.seg_syntax_q_idx == 0 &&
+    av1_quant_deltas_lossless(state.quant_deltas)
+  if state.segmentation.enabled {
     for row in mi_row..<(mi_row + height4) {
       if row < 0 || row >= state.rows {
         continue
@@ -563,14 +662,6 @@ fn av1_seg_apply_block(
       }
     }
   }
-}
-
-///|
-/// The frame's own lossless flag, which a segment ALT_Q feature can only keep
-/// or lose, never restore: it is the base index being zero with every
-/// quantizer delta zero (AV1 §5.9.14, §6.10.9).
-fn av1_frame_lossless_flag(state : Av1IntraState) -> Bool {
-  state.base_q_idx == 0 && av1_quant_deltas_lossless(state.quant_deltas)
 }
 
 ///|
@@ -605,7 +696,7 @@ fn av1_intra_tx_type(
     },
     direction,
     state.reduced_tx_set,
-    state.seg_q_idx,
+    state.seg_syntax_q_idx,
   )
 }
 
@@ -694,7 +785,7 @@ fn av1_intra_transform(
   if all_zero == 0 {
     let tx_type = if plane_index == 0 {
       if inter {
-        match state.inter {
+        match av1_block_motion_info(state) {
           Some(info) =>
             av1_inter_luma_tx_type(
               decoder, state, info, tx_width, tx_height, x4, y4,
@@ -710,7 +801,7 @@ fn av1_intra_transform(
     } else if inter {
       match state.current {
         Some(current) => {
-          let info = match state.inter {
+          let info = match av1_block_motion_info(state) {
             Some(value) => value
             None => return false
           }
@@ -758,6 +849,10 @@ fn av1_intra_transform(
         bit_depth=state.bit_depth,
         height=tx_height,
         scan_class=av1_tx_scan_class(tx_type),
+        quant_matrix=state.quant_matrix,
+        plane=plane_index,
+        tx_type~,
+        lossless=state.seg_lossless,
         dc_sign_ctx=if dc_sign < 0 { 1 } else if dc_sign > 0 { 2 } else { 0 },
         dc_q_idx=av1_plane_qindex(
           state.seg_q_idx,
@@ -795,7 +890,7 @@ fn av1_intra_transform(
   } else if inter && plane_index == 0 {
     // An all-zero luma transform still records DCT_DCT, because the block's
     // chroma transforms inherit it (AV1 §5.11.39).
-    match state.inter {
+    match av1_block_motion_info(state) {
       Some(info) =>
         av1_inter_record_tx_types(
           info.field,
@@ -962,6 +1057,8 @@ fn av1_intra_transform(
         plane_index,
         state.y_modes,
         state.uv_modes,
+        sub_x=state.sub_x,
+        sub_y=state.sub_y,
       ) {
       Some(value) => value
       None => return false
@@ -1407,6 +1504,22 @@ fn av1_intra_only_block(
   let x4 = block.col / 4
   let y4 = block.row / 4
   let has_chroma = av1_intra_has_chroma(state, block)
+  let mut seg_id = if state.segmentation.seg_id_pre_skip {
+    av1_read_segment_id(
+      decoder,
+      state,
+      y4,
+      x4,
+      y4 > 0,
+      x4 > 0,
+      0,
+      true,
+      width4=block.width / 4,
+      height4=block.height / 4,
+    )
+  } else {
+    -1
+  }
   let mut skip_context = 0
   if y4 > 0 {
     skip_context = skip_context + state.skips[(y4 - 1) * state.cols + x4]
@@ -1414,18 +1527,30 @@ fn av1_intra_only_block(
   if x4 > 0 {
     skip_context = skip_context + state.skips[y4 * state.cols + x4 - 1]
   }
-  let skip = decoder.symbol(state.skip_cdfs[skip_context])
+  let skip = if av1_segment_feature(state.segmentation, seg_id, 6) {
+    1
+  } else {
+    decoder.symbol(state.skip_cdfs[skip_context])
+  }
   if skip != 0 && skip != 1 {
     return false
   }
   // `read_segment_id` sits between skip and the CDEF index (AV1 §5.11.13), and
   // the segment it names decides the block's quantizer index from here on.
-  if state.segmentation.enabled && state.segmentation.seg_id_pre_skip {
-    return false
+  if !state.segmentation.seg_id_pre_skip {
+    seg_id = av1_read_segment_id(
+      decoder,
+      state,
+      y4,
+      x4,
+      y4 > 0,
+      x4 > 0,
+      skip,
+      false,
+      width4=block.width / 4,
+      height4=block.height / 4,
+    )
   }
-  let seg_id = av1_read_segment_id(
-    decoder, state, y4, x4, y4 > 0, x4 > 0, skip, false,
-  )
   if !av1_intra_cdef_index(decoder, state, block, skip) {
     return false
   }
@@ -1433,12 +1558,30 @@ fn av1_intra_only_block(
   // a whole-superblock block that is skipped is the one case dav1d does not
   // read it for.
   if av1_at_superblock_origin(state, y4, x4) &&
-    !(skip == 1 && av1_superblock_block_is_whole(block.width, block.height, state.superblock_size)) {
+    !(skip == 1 &&
+    av1_superblock_block_is_whole(
+      block.width,
+      block.height,
+      state.superblock_size,
+    )) {
     av1_read_superblock_delta_q(decoder, state)
+    av1_read_superblock_delta_lf(decoder, state)
   }
   // The segment's ALT_Q builds on this superblock's index, so the block's
   // quantizer index is settled after the delta, not before it.
   av1_seg_apply_block(state, y4, x4, block.width / 4, block.height / 4, seg_id)
+  match state.intrabc {
+    Some(ibc) =>
+      match decoder.symbol(ibc.use_cdf) {
+        0 => ()
+        1 =>
+          return av1_intrabc_block(
+            decoder, state, ibc, block, block_index, skip,
+          )
+        _ => return false
+      }
+    None => ()
+  }
   let above_mode = if y4 > 0 {
     state.y_modes[(y4 - 1) * state.cols + x4]
   } else {
@@ -1465,7 +1608,7 @@ fn av1_intra_only_block(
     // is_cfl_allowed differs for lossless: only a 4x4 chroma residual block
     // may use CfL, even when the luma coding block is below 32 pixels.
     let cfl_allowed = if state.seg_lossless {
-      block.width <= 8 && block.height <= 8
+      block.width <= 4 << state.sub_x && block.height <= 4 << state.sub_y
     } else {
       block.width <= 32 && block.height <= 32
     }
@@ -1566,6 +1709,13 @@ fn av1_intra_only_block(
     luma_tx_width,
     luma_tx_height,
   )
+  match state.intrabc {
+    Some(ibc) =>
+      av1_intrabc_record(
+        ibc, block, false, 0, 0, skip, luma_tx_width, luma_tx_height,
+      )
+    None => ()
+  }
   true
 }
 
@@ -1631,6 +1781,14 @@ fn av1_decode_intra_tile_state(
   /// table with the normative defaults (a frame whose primary reference
   /// names no slot, or `PRIMARY_REF_NONE`).
   frame_cdfs? : Av1FrameCdfs? = None,
+  quant_matrix? : Av1QuantMatrix? = None,
+  allow_intrabc? : Bool = false,
+  frame_mi_cols? : Int = 0,
+  frame_mi_rows? : Int = 0,
+  previous_seg_ids? : Array[Int] = [],
+  delta_lf_present? : Bool = false,
+  delta_lf_res? : Int = 0,
+  delta_lf_multi? : Bool = false,
   /// When present, the tile's final entropy state is captured here, so the
   /// caller can store it as the frame context (AV1 §8.3).
   cdfs_out? : Array[Av1FrameCdfs?]? = None,
@@ -1647,7 +1805,12 @@ fn av1_decode_intra_tile_state(
   }
   match cdef {
     Some(config) =>
-      if base_q_idx == 0 || !av1_cdef_config_valid(config, monochrome~) {
+      if av1_frame_coded_lossless(
+          base_q_idx,
+          quant_deltas,
+          segmentation.unwrap_or(av1_segmentation_empty()),
+        ) ||
+        !av1_cdef_config_valid(config, monochrome~) {
         return None
       }
     None => ()
@@ -1678,6 +1841,16 @@ fn av1_decode_intra_tile_state(
     segmentation~,
     delta_q_present~,
     delta_q_res~,
+    quant_matrix~,
+    allow_intrabc~,
+    frame_mi_cols~,
+    frame_mi_rows~,
+    tile_col=tile_origin_col_mi,
+    tile_row=tile_origin_row_mi,
+    previous_seg_ids~,
+    delta_lf_present~,
+    delta_lf_res~,
+    delta_lf_multi~,
   )
   let neighbors = match
     av1_partition_neighbor_state(
@@ -1764,11 +1937,20 @@ fn av1_decode_intra_tile_state(
       }
     None => ()
   }
-  // The context_update_tile_id tile (tile 0) ends by writing its final rows
+  // The selected context_update_tile_id tile writes its final rows
   // into the frame context the next frame may inherit (AV1 §8.3).
   match cdfs_out {
     Some(sink) =>
-      sink.push(Some(av1_frame_cdfs_capture(state, cdfs, lr_tile_state)))
+      sink.push(
+        Some(
+          av1_frame_cdfs_capture(
+            state,
+            cdfs,
+            lr_tile_state,
+            inherited=frame_cdfs,
+          ),
+        ),
+      )
     None => ()
   }
   Some(state)
