@@ -37,6 +37,104 @@ test "metadata reads png and gif dimensions" {
 }
 
 ///|
+fn metadata_tiff_uint(
+  data : Array[Byte],
+  p : Int,
+  value : Int,
+  size : Int,
+  little : Bool,
+) -> Unit {
+  for i in 0..<size {
+    let index = if little { p + i } else { p + size - 1 - i }
+    data[index] = if i < 4 {
+      ((value >> (i * 8)) & 255).to_byte()
+    } else {
+      b'\x00'
+    }
+  }
+}
+
+///|
+fn metadata_tiff_fixture(big : Bool, little : Bool, kind : Int) -> Array[Byte] {
+  let header = if big { 16 } else { 8 }
+  let count_size = if big { 8 } else { 2 }
+  let entry_size = if big { 20 } else { 12 }
+  let next_size = if big { 8 } else { 4 }
+  let data = Array::make(
+    header + count_size + 2 * entry_size + next_size,
+    b'\x00',
+  )
+  data[0] = if little { b'I' } else { b'M' }
+  data[1] = data[0]
+  metadata_tiff_uint(data, 2, if big { 43 } else { 42 }, 2, little)
+  if big {
+    metadata_tiff_uint(data, 4, 8, 2, little)
+    metadata_tiff_uint(data, 8, header, 8, little)
+  } else {
+    metadata_tiff_uint(data, 4, header, 4, little)
+  }
+  metadata_tiff_uint(data, header, 2, count_size, little)
+  for i in 0..<2 {
+    let p = header + count_size + i * entry_size
+    metadata_tiff_uint(data, p, 256 + i, 2, little)
+    metadata_tiff_uint(data, p + 2, kind, 2, little)
+    metadata_tiff_uint(data, p + 4, 1, if big { 8 } else { 4 }, little)
+    metadata_tiff_uint(
+      data,
+      p + (if big { 12 } else { 8 }),
+      if i == 0 {
+        23
+      } else {
+        17
+      },
+      if kind == 3 {
+        2
+      } else if kind == 4 {
+        4
+      } else {
+        8
+      },
+      little,
+    )
+  }
+  data
+}
+
+///|
+test "TIFF metadata supports both byte orders and BigTIFF scalar dimension types" {
+  for little in [true, false] {
+    for big in [true, false] {
+      for kind in (if big { [3, 4, 16] } else { [3, 4] }) {
+        let data = metadata_tiff_fixture(big, little, kind)
+        assert_true(detect_image_format(data) is Some(Tiff))
+        let metadata = image_metadata(data).unwrap()
+        assert_eq((metadata.width, metadata.height), (23, 17))
+        assert_false(metadata.animated)
+        for length in 0..<data.length() {
+          assert_true(image_metadata(data[:length].to_owned()) is None)
+        }
+      }
+    }
+  }
+}
+
+///|
+test "BigTIFF metadata rejects invalid headers, overflowing offsets and nonscalar dimensions" {
+  let fixture = metadata_tiff_fixture(true, true, 16)
+  // Offset width, reserved bytes, first IFD high word, entry-count high word,
+  // dimension count and dimension high word must all be validated.
+  for change in [(4, 4), (6, 1), (12, 1), (20, 1), (28, 2), (40, 1)] {
+    let (position, value) = change
+    let data = fixture.copy()
+    data[position] = value.to_byte()
+    assert_true(image_metadata(data) is None)
+  }
+  let classic = metadata_tiff_fixture(false, true, 4)
+  metadata_tiff_uint(classic, 4, 2147483647, 4, true)
+  assert_true(image_metadata(classic) is None)
+}
+
+///|
 fn formats_test_join(parts : Array[Array[Byte]]) -> Array[Byte] {
   let result : Array[Byte] = []
   for part in parts {

@@ -1,0 +1,24 @@
+# Publish the library, host bindings and maintained documentation only.
+# Local reference trees and codec experiments must not enter the archive.
+/*
+!/.moonignore
+!/moon.mod
+!/moon.pkg
+!/*.mbt
+!/*.mbti
+!/README.md
+!/README.en.md
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/CODE_OF_CONDUCT.md
+!/SECURITY.md
+!/THIRD_PARTY_NOTICES.md
+!/HANDOFF.md
+!/LICENSE
+!/web/
+!/wasmcore/
+!/docs/
+!/scripts/
+!/verify-wasm.mjs
+!/serve.mjs
+__pycache__/

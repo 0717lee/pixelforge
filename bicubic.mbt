@@ -23,6 +23,7 @@ fn catmull_weights(t : Double) -> (Double, Double, Double, Double) {
 /// Bicubic (Catmull-Rom) resize to `new_width` x `new_height` (both clamped
 /// to at least 1). All four channels including alpha are interpolated; the
 /// cubic can overshoot near edges, so results are clamped back to 0..255.
+/// An empty source produces transparent pixels at the requested size.
 pub fn Image::resize_bicubic(
   self : Image,
   new_width : Int,
@@ -31,6 +32,9 @@ pub fn Image::resize_bicubic(
   let w = if new_width < 1 { 1 } else { new_width }
   let h = if new_height < 1 { 1 } else { new_height }
   let out = Image::new(w, h)
+  if self.width == 0 || self.height == 0 {
+    return out
+  }
   for y in 0..<h {
     let fy = (y.to_double() + 0.5) * self.height.to_double() / h.to_double() -
       0.5

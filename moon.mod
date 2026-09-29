@@ -1,6 +1,6 @@
 name = "0717lee/pixelforge"
 
-version = "0.18.0"
+version = "0.19.0"
 
 readme = "README.md"
 
@@ -25,14 +25,3 @@ import {
   "moonbitlang/x@0.5.1",
   "mizchi/image@0.4.3",
 }
-
-options(
-  exclude: [
-    "assets/",
-    "_screenshots/",
-    "cmd/",
-    "项目申报书*.md",
-    "申报*.md",
-    "*.pdf",
-  ],
-)

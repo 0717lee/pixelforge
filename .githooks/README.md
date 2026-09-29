@@ -2,7 +2,9 @@
 
 ## Pre-commit Hook
 
-This pre-commit hook performs automatic checks before finalizing your commit.
+This optional pre-commit hook runs `moon check` before finalizing a commit.
+It does not run tests or regenerate Web artifacts; complete the checks in
+[CONTRIBUTING.md](../CONTRIBUTING.md) before opening a pull request.
 
 ### Usage Instructions
 

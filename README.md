@@ -2,278 +2,144 @@
 
 [![CI](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml)
 
-[English](README.en.md) | 简体中文
+简体中文 | [English](README.en.md)
 
-当前功能与验证边界见 [开发交接](HANDOFF.md)。
+PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、几何变换、绘图、分析和编解码，以及 native CLI 和浏览器 Playground。核心支持 JavaScript、wasm-gc 和 native；Playground 另提供线性内存 WebAssembly 引擎。
 
-> 一个纯 [MoonBit](https://www.moonbitlang.cn/) 实现的图像处理库，附带一个在浏览器里实时运行的 Playground。
-> 后端无关的核心库可编译到 **JavaScript / WebAssembly (wasm-gc & 线性内存 wasm) / native**。
->
-> **版本与接口**：GitHub 保留 `v1.0.0` 稳定版标记；当前源码包版本为 `0.18.0`，以 `moon.mod` 为准。当前源码已移除 AV1/AVIF 像素解码接口，属于破坏性 API 变更；完整接口见 [接口文件](pkg.generated.mbti)，变更记录见 [CHANGELOG](CHANGELOG.md)。
+**当前版本为 `0.19.0`。** 本版移除了旧 AV1/AVIF 解析和像素解码接口，从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)。历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
-![PixelForge 浏览器 Playground](assets/playground-original.png)
+## 快速开始
 
-*同一界面一键切换 20+ 种滤镜与 JS / WebAssembly 双引擎——以 Sobel 边缘检测为例：*
-
-![Sobel 边缘检测](assets/playground-sobel.png)
-
----
-
-## ✨ 特性
-
-- **丰富的滤镜与几何变换**：灰度、反色、亮度、对比度、高斯/盒式模糊、锐化、浮雕、拉普拉斯/Sobel/Scharr/Canny 边缘、棕褐色、二值化、像素化、中值降噪、直方图均衡、色调分离、伽马校正、暗角、饱和度、色相旋转、水平/垂直翻转；另有 90° 旋转与最近邻/双线性/双三次 (Catmull-Rom) 缩放。
-- **形态学运算**：3×3 腐蚀 / 膨胀 / 开运算 / 闭运算。
-- **纹理描述**：`lbp_codes()` / `lbp_histogram()` 提供 8 邻域局部二值模式特征。
-- **高级特征**：`harris_corners()` 提供确定性的 Harris 角点检测与非极大值抑制。
-- **高级特征**：`hog()` 提供可配置 cell/block 的方向梯度直方图，`contours()` 提取阈值连通域边界像素，`skeletonize()` 使用有界 Zhang–Suen 细化生成骨架。
-- **流式遍历**：`for_each_tile()` / `for_each_row()` 提供不复制像素缓冲的分块与逐行访问；需要独立图像时再调用 tile 的 `copy()`。
-- **图像编解码**：PNG（支持 8-bit 灰度、灰度透明、调色板、RGB/RGBA 与 tRNS；自实现完整 DEFLATE inflate，编码端使用自适应行过滤和 fixed-Huffman 压缩，并校验 CRC-32/Adler-32）、GIF 编码/解码（单帧 GIF89a 编码、变长 LZW、交错、透明索引）、QOI、BMP 与 TIFF（多条带、分块、PackBits/LZW/Deflate、Predictor=2、有限 BigTIFF）解码；JPEG 编解码、WebP Lossless 编解码和 JS 目标 AVIF 编码通过纯 MoonBit/`mizchi/image` 适配。
-- **WebP Lossless**：纯 MoonBit VP8L 解码覆盖 LZ77、色彩缓存、空间变化 Huffman 分组，以及 Predictor、Cross-Color、Subtract Green 和 Color Indexing 变换。
-- **AVIF 浏览器支持**：Playground 加载 AVIF 依赖浏览器原生图片解码能力；浏览器专用的 AVIF 编码适配仍保留。像素库不包含 AV1 解码器，native CLI 不提供 AVIF 像素转换。
-- **GIF 动画帧**：`gif_decode_all()` 返回每帧图像、位置、延迟、透明索引和 disposal 元数据；`gif_decode()` 继续提供首帧便捷 API。Playground 上传 GIF 时保留浏览器动画预览，编辑管线仍以首帧作为像素输入。
-- **格式探测**：`detect_image_format()` 与 `image_metadata()` 可在不解码像素的情况下识别 PNG/GIF/QOI/BMP/JPEG/WebP/AVIF/TIFF，并读取常见容器的尺寸与 GIF 动画标记。
-- **仿射变换**：`Affine` 矩阵（旋转/平移/缩放/错切 + 复合 + 求逆），逆映射双线性采样；任意角度 `rotate(degrees)`。
-- **绘图原语**：Bresenham 直线、矩形、中点圆、填充，全部自动边界裁剪。
-- **可分离高斯模糊**：`gaussian(radius)` 任意半径，二项式权重行列分离，每像素 O(r) 而非 O(r²)。
-- **锐化蒙版**：`unsharp_mask(radius, amount)` 复用高斯模糊提取高频细节并回叠，锐化边缘。
-- **裁剪与填充**：`crop(x, y, w, h)`（自动限幅）与 `pad(l, t, r, b, color)`（颜色边框），`crop∘pad` 可无损往返。
-- **双边滤波**：`bilateral(radius, σs, σr)` 保边平滑——平坦区域降噪，强边缘保持锐利。
-- **图像分析**：Otsu 自动阈值（类间方差最大化）、Floyd–Steinberg 误差扩散抖动、四连通连通域标记与计数、chamfer (3,4) 距离变换、感知哈希（aHash/dHash + 汉明距离）。
-- **积分图与 O(1) 盒式模糊**：`integral_image()` 求和面积表（Int64 防溢出）驱动 `box_blur(radius)`，任意半径每像素 O(1)。
-- **泛洪填充**：`flood_fill(x, y, color, tolerance)` 四连通种子填充，逐通道容差。
-- **图层合成**：`composite(top, mode)` Porter-Duff source-over + 8 种混合模式（正片叠底/滤色/叠加/变暗/变亮/差值/线性减淡等），纯整数舍入运算。
-- **位图文字**：内置 5×7 字体（数字/大写字母/基本标点），`draw_text` 整数倍缩放、自动裁剪。
-- **色彩空间**：RGB ↔ HSV、RGB ↔ HSL（含 `adjust_lightness`）、RGB ↔ YCbCr (BT.601) 精确往返转换。
-- **直方图**：`histogram_luma()` / `histogram_rgb()` 256 桶统计；Playground 内置实时亮度直方图面板。
-- **通用卷积引擎**：`Kernel` + `Image::convolve`，可自定义任意奇数尺寸卷积核。
-- **图像统计与色调**：`stats()` 逐通道 min/max/mean（Int64 累加）、`auto_contrast()` 自动对比度拉伸、`levels(black, white, gamma)` 色阶重映射。
-- **确定性噪声**：`add_gaussian_noise(seed, σ)` / `add_salt_pepper(seed, density)`，64 位 LCG 驱动，同 seed 跨后端逐字节一致。
-- **图像质量指标**：`mse()` / `psnr()` 比较 RGBA 四通道；`luma_mse()` / `ssim()` 使用 Rec.601 亮度并忽略 alpha。
-- **局部阈值与区域统计**：`sauvola()` / `adaptive_mean()` 使用积分图处理局部窗口；`regionprops()` 返回连通域面积、边界框和质心。
-- **纯整数、确定性**：滤镜数学尽量用整数（如亮度权重 ×1000），结果可复现；测试覆盖正常、边界和畸形输入（含 CRC-32/Adler-32 公开参考向量与手工汇编的 DEFLATE 位流）。
-- **纯 MoonBit 核心处理**：图像处理算子使用 `moonbitlang/core`；部分格式适配使用 `mizchi/image`，native CLI 的文件模式使用官方 `moonbitlang/x/fs`。
-- **多后端 + 零拷贝互操作**：js 后端下 `FixedArray[Byte]` 就是 `Uint8Array`，与 canvas 的 `Uint8ClampedArray` 零拷贝互通；线性内存 wasm 后端导出 `memory`，宿主直接批量读写像素。
-- **浏览器 Playground**：拖拽 / 粘贴 / 上传图片，GIF 保持动画预览，滤镜可叠加成管线，JS/WASM 引擎切换与性能对比，可切换到 **Web Worker 后台线程**处理大图不卡 UI，处理结果用**自家 `png_encode`** 一键下载 PNG。
-
-### AVIF 支持边界
-
-`detect_image_format()` 与 `image_metadata()` 可识别 AVIF 容器并读取支持的尺寸信息，不解码像素。native CLI 的 `info` 以 metadata 模式报告 AVIF；`convert` 不支持 AVIF 输入或输出。Playground 加载 AVIF 依赖浏览器原生支持，浏览器专用编码适配单独保留。像素库不包含 AV1 解码器、AVIF 网格合成或动画解码接口。
-
-尺寸探测读取主图关联的 `ispe` 属性；只有轨道而无主图尺寸的序列暂不支持。
-
-## 🆚 与 MoonBit 生态中其他图像库的关系
-
-MoonBit 生态中已经存在若干方向相近的图像处理包（如 `megemini/millow`、`PingGuoMiaoMiao/MoonVision`、`shunge/image` 等）。PixelForge 与它们在基础滤镜上不可避免地有重叠（模糊、边缘检测、阈值等是所有图像库的共同基础能力，且本库的实现全部独立手写、以确定性测试驱动），但**定位与核心能力有明显差异**：
-
-| 现有项目 | 定位 | 与 PixelForge 的差异 |
-| --- | --- | --- |
-| `megemini/millow` | 更广的计算机视觉算法库（增强、轮廓/区域特征、HOG/LBP、SSIM 等） | 侧重 CV 算法；PixelForge 侧重零依赖、多后端编解码和浏览器交互 |
-| `PingGuoMiaoMiao/MoonVision` | 轻量图像处理 + 基础 CV（灰度图为主、模板匹配） | 侧重灰度图像处理；不提供 RGBA 全彩编解码、绘图/文字、噪声与哈希 |
-| `shunge/image` | 纯解码器（BMP/QOI/TGA/PNG/GIF/JPEG 六格式解码） | 仅解码；不提供滤镜、编码、绘图与分析能力 |
-
-**PixelForge 当前重点打磨的能力**：
-
-- **编解码器广度**：PNG（自实现完整 DEFLATE inflate + CRC-32/Adler-32 校验）、QOI、BMP 的**编+解**与 GIF 解码，全部纯 MoonBit 实现
-- **浏览器 Playground**：JS/WASM 双引擎实时对比、Web Worker 后台线程、实时亮度直方图面板、用自家 `png_encode` 下载结果
-- **位图字体**：内置 5×7 字体 `draw_text`，可直接在图像上排版文字
-- **感知哈希**：aHash / dHash + 汉明距离，图像去重与相似度检索
-- **确定性噪声**：64 位 LCG 驱动的高斯 / 椒盐噪声，同 seed 跨后端逐字节重现，配合中值/双边滤波形成降噪演示闭环
-- **图像统计与色调**：逐通道 min/max/mean、auto_contrast、levels 色阶
-- **工程透明度**：13 个版本的完整演进记录、双语文档、CI 端到端冒烟测试
-
-如果您的项目在 `mooncakes.io` 上看到本库，可通过 `moon add 0717lee/pixelforge` 直接使用；也希望本库的编解码器与 Playground 实现能为生态提供参考。
-
-## 📦 项目结构
-
-```
-pixelforge/
-├── image.mbt              # Image 数据结构、像素读写、clamp_byte
-├── filters_basic.mbt      # map_rgb 引擎 + 灰度/反色/亮度/对比度
-├── convolution.mbt        # Kernel + convolve + 模糊/锐化/浮雕/边缘/Sobel/Scharr
-├── filters_advanced.mbt   # 棕褐色/二值化/像素化/中值/直方图均衡/色调分离
-├── filters_effects.mbt    # 伽马校正/暗角
-├── colorspace.mbt         # RGB↔HSV、RGB↔YCbCr、饱和度/色相旋转
-├── morphology.mbt         # 3×3 腐蚀/膨胀/开/闭运算
-├── canny.mbt              # Canny 边缘检测（NMS + 滞后阈值）
-├── affine.mbt             # 仿射变换（旋转/平移/缩放/错切，逆映射采样）
-├── drawing.mbt            # 绘图原语（Bresenham 直线/矩形/圆/填充）
-├── gaussian.mbt           # 可分离高斯模糊（任意半径，二项式权重）
-├── unsharp.mbt            # 锐化蒙版（复用高斯）
-├── croppad.mbt            # 裁剪 / 颜色边框填充
-├── integral.mbt           # 积分图（SAT）+ O(1) 盒式模糊
-├── floodfill.mbt          # 泛洪填充（四连通种子填充）
-├── distance.mbt           # chamfer (3,4) 距离变换
-├── stats.mbt              # 图像统计 / 自动对比度 / 色阶
-├── bicubic.mbt            # 双三次缩放（Catmull-Rom）
-├── phash.mbt              # 感知哈希（aHash/dHash + 汉明距离）
-├── noise.mbt              # 确定性噪声（高斯 / 椒盐，LCG）
-├── hsl.mbt                # HSL 色彩空间 + 亮度调整
-├── histogram.mbt          # 直方图 API（亮度 / RGB）
-├── bilateral.mbt          # 双边滤波（保边平滑）
-├── otsu.mbt               # Otsu 自动阈值（类间方差最大化）
-├── dither.mbt             # Floyd–Steinberg 误差扩散抖动
-├── components.mbt         # 四连通连通域标记/计数
-├── blend.mbt              # 图层合成（source-over + 8 种混合模式）
-├── text.mbt               # 5×7 位图字体 draw_char/draw_text
-├── png.mbt                # PNG 编解码（完整 DEFLATE inflate + 校验）
-├── gif.mbt                # GIF 解码（变长 LZW、交错、透明索引）
-├── qoi.mbt                # QOI 图像编解码（完整规范）
-├── bmp.mbt                # BMP 编解码（无压缩 24/32 位）
-├── transform.mbt          # 水平/垂直翻转、90° 旋转
-├── resize.mbt             # 最近邻/双线性缩放
-├── dispatch.mbt           # Image::apply_filter_id 统一派发（各绑定共用）
-├── pipeline.mbt           # 类型安全、可复用的 Filter / Pipeline 管线 API
-├── metrics.mbt            # MSE / PSNR / luma MSE / SSIM
-├── adaptive_threshold.mbt # Sauvola / 局部均值阈值
-├── regionprops.mbt        # 连通域面积、边界框、质心
-├── *_test.mbt             # 确定性测试（黑盒 + 白盒）
-├── cmd/main/              # 原生 CLI 示例（moon run cmd/main）
-├── cmd/ppm/               # PPM 图像输出示例（moon run cmd/ppm > edges.ppm）
-├── cmd/showcase/          # 综合展示（绘图+文字+滤镜+PNG 往返自检）
-├── cmd/cli/               # native info/convert 编解码 CLI + 十六进制模式
-├── web/                   # 浏览器绑定 + Playground（HTML/CSS/JS）
-│   ├── bindings.mbt       #   js 后端绑定 apply_filter（零拷贝）
-│   ├── dist/web.js        #   已构建的 MoonBit→JS 产物
-│   ├── dist/wasmcore.wasm #   已构建的线性内存 wasm 产物
-│   └── index.html / playground.js / style.css
-├── wasmcore/              # 线性内存 wasm 绑定（alloc/process + 导出 memory）
-├── scripts/build-web.mjs  # 构建并校验 web/dist 产物
-└── serve.mjs              # 零依赖静态服务器
-```
-
-## 🚀 快速开始
-
-先安装 [MoonBit 工具链](https://www.moonbitlang.cn/download/)。
-
-```bash
-moon test              # 运行完整单元测试套件
-moon run cmd/main      # 运行原生示例（生成图像并跑滤镜，打印校验和）
-moon run cmd/showcase > showcase.ppm   # 综合展示：绘图+文字+滤镜+PNG 往返自检
-moon run cmd/ppm > edges.ppm   # 生成一张 Sobel 边缘检测的 PPM 图片
-moon run --target native cmd/cli -- --help # 查看文件编解码 CLI
-```
-
-启动浏览器 Playground（`web/dist/` 中已包含构建好的产物）：
-
-```bash
-node serve.mjs         # 然后打开 http://localhost:8123
-```
-
-Playground 默认把上传图片缩放到最长边 1024 像素作为预览，以避免浏览器在连续渲染时占用过多内存；页面会显示实际预览尺寸，下载结果也使用该尺寸。需要处理原始分辨率时，请直接调用库 API 或在宿主中自行设置像素上限。
-
-如需从源码重新构建 Web 产物：
-
-```bash
-node scripts/build-web.mjs           # 构建并同步 web/dist/
-node scripts/build-web.mjs --check   # 仅检查提交的产物是否同步
-```
-
-## 🧑‍💻 库用法
-
-```moonbit
-// 从 RGBA 字节缓冲区（w*h*4）构造图像
-let img = @pixelforge.Image::from_bytes(width, height, rgba_bytes)
-
-// 链式调用滤镜（每个滤镜返回一张新图，不修改原图）
-let stylized = img.grayscale().sobel()
-let soft = img.blur().brightness(20)
-
-// 自定义卷积核
-let kernel = @pixelforge.Kernel::new(3, [0.0, -1.0, 0.0, -1.0, 5.0, -1.0, 0.0, -1.0, 0.0], 1.0, 0.0)
-let sharp = img.convolve(kernel)
-
-// 按数字 id 派发（供各宿主绑定 / CLI 共用）
-let out = img.apply_filter_id(8, 0.0) // 8 = Sobel
-
-// 类型安全的可复用管线（按追加顺序执行）
-let pipeline = @pixelforge.Pipeline::new()
-  .append(@pixelforge.Filter::Grayscale)
-  .append(@pixelforge.Filter::Contrast(1.25))
-  .append(@pixelforge.Filter::Sobel)
-let out2 = img.apply_pipeline(pipeline)
-
-// 质量指标：RGBA 误差与 Rec.601 亮度相似度
-let error = img.mse(out2)
-let score = img.psnr(out2)
-let similarity = img.ssim(out2)
-
-// 取回处理后的像素
-let bytes = out.data // FixedArray[Byte]，长度 = width*height*4
-```
-
-`mse`/`psnr` 比较 RGBA 四通道；`luma_mse`/`ssim` 使用 Rec.601 luma 并忽略 alpha。`ssim` 使用覆盖整张图的单个 population-statistics 窗口（无滑动窗口补边），相同尺寸的空图返回 1；比较尺寸不一致会拒绝。
-
-### 错误与边界
-
-- `png_decode`、`gif_decode`、`qoi_decode`、`bmp_decode`、`tiff_decode`、`webp_decode` 对格式错误或不支持的输入返回 `None`。AVIF 保留格式探测与 metadata；浏览器加载取决于宿主支持，native CLI 明确拒绝 AVIF 像素解码与转换。
-- `Image::new`、`Image::from_bytes` 以及尺寸必须一致的合成操作会拒绝非法尺寸或缓冲区；坐标 API 要求调用方传入图像范围内的坐标。
-- 编解码器和构造器都会限制图像尺寸，宿主在接收不可信图片时仍应设置更严格的文件大小和像素上限。
-- Playground 主要演示常用滤镜和双后端切换；完整的编解码、几何、绘图、分析和合成 API 通过 MoonBit 库直接使用。
-
-## 🎛️ 滤镜清单
-
-| id | 滤镜 | 方法 | `amount` |
-| --- | --- | --- | --- |
-| 0 | 灰度 | `grayscale()` | — |
-| 1 | 反色 | `invert()` | — |
-| 2 | 亮度 | `brightness(delta)` | −255..255 |
-| 3 | 对比度 | `contrast(factor)` | 0.0..3.0 |
-| 4 | 高斯模糊 | `blur()` | — |
-| 5 | 锐化 | `sharpen()` | — |
-| 6 | 浮雕 | `emboss()` | — |
-| 7 | 拉普拉斯边缘 | `edges()` | — |
-| 8 | Sobel 边缘 | `sobel()` | — |
-| 9 | 棕褐色 | `sepia()` | — |
-| 10 | 二值化 | `threshold(level)` | 阈值（默认 128） |
-| 11 | 像素化 | `pixelate(block)` | 块大小（默认 8） |
-| 12 | 中值降噪 | `median()` | — |
-| 13 | 直方图均衡 | `histogram_equalize()` | — |
-| 14 | 水平翻转 | `flip_horizontal()` | — |
-| 15 | 垂直翻转 | `flip_vertical()` | — |
-| 16 | 色调分离 | `posterize(levels)` | 色阶数（默认 4） |
-| 17 | 伽马校正 | `gamma(value)` | 伽马值（默认 2.2） |
-| 18 | 暗角 | `vignette(strength)` | 强度 0..1（默认 0.5） |
-| 19 | Scharr 边缘 | `scharr()` | — |
-| 20 | Canny 边缘 | `canny(low, high)` | 高阈值（默认 100，低阈值取一半） |
-| 21 | Otsu 自动阈值 | `otsu()` | — |
-| 22 | Floyd–Steinberg 抖动（二值） | `dither_mono()` | — |
-
-> 会改变尺寸的变换不走 id 派发，直接调用库 API：`rotate90()`、`resize_nearest(w, h)`、`resize_bilinear(w, h)`、`resize_bicubic(w, h)`。多参数 / 非图像→图像的 API 同理：`average_hash()`/`difference_hash()`/`hamming_distance`、`add_gaussian_noise`/`add_salt_pepper`、`histogram_luma()`/`histogram_rgb()`、`rgb_to_hsl`/`hsl_to_rgb`/`adjust_lightness`、`box_blur(radius)`、`flood_fill(x, y, color, tol)`、`distance_transform(t)`、`gaussian(radius)`、`unsharp_mask(radius, amount)`、`crop(x, y, w, h)`、`pad(l, t, r, b, color)`、`bilateral(radius, σs, σr)`、`dither_grayscale(levels)`/`dither_mono()`、`otsu_threshold()`、`label_components(t)`/`count_components(t)`、`composite(top, mode)`、`draw_text(...)`、`rotate(deg)`、`translate(dx, dy)`、`affine(t)`、`draw_line`/`draw_rect`/`draw_circle` 等绘图原语、`saturate(factor)`、`hue_rotate(deg)`、`erode()`/`dilate()`/`morph_open()`/`morph_close()`、`png_encode`/`png_decode`、`gif_encode`/`gif_decode`、`qoi_encode`/`qoi_decode`、`bmp_encode`/`bmp_decode`、`tiff_decode`、`jpeg_decode`/`jpeg_encode`、`webp_encode`、`avif_encode`、`rgb_to_hsv` 等色彩空间函数。
-
-## 🏗️ 架构与多后端
-
-核心库完全后端无关。两个宿主绑定包分别演示两种进出 MoonBit 的方式：
-
-- **`web/`（js 后端）**：MoonBit 的 `FixedArray[Byte]` 编译为 JS `Uint8Array`，因此 canvas 的 `ImageData.data`（`Uint8ClampedArray`）可以**零拷贝**直接传入 `apply_filter`。
-- **`wasmcore/`（线性内存 wasm 后端）**：链接时用 `export-memory-name` 导出线性 `memory`；`alloc(len)` 返回的指针**直接指向数据**（实测零 header 偏移），宿主用 `Uint8Array` 视图批量写入像素后调用 `process`。
-
-> **一个诚实的性能观察**：在浏览器里对同一套滤镜做基准对比，MoonBit 的 **js 后端反而比线性内存 wasm 快约 4–5×**。原因是 V8 对 JS 后端产物做了深度 JIT 优化，而 wasm 路径还多了进/出线性内存的拷贝与运行时开销。这说明"WASM 一定更快"是一种误解——Playground 保留了引擎切换与对比按钮，你可以自己复现这个结论。
-
-## ✅ 测试
+安装 [MoonBit 工具链](https://www.moonbitlang.com/download/)，新建项目并添加依赖：
 
 ```sh
-moon check
-moon test --target js
-moon test --target wasm-gc
-moon test --target native
-node scripts/check-canonicalize-moon-js.mjs
-node scripts/build-web.mjs --check
-node scripts/check-browser-codecs.mjs
-node verify-wasm.mjs
+moon new pixel-demo --user demo_user
+cd pixel-demo
+moon add 0717lee/pixelforge@0.19.0
+```
+
+将 `cmd/main/moon.pkg` 设置为：
+
+```moonbit
+import {
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")
+```
+
+将 `cmd/main/main.mbt` 替换为以下完整示例：
+
+```moonbit
+///|
+fn main {
+  let image = @pixelforge.Image::new(2, 1)
+  image.set_pixel(0, 0, b'\xFF', b'\x00', b'\x00', b'\xFF')
+  image.set_pixel(1, 0, b'\x00', b'\xFF', b'\x00', b'\xFF')
+  let pipeline = @pixelforge.Pipeline::new()
+    .append(@pixelforge.Filter::Grayscale)
+    .append(@pixelforge.Filter::Brightness(10))
+  let processed = image.apply_pipeline(pipeline)
+  let png = @pixelforge.png_encode(processed)
+  let decoded = match @pixelforge.png_decode(png) {
+    Some(value) => value
+    None => abort("PNG decoding failed")
+  }
+  if decoded.data != processed.data {
+    abort("PNG round-trip changed pixels")
+  }
+  println("\{decoded.width}x\{decoded.height} PNG round-trip OK")
+}
+```
+
+运行 `moon run cmd/main`，预期输出 `2x1 PNG round-trip OK`。切换后端使用 `--target js` 或 `--target native`；native 需要平台 C 编译器。仓库内的同一示例见 [cmd/quickstart](https://github.com/0717lee/pixelforge/blob/main/cmd/quickstart/main.mbt)，可用 `moon run cmd/quickstart` 验证当前源码。
+
+## 功能与 API
+
+| 类别 | 主要能力 |
+| --- | --- |
+| 滤镜与色调 | 灰度、反色、亮度、对比度、阈值、棕褐色、像素化、中值、直方图均衡、色调分离、gamma、暗角、饱和度、色相、HSL 亮度、色阶、自动对比度 |
+| 卷积与边缘 | 自定义 `Kernel` / `convolve`，高斯与盒式模糊、锐化、浮雕、Laplacian、Sobel、Scharr、Canny、双边滤波、锐化蒙版 |
+| 几何与绘图 | 裁剪、填充、翻转、旋转、仿射矩阵、最近邻/双线性/双三次缩放，线/矩形/圆，5×7 位图文字，source-over 与八种混合模式 |
+| 分析与特征 | RGB/luma 直方图与统计，Otsu/Sauvola/局部均值阈值，形态学、骨架、连通域/区域统计/轮廓、Harris、HOG、LBP、积分图、距离变换、泛洪填充 |
+| 比较与噪声 | aHash/dHash/汉明距离，MSE/PSNR/SSIM，确定性高斯与椒盐噪声，Floyd–Steinberg 抖动 |
+| 组合与遍历 | 类型化 `Filter` / `Pipeline`、数字 id 派发、共享像素的 `for_each_tile` / `for_each_row` |
+
+当前公开签名见 [pkg.generated.mbti](pkg.generated.mbti)，参数说明在对应源码注释中。[mooncakes API 文档](https://mooncakes.io/docs/0717lee/pixelforge) 对应已发布版本。
+
+`Image` 按行存储 RGBA 字节，长度必须为 `width * height * 4`。`from_bytes` 包装原缓冲区，修改缓冲区也会改变图像；需要独立所有权时使用 `copy()`。滤镜、几何变换和管线返回新图像；`set_pixel`、绘图与文字方法原地修改图像。tile/row 与原图共享像素。
+
+`mse` / `psnr` 比较 RGBA 四通道；`luma_mse` / `ssim` 使用 Rec.601 亮度并忽略 alpha。`ssim` 使用整幅图像的单个总体统计窗口，相同尺寸的空图返回 1。双线性/双三次缩放分别插值 RGBA 通道，不进行预乘 alpha 转换。
+
+## 格式与后端支持
+
+“核心”指 JavaScript、wasm-gc 和 native。Playground 图片加载使用浏览器解码器，其支持范围与核心编解码器分开。
+
+| 格式 | 核心解码 | 核心编码 | 主要边界 |
+| --- | --- | --- | --- |
+| PNG | 支持 | 支持 | 非交错、8-bit 灰度/灰度透明/调色板/RGB/RGBA；tRNS；CRC-32/Adler-32 校验；输出 RGBA8 |
+| GIF | 支持 | 支持 | LZW、交错、透明索引；编码单帧、最多 256 个调色板项，alpha < 128 视为透明，超限 abort |
+| QOI | 支持 | 支持 | RGBA 无损往返 |
+| BMP | 支持 | 支持 | 无压缩 24/32-bit；24-bit 输出不保留 alpha |
+| JPEG | 支持 | 支持 | `mizchi/image` 的 baseline JPEG；有损，不保留 alpha；`jpeg_encode(image, quality)` |
+| WebP | Lossless VP8L | Lossless VP8L | 解码 predictor、cross-color、subtract-green、color-indexing 变换；不解码有损 VP8 |
+| TIFF | 支持子集 | 不支持 | classic：chunky 8-bit 灰度/RGB/RGBA，多条带或 tiles，未压缩/PackBits/LZW/Deflate，Predictor=2；BigTIFF：单条带，未压缩/PackBits/LZW，偏移和值在支持的 Int 范围内 |
+| AVIF | 仅探测和 metadata | JS 宿主适配 | 无 AV1 像素解码；编码只接受不透明图像，浏览器需支持 Canvas AVIF 编码，依赖在 Node.js 中使用本地 `ffmpeg`；native/wasm-gc 编码 abort |
+
+`detect_image_format()` 识别签名；`image_metadata()` 读取支持的尺寸信息，均不证明完整像素数据可解码。TIFF/BigTIFF 支持大小端探测。AVIF metadata 读取主图关联的 `ispe`，不支持无主图尺寸的纯轨道序列。
+
+`gif_decode_all()` 返回帧图像及位置、延迟、透明索引和 disposal 元数据，调用方负责播放和帧合成；`gif_decode()` 返回首帧。核心不提供 AVIF 网格或动画解码。
+
+处理算子使用 `moonbitlang/core`；JPEG 编解码、WebP 编码与 AVIF 适配使用 `mizchi/image`，native CLI 使用 `moonbitlang/x/fs`。依赖版本和许可见 [moon.mod](moon.mod) 与 [第三方说明](THIRD_PARTY_NOTICES.md)。
+
+## 错误、尺寸和参数
+
+- 像素解码返回 `Image?`（多帧 GIF 返回帧数组选项）；格式错误或不支持的变体返回 `None`，由调用方处理。
+- `Image::new` / `from_bytes` 对负尺寸、超过 100,000,000 像素或缓冲区长度不匹配执行 `abort`。`abort` 是终止当前执行的 panic，不是可通过 `catch` 恢复的普通解码错误。坐标越界、比较/合成尺寸不匹配也会 abort。
+- 任一边为零的图像合法。三个缩放方法将目标边长至少设为 1；空源图生成该尺寸的透明图像。其他算子按各自文档使用。
+- 编码器可能因格式限制而 abort；先检查格式支持、尺寸、GIF 调色板或 AVIF alpha 条件。宿主应按内存预算限制输入文件大小和像素数。
+- `Pipeline` 与数字派发共用默认规则：阈值 ≤ 0 使用 128，像素块 < 2 使用 8，色阶数 < 2 使用 4，gamma ≤ 0 使用 2.2，暗角 ≤ 0 使用 0.5，Canny 高阈值 ≤ 0 使用 100。需要显式零值时直接调用 `threshold(0)` / `vignette(0.0)`。数字 id 对照表见 [dispatch.mbt](dispatch.mbt)。
+
+## 浏览器 Playground 与性能
+
+在仓库根目录运行（需要 Node.js 22 或更新版本）：
+
+```sh
+node serve.mjs
+```
+
+打开 [localhost:8123](http://localhost:8123)。支持上传/拖拽/粘贴、参数化管线、撤销/重做、JS/WASM 切换、Worker 和 PNG 下载。GIF 保留动画预览，处理管线编辑载入帧；WebP/AVIF 加载依赖浏览器原生支持。
+
+上传限制为 20 MiB、16,000,000 像素、单边 8192；预览最长边缩放到 1024，下载也使用预览尺寸。处理原始分辨率请使用库或 CLI。
+
+主线程和 Worker 通过 [WasmPipeline](web/wasm-pipeline.js) 管理线性内存：同缓冲区长度复用像素分配，长度变化则替换实例，让旧实例可被回收。直接使用低层 `alloc` 的宿主也须管理实例生命周期，不能每次渲染无限分配。
+
+JS/WASM 的快慢取决于输入、滤镜、宿主和拷贝成本。页面对比使用当前预览和管线，每引擎预热一次，再运行十次取平均；包含像素复制和计算，不含解码、绘制或 Worker 通信。可复现的 Node.js 基准：
+
+```sh
+node scripts/benchmark.mjs
+```
+
+脚本报告 Node/操作系统/CPU、固定输入与操作、预热/采样次数、median/p95 和 WASM 内存；先校验两引擎像素一致，再计时。这些结果不代表浏览器性能，也不构成通用速度倍率。
+
+## CLI
+
+```sh
 moon run --target native cmd/cli -- --help
+moon run --target native cmd/cli -- info --input input.tiff
+moon run --target native cmd/cli -- convert --from png --to qoi --pipeline grayscale,contrast:1.2 --input input.png --output output.qoi
 ```
 
-测试覆盖图像处理、保留的编解码能力、格式探测、异常输入与尺寸边界。修改核心后先运行 `moon info`，用 `node scripts/build-web.mjs` 更新产物，再执行复现与浏览器检查。当前源码移除解码器后的三后端、CLI、Web/Worker 与生成产物结果记录在 [HANDOFF](HANDOFF.md)，不能沿用旧解码器套件的测试总数。
+`info` 对 AVIF 仅读 metadata；`convert` 不接受 AVIF 输入或输出。格式、管线、退出和文件覆盖行为见 [CLI 文档](https://github.com/0717lee/pixelforge/blob/main/cmd/cli/README.md)。CLI 示例不随 mooncakes 库包发布，需使用仓库源码。
 
-## 📮 发布到 mooncakes.io
+## 开发与贡献
 
-> 模块名为 `0717lee/pixelforge`。其他 MoonBit 项目可通过 `moon add 0717lee/pixelforge` 添加依赖。
+工具链、验证命令、规范和 Web 产物更新见 [CONTRIBUTING](CONTRIBUTING.md)。[HANDOFF](HANDOFF.md) 记录维护范围和验收证据；[发布指南](docs/RELEASING.md) 说明版本、包文档与 GitHub Release 的同步步骤。
 
-```bash
-moon login             # 登录 mooncakes.io
-moon publish           # 发布
-```
+根目录为核心及单元测试；`cmd/` 为示例；`web/` 为 Playground；`wasmcore/` 为线性内存绑定；`scripts/` 为构建、文档、CLI 和性能验证。
 
-## 📄 许可证
+反馈问题请附版本、后端和最小复现。安全问题按 [SECURITY](SECURITY.md) 私下报告；参与规范见 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。
 
-[Apache-2.0](LICENSE)
+## 许可证
+
+[Apache-2.0](LICENSE)，依赖归属见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。

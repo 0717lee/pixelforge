@@ -2,278 +2,144 @@
 
 [![CI](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml)
 
-English | [简体中文](README.md)
+[简体中文](README.md) | English
 
-[Developer handoff and final acceptance goal (Chinese)](HANDOFF.md)
+PixelForge is a MoonBit RGBA8 library with filters, geometry, drawing, analysis and codecs, plus a native CLI and browser Playground. The core supports JavaScript, wasm-gc and native; the Playground also provides a linear-memory WebAssembly engine.
 
-> An image processing library written in pure [MoonBit](https://www.moonbitlang.com/), with a browser Playground that runs it live.
-> The backend-agnostic core compiles to **JavaScript / WebAssembly (wasm-gc & linear-memory wasm) / native**.
->
-> **Version and API**: GitHub keeps `v1.0.0` as the stable-release marker; the source package version is `0.18.0`, as declared in `moon.mod`. The current source removes the AV1/AVIF pixel-decoding APIs, a breaking API change. See the [generated interface](pkg.generated.mbti) and [changelog](CHANGELOG.md).
+**The current version is `0.19.0`.** It removes the former AV1/AVIF parsing and pixel-decoding APIs. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
 
-![PixelForge browser Playground](assets/playground-original.png)
+## Quick start
 
-*One UI, switchable filters and JS / WebAssembly engines — Sobel edge detection shown here:*
-
-![Sobel edge detection](assets/playground-sobel.png)
-
----
-
-## ✨ Features
-
-- **AVIF browser support**: Playground loading relies on the browser's native image decoder. Browser-only AVIF encoding remains available through its adapter. The pixel library contains no AV1 decoder, and the native CLI does not convert AVIF pixels.
-- **A broad set of filters & geometric transforms**: grayscale, invert, brightness, contrast, gaussian/box blur, sharpen, emboss, Laplacian/Sobel/Scharr/Canny edges, sepia, threshold, pixelate, median denoise, histogram equalization, posterize, gamma, vignette, saturate, hue rotate, horizontal/vertical flips — plus 90° rotation and nearest/bilinear/bicubic (Catmull-Rom) resize.
-- **Morphology**: 3×3 erode / dilate / open / close.
-- **Image codecs**: PNG (8-bit grayscale, grayscale+alpha, palette, RGB/RGBA and `tRNS`; self-implemented full DEFLATE inflate, adaptive row filters and fixed-Huffman encoding with CRC-32/Adler-32 verification), GIF decoding (variable-width LZW, interlacing, transparency), QOI (complete spec, lossless round trip) and BMP (uncompressed 24/32-bit) — all in pure MoonBit.
-- **GIF animation frames**: `gif_decode_all()` returns each frame with its offset, delay, transparency index, and disposal metadata; `gif_decode()` remains the first-frame convenience API.
-- **Affine transforms**: an `Affine` matrix type (rotate/translate/scale/shear + composition + inversion) rendered by inverse mapping with bilinear sampling; arbitrary-angle `rotate(degrees)`.
-- **Drawing primitives**: Bresenham lines, rectangles, midpoint circles and fills, all bounds-clipped.
-- **Separable Gaussian blur**: `gaussian(radius)` with any radius, binomial weights split into row/column passes — O(r) per pixel instead of O(r²).
-- **Unsharp mask**: `unsharp_mask(radius, amount)` reuses the Gaussian to extract and re-add high-frequency detail, sharpening edges.
-- **Crop & pad**: `crop(x, y, w, h)` (clamped to bounds) and `pad(l, t, r, b, color)` (colored borders); `crop∘pad` round-trips losslessly.
-- **Bilateral filter**: `bilateral(radius, σs, σr)` edge-preserving smoothing — denoises flat regions while keeping strong edges sharp.
-- **Image analysis**: Otsu automatic thresholding (between-class variance), Floyd–Steinberg error-diffusion dithering, 4-connected component labeling and counting, chamfer (3,4) distance transform, perceptual hashes (aHash/dHash + Hamming distance).
-- **Integral image & O(1) box blur**: `integral_image()` builds a summed-area table (Int64, overflow-safe) that drives `box_blur(radius)` at O(1) per pixel for any radius.
-- **Flood fill**: `flood_fill(x, y, color, tolerance)` 4-connected seed fill with per-channel tolerance.
-- **Layer compositing**: `composite(top, mode)` — Porter-Duff source-over with 8 blend modes (multiply, screen, overlay, darken, lighten, difference, add), in rounded integer math.
-- **Bitmap text**: built-in 5×7 font (digits, uppercase letters, basic punctuation), `draw_text` with integer scaling and clipping.
-- **Color spaces**: exact round-trip RGB ↔ HSV, RGB ↔ HSL (with `adjust_lightness`) and RGB ↔ YCbCr (BT.601) conversions.
-- **Histograms**: `histogram_luma()` / `histogram_rgb()` 256-bin counts; the playground has a live luma histogram panel.
-- **Generic convolution engine**: `Kernel` + `Image::convolve` for custom odd-sized kernels.
-- **Image statistics & tone**: `stats()` per-channel min/max/mean (Int64 accumulation), `auto_contrast()` automatic contrast stretch, `levels(black, white, gamma)` tonal remap.
-- **Deterministic noise**: `add_gaussian_noise(seed, σ)` / `add_salt_pepper(seed, density)` driven by a 64-bit LCG — the same seed is byte-identical on every backend.
-- **Image-quality metrics**: `mse()` / `psnr()` compare all RGBA channels; `luma_mse()` / `ssim()` use Rec.601 luma and ignore alpha.
-- **Local thresholding and region statistics**: `sauvola()` / `adaptive_mean()` use summed-area tables for local windows; `regionprops()` reports component area, bounding boxes, and centroids.
-- **Integer-first, deterministic**: filter math sticks to integers where possible (e.g. luma weights ×1000); results are reproducible, with tests covering normal, boundary, and malformed inputs (including canonical CRC-32/Adler-32 check vectors and a hand-assembled DEFLATE bitstream).
-- **Pure MoonBit image processing**: operators use `moonbitlang/core`; codec adapters use `mizchi/image`, and native CLI file mode uses the official `moonbitlang/x/fs` package.
-- **Multi-backend, zero-copy interop**: on the js backend a `FixedArray[Byte]` *is* a `Uint8Array`, so canvas `Uint8ClampedArray` buffers cross over without copies; the linear-memory wasm backend exports `memory` for bulk pixel access.
-- **Browser Playground**: drag & drop / paste / upload images, stackable filter pipeline, JS/WASM engine switch with benchmarks, an optional **Web Worker background thread** for large images, and PNG downloads produced by the library's **own `png_encode`**.
-
-## 🆚 Relation to other MoonBit image libraries
-
-The MoonBit ecosystem already hosts several image packages with overlapping directions (e.g. `megemini/millow`, `PingGuoMiaoMiao/MoonVision`, `shunge/image`). PixelForge unavoidably overlaps with them on basic filters (blur, edge detection, thresholding — the common foundation every image library shares, here all independently hand-written and test-driven), but its **positioning and core capabilities are clearly different**:
-
-| Existing project | Positioning | Difference from PixelForge |
-| --- | --- | --- |
-| `megemini/millow` | Broader computer-vision algorithms (augmentation, contours/region features, HOG/LBP, SSIM, ...) | CV-focused; PixelForge emphasizes zero dependencies, multi-backend codecs, and browser interaction |
-| `PingGuoMiaoMiao/MoonVision` | Lightweight image processing + basic CV (grayscale-first, template matching) | Grayscale-focused; no full RGBA codecs, drawing/text, noise or hashing |
-| `shunge/image` | Pure decoder (BMP/QOI/TGA/PNG/GIF/JPEG) | Decode only; no filters, encoding, drawing or analysis |
-
-**Capabilities PixelForge focuses on**:
-
-- **Codec breadth**: PNG (self-implemented full DEFLATE inflate with CRC-32/Adler-32 verification), QOI, BMP **encode + decode** and GIF decoding, all in pure MoonBit
-- **Browser Playground**: live JS/WASM engine comparison, Web Worker background thread, real-time luma histogram panel, downloads via the library's own `png_encode`
-- **Bitmap text**: built-in 5×7 font `draw_text` for typesetting directly on images
-- **Perceptual hashing**: aHash / dHash + Hamming distance for deduplication and similarity search
-- **Deterministic noise**: 64-bit LCG-driven gaussian / salt-and-pepper noise, byte-identical across backends for a given seed; pairs with median/bilateral filters into a denoise demo loop
-- **Statistics & tone**: per-channel min/max/mean, auto_contrast, levels
-- **Engineering transparency**: full evolution across 13 releases, bilingual docs, CI end-to-end smoke tests
-
-If you found this library on `mooncakes.io`, you can use it directly with `moon add 0717lee/pixelforge`; we also hope the codec and Playground implementations serve as useful ecosystem references.
-
-## 📦 Project layout
-
-```
-pixelforge/
-├── image.mbt              # Image type, pixel access, clamp_byte
-├── filters_basic.mbt      # map_rgb engine + grayscale/invert/brightness/contrast
-├── convolution.mbt        # Kernel + convolve + blur/sharpen/emboss/edges/Sobel/Scharr
-├── filters_advanced.mbt   # sepia/threshold/pixelate/median/histogram/posterize
-├── filters_effects.mbt    # gamma/vignette
-├── colorspace.mbt         # RGB↔HSV, RGB↔YCbCr, saturate/hue_rotate
-├── morphology.mbt         # 3×3 erode/dilate/open/close
-├── canny.mbt              # Canny edges (NMS + hysteresis)
-├── affine.mbt             # affine transforms (inverse-mapped sampling)
-├── drawing.mbt            # drawing primitives (Bresenham/rect/circle/fill)
-├── gaussian.mbt           # separable Gaussian blur (any radius)
-├── unsharp.mbt            # unsharp mask (reuses gaussian)
-├── croppad.mbt            # crop / colored-border pad
-├── integral.mbt           # integral image (SAT) + O(1) box blur
-├── floodfill.mbt          # flood fill (4-connected seed fill)
-├── distance.mbt           # chamfer (3,4) distance transform
-├── stats.mbt              # statistics / auto-contrast / levels
-├── bicubic.mbt            # bicubic resize (Catmull-Rom)
-├── phash.mbt              # perceptual hashes (aHash/dHash + Hamming)
-├── noise.mbt              # deterministic noise (gaussian / salt-pepper)
-├── hsl.mbt                # HSL color space + lightness adjust
-├── histogram.mbt          # histogram API (luma / RGB)
-├── bilateral.mbt          # bilateral filter (edge-preserving)
-├── otsu.mbt               # Otsu automatic threshold
-├── dither.mbt             # Floyd–Steinberg error diffusion
-├── components.mbt         # 4-connected component labeling
-├── blend.mbt              # layer compositing (source-over + 8 blend modes)
-├── text.mbt               # 5×7 bitmap font draw_char/draw_text
-├── png.mbt                # PNG codec (full DEFLATE inflate + checksums)
-├── gif.mbt                # GIF decoder (variable-width LZW, interlacing)
-├── qoi.mbt                # QOI codec (complete spec)
-├── bmp.mbt                # BMP codec (uncompressed 24/32-bit)
-├── transform.mbt          # flips, 90° rotation
-├── resize.mbt             # nearest/bilinear resize
-├── dispatch.mbt           # Image::apply_filter_id shared dispatch table
-├── pipeline.mbt           # typed, reusable Filter / Pipeline API
-├── metrics.mbt            # MSE / PSNR / luma MSE / SSIM
-├── adaptive_threshold.mbt # Sauvola / local-mean thresholding
-├── regionprops.mbt        # component area, bounds, and centroids
-├── *_test.mbt             # deterministic tests (blackbox + whitebox)
-├── cmd/main/              # native CLI example (moon run cmd/main)
-├── cmd/ppm/               # PPM output example (moon run cmd/ppm > edges.ppm)
-├── cmd/showcase/          # capstone demo (drawing+text+filter+PNG round trip)
-├── cmd/cli/               # native info/convert CLI plus hex mode
-├── web/                   # browser bindings + Playground (HTML/CSS/JS)
-│   ├── bindings.mbt       #   js-backend bindings (zero-copy) incl. encode_png
-│   ├── worker.js          #   Web Worker running the same pipeline off-thread
-│   ├── dist/web.js        #   prebuilt MoonBit→JS bundle
-│   ├── dist/wasmcore.wasm #   prebuilt linear-memory wasm bundle
-│   └── index.html / playground.js / style.css
-├── wasmcore/              # linear-memory wasm bindings (alloc/process + memory)
-├── scripts/build-web.mjs  # build and verify web/dist artifacts
-└── serve.mjs              # dependency-free static server
-```
-
-## 🚀 Quick start
-
-Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) first.
-
-```bash
-moon test              # run the complete unit-test suite
-moon run cmd/main      # native example (builds an image, runs filters, prints checksums)
-moon run cmd/ppm > edges.ppm   # emit a Sobel edge-detected PPM image
-moon run --target native cmd/cli -- --help # show the file codec CLI help
-```
-
-Start the browser Playground (prebuilt bundles ship in `web/dist/`):
-
-```bash
-node serve.mjs         # then open http://localhost:8123
-```
-
-The Playground scales uploaded images to a 1024-pixel longest edge for preview so repeated renders do not exhaust browser memory. It shows the actual preview dimensions, and downloads use that preview size. Use the library API directly when you need to preserve the original resolution.
-
-To rebuild the web bundles from source:
-
-```bash
-node scripts/build-web.mjs           # build and synchronize web/dist/
-node scripts/build-web.mjs --check   # only verify committed artifacts are current
-```
-
-### Errors and boundaries
-
-- `png_decode`, `gif_decode`, `qoi_decode`, and `bmp_decode` return `None` for malformed or unsupported input.
-- `Image::new`, `Image::from_bytes`, and compositing operations that require matching dimensions reject invalid sizes or buffers; coordinate APIs require in-bounds coordinates.
-- Codecs and constructors enforce image-size limits. Hosts handling untrusted images should still apply stricter file-size and pixel-count limits.
-- The Playground demonstrates the common filters and backend switching; the complete codec, geometry, drawing, analysis, and compositing APIs are available through the MoonBit library.
-
-## 🧑‍💻 Library usage
-
-### AVIF boundaries
-
-`detect_image_format()` and `image_metadata()` recognize AVIF containers and read supported dimensions without decoding pixels. The native CLI reports AVIF through metadata-only `info`; `convert` accepts neither AVIF input nor output. Playground loading depends on native browser support, while browser-only AVIF encoding remains a separate adapter. The pixel library contains no AV1 decoder, AVIF grid composition or animation-decoding APIs.
-
-The dimension probe reads the primary item's associated `ispe` property. Track-only sequences without primary-item dimensions remain unsupported.
-
-### Image processing
-
-```moonbit
-// Build an image from an RGBA byte buffer (w*h*4)
-let img = @pixelforge.Image::from_bytes(width, height, rgba_bytes)
-
-// Chain filters (each returns a new image; the source is never mutated)
-let stylized = img.grayscale().sobel()
-let soft = img.gaussian(4).brightness(20)
-
-// Custom convolution kernel
-let kernel = @pixelforge.Kernel::new(3, [0.0, -1.0, 0.0, -1.0, 5.0, -1.0, 0.0, -1.0, 0.0], 1.0, 0.0)
-let sharp = img.convolve(kernel)
-
-// Dispatch by numeric id (shared by all host bindings / CLI)
-let out = img.apply_filter_id(8, 0.0) // 8 = Sobel
-
-// Build a typed, reusable pipeline (operations run in append order)
-let pipeline = @pixelforge.Pipeline::new()
-  .append(@pixelforge.Filter::Grayscale)
-  .append(@pixelforge.Filter::Contrast(1.25))
-  .append(@pixelforge.Filter::Sobel)
-let out2 = img.apply_pipeline(pipeline)
-
-// Quality metrics: RGBA error and Rec.601 luma similarity.
-let error = img.mse(out2)
-let score = img.psnr(out2)
-let similarity = img.ssim(out2)
-
-// Compositing, text and codecs
-let framed = img.composite(overlay_layer, @pixelforge.BlendMode::Multiply)
-framed.draw_text(8, 8, "PIXELFORGE 0.5", 2, b'\xFF', b'\xFF', b'\xFF', b'\xFF')
-let png_bytes = @pixelforge.png_encode(framed)
-```
-
-`mse`/`psnr` compare all RGBA channels; `luma_mse`/`ssim` use Rec.601 luma and ignore alpha. `ssim` uses one population-statistics window over the complete image (no sliding-window padding); equal-sized empty images return 1, while mismatched dimensions are rejected.
-
-## 🎛️ Filter table
-
-| id | filter | method | `amount` |
-| --- | --- | --- | --- |
-| 0 | grayscale | `grayscale()` | — |
-| 1 | invert | `invert()` | — |
-| 2 | brightness | `brightness(delta)` | −255..255 |
-| 3 | contrast | `contrast(factor)` | 0.0..3.0 |
-| 4 | gaussian blur | `blur()` | — |
-| 5 | sharpen | `sharpen()` | — |
-| 6 | emboss | `emboss()` | — |
-| 7 | Laplacian edges | `edges()` | — |
-| 8 | Sobel edges | `sobel()` | — |
-| 9 | sepia | `sepia()` | — |
-| 10 | threshold | `threshold(level)` | level (default 128) |
-| 11 | pixelate | `pixelate(block)` | block size (default 8) |
-| 12 | median denoise | `median()` | — |
-| 13 | histogram equalize | `histogram_equalize()` | — |
-| 14 | flip horizontal | `flip_horizontal()` | — |
-| 15 | flip vertical | `flip_vertical()` | — |
-| 16 | posterize | `posterize(levels)` | levels (default 4) |
-| 17 | gamma | `gamma(value)` | gamma (default 2.2) |
-| 18 | vignette | `vignette(strength)` | strength 0..1 (default 0.5) |
-| 19 | Scharr edges | `scharr()` | — |
-| 20 | Canny edges | `canny(low, high)` | high threshold (default 100, low = high/2) |
-| 21 | Otsu auto threshold | `otsu()` | — |
-| 22 | Floyd–Steinberg dither (mono) | `dither_mono()` | — |
-
-> Size-changing transforms are library APIs rather than dispatch ids: `rotate90()`, `resize_nearest(w, h)`, `resize_bilinear(w, h)`, `resize_bicubic(w, h)`. Likewise for multi-parameter APIs: `average_hash()`/`difference_hash()`/`hamming_distance`, `add_gaussian_noise`/`add_salt_pepper`, `histogram_luma()`/`histogram_rgb()`, `rgb_to_hsl`/`hsl_to_rgb`/`adjust_lightness`, `box_blur(radius)`, `flood_fill(x, y, color, tol)`, `distance_transform(t)`, `gaussian(radius)`, `unsharp_mask(radius, amount)`, `crop(x, y, w, h)`, `pad(l, t, r, b, color)`, `bilateral(radius, σs, σr)`, `dither_grayscale(levels)`/`dither_mono()`, `otsu_threshold()`, `label_components(t)`/`count_components(t)`, `composite(top, mode)`, `draw_text(...)`, `rotate(deg)`, `translate(dx, dy)`, `affine(t)`, the drawing primitives, `saturate(factor)`, `hue_rotate(deg)`, the morphology operators, `png_encode`/`png_decode`, `gif_decode`, `qoi_encode`/`qoi_decode`, `bmp_encode`/`bmp_decode` and the color-space functions.
-
-## 🏗️ Architecture & backends
-
-The core library is fully backend-agnostic. Two host binding packages demonstrate both ways in and out of MoonBit:
-
-- **`web/` (js backend)**: MoonBit's `FixedArray[Byte]` compiles to a JS `Uint8Array`, so a canvas `ImageData.data` buffer (`Uint8ClampedArray`) passes into `apply_filter` with **zero copies**.
-- **`wasmcore/` (linear-memory wasm)**: the link step exports linear `memory`; the pointer returned by `alloc(len)` points **directly at the data** (measured zero header offset), so the host writes pixels through a `Uint8Array` view and calls `process`.
-
-> **An honest performance note**: benchmarking the same filter pipeline in the browser, MoonBit's **js backend is about 4–5× faster than the linear-memory wasm path**. V8 JITs the JS output aggressively, while the wasm path pays for copying pixels in and out of linear memory. "WASM is always faster" is a myth — the Playground keeps the engine toggle and comparison button so you can reproduce this yourself.
-
-## ✅ Tests
-
-Run from the repository root with the MoonBit toolchain and Node.js installed; native tests also require a platform C compiler:
+Install the [MoonBit toolchain](https://www.moonbitlang.com/download/), create a project, and add the dependency:
 
 ```sh
-moon check
-moon test --target native
-moon test --target js
-moon test --target wasm-gc
-node scripts/check-canonicalize-moon-js.mjs
-node scripts/build-web.mjs --check
-node scripts/check-browser-codecs.mjs
-node verify-wasm.mjs
+moon new pixel-demo --user demo_user
+cd pixel-demo
+moon add 0717lee/pixelforge@0.19.0
+```
+
+Set `cmd/main/moon.pkg` to:
+
+```moonbit
+import {
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")
+```
+
+Replace `cmd/main/main.mbt` with this complete example:
+
+```moonbit
+///|
+fn main {
+  let image = @pixelforge.Image::new(2, 1)
+  image.set_pixel(0, 0, b'\xFF', b'\x00', b'\x00', b'\xFF')
+  image.set_pixel(1, 0, b'\x00', b'\xFF', b'\x00', b'\xFF')
+  let pipeline = @pixelforge.Pipeline::new()
+    .append(@pixelforge.Filter::Grayscale)
+    .append(@pixelforge.Filter::Brightness(10))
+  let processed = image.apply_pipeline(pipeline)
+  let png = @pixelforge.png_encode(processed)
+  let decoded = match @pixelforge.png_decode(png) {
+    Some(value) => value
+    None => abort("PNG decoding failed")
+  }
+  if decoded.data != processed.data {
+    abort("PNG round-trip changed pixels")
+  }
+  println("\{decoded.width}x\{decoded.height} PNG round-trip OK")
+}
+```
+
+Run `moon run cmd/main`; expected output is `2x1 PNG round-trip OK`. Select another backend with `--target js` or `--target native`; native requires a platform C compiler. The same example lives in [cmd/quickstart](https://github.com/0717lee/pixelforge/blob/main/cmd/quickstart/main.mbt); run `moon run cmd/quickstart` in this repository to exercise the current source.
+
+## Features and API
+
+| Category | Main capabilities |
+| --- | --- |
+| Filters and tone | Grayscale, invert, brightness, contrast, threshold, sepia, pixelate, median, histogram equalization, posterize, gamma, vignette, saturation, hue, HSL lightness, levels, auto contrast |
+| Convolution and edges | Custom `Kernel` / `convolve`, Gaussian/box blur, sharpen, emboss, Laplacian, Sobel, Scharr, Canny, bilateral filtering, unsharp mask |
+| Geometry and drawing | Crop, pad, flips, rotation, affine matrices, nearest/bilinear/bicubic resize, lines/rectangles/circles, 5×7 bitmap text, source-over and eight blend modes |
+| Analysis and features | RGB/luma histograms and statistics, Otsu/Sauvola/local-mean thresholds, morphology, skeletons, components/region statistics/contours, Harris, HOG, LBP, integral images, distance transform, flood fill |
+| Comparison and noise | aHash/dHash/Hamming distance, MSE/PSNR/SSIM, deterministic Gaussian and salt-and-pepper noise, Floyd–Steinberg dithering |
+| Composition and traversal | Typed `Filter` / `Pipeline`, numeric dispatch, pixel-buffer-sharing `for_each_tile` / `for_each_row` |
+
+Current public signatures are in [pkg.generated.mbti](pkg.generated.mbti); source documentation comments describe parameters. The [mooncakes API documentation](https://mooncakes.io/docs/0717lee/pixelforge) describes the published package.
+
+`Image` stores row-major RGBA bytes and requires `width * height * 4` bytes. `from_bytes` wraps the original buffer, so modifying it also changes the image; use `copy()` for independent ownership. Filters, geometry and pipelines return new images; `set_pixel`, drawing and text methods mutate images. Tiles and rows share their source pixels.
+
+`mse` / `psnr` compare RGBA channels; `luma_mse` / `ssim` use Rec.601 luma and ignore alpha. `ssim` uses one population-statistics window over the whole image; equal-sized empty images return 1. Bilinear/bicubic resize interpolates RGBA channels independently without converting to premultiplied alpha.
+
+## Formats and backends
+
+“Core” means JavaScript, wasm-gc and native. Playground loading uses browser decoders, whose support is separate from the core codecs.
+
+| Format | Core decode | Core encode | Main boundaries |
+| --- | --- | --- | --- |
+| PNG | Yes | Yes | Non-interlaced, 8-bit grayscale/grayscale-alpha/palette/RGB/RGBA; tRNS; CRC-32/Adler-32 checks; RGBA8 output |
+| GIF | Yes | Yes | LZW, interlacing, transparency; single-frame encoding, at most 256 palette entries, alpha < 128 becomes transparent; exceeding limits aborts |
+| QOI | Yes | Yes | Lossless RGBA round trips |
+| BMP | Yes | Yes | Uncompressed 24/32-bit; 24-bit output drops alpha |
+| JPEG | Yes | Yes | Baseline JPEG through `mizchi/image`; lossy, drops alpha; `jpeg_encode(image, quality)` |
+| WebP | Lossless VP8L | Lossless VP8L | Predictor, cross-color, subtract-green and color-indexing transforms; no lossy VP8 decoding |
+| TIFF | Subset | No | Classic: chunky 8-bit grayscale/RGB/RGBA, strips or tiles, uncompressed/PackBits/LZW/Deflate, Predictor=2; BigTIFF: one strip, uncompressed/PackBits/LZW, offsets and values within supported Int bounds |
+| AVIF | Detection and metadata only | JS host adapter | No AV1 pixel decoder; encoding accepts opaque images only and requires Canvas AVIF encoding in browsers; the dependency uses local `ffmpeg` in Node.js; native/wasm-gc encoding aborts |
+
+`detect_image_format()` recognizes signatures; `image_metadata()` reads supported dimensions. Neither proves that complete pixel data is decodable. TIFF/BigTIFF detection supports both byte orders. AVIF metadata follows the primary item's associated `ispe`; track-only sequences without primary-item dimensions are unsupported.
+
+`gif_decode_all()` returns frame images, offsets, delays, transparency indices and disposal metadata; callers handle playback and compositing. `gif_decode()` returns the first frame. The core does not decode AVIF grids or animations.
+
+Operators use `moonbitlang/core`; JPEG decode/encode, WebP encoding and AVIF adapters use `mizchi/image`; the native CLI uses `moonbitlang/x/fs`. Dependency versions and attribution are in [moon.mod](moon.mod) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+
+## Errors, sizes and parameters
+
+- Pixel decoders return `Image?` (multi-frame GIF returns an optional frame array). Malformed input or unsupported variants return `None`, which callers must handle.
+- `Image::new` / `from_bytes` abort for negative dimensions, more than 100,000,000 pixels, or a mismatched buffer length. `abort` is a panic that terminates the current execution, not a recoverable decoding error handled by `catch`. Out-of-bounds pixel access and mismatched comparison/compositing sizes also abort.
+- Either dimension may be zero. All three resizers clamp target dimensions to at least 1; an empty source produces a transparent image at that size. Follow each operator's own contract for other operations.
+- Encoders may abort on format restrictions. Check format support, sizes, GIF palettes and AVIF alpha first. Hosts should limit upload bytes and pixels according to their memory budget.
+- `Pipeline` and numeric dispatch share defaults: threshold ≤ 0 means 128; pixel block < 2 means 8; posterize levels < 2 means 4; gamma ≤ 0 means 2.2; vignette ≤ 0 means 0.5; Canny high threshold ≤ 0 means 100. Use direct `threshold(0)` / `vignette(0.0)` for explicit zero values. The numeric id table is in [dispatch.mbt](dispatch.mbt).
+
+## Browser Playground and performance
+
+From the repository root, with Node.js 22 or newer:
+
+```sh
+node serve.mjs
+```
+
+Open [localhost:8123](http://localhost:8123). Upload, drag/drop or paste images; edit parameterized pipelines; undo/redo; switch JS/WASM or Worker mode; download PNG. GIF preview retains animation while processing edits the loaded frame. WebP/AVIF loading depends on browser support.
+
+Uploads are limited to 20 MiB, 16,000,000 pixels and an 8192-pixel side. Previews scale to a 1024-pixel longest edge; downloads use that resolution. Use the library or CLI for original-resolution processing.
+
+Main-thread and Worker processing share [WasmPipeline](web/wasm-pipeline.js): equal buffer lengths reuse one allocation; length changes replace the instance so old memory can be collected. Hosts using low-level `alloc` must also manage instance lifetimes instead of allocating indefinitely on every render.
+
+Relative speed depends on input, filters, host and copying costs. The page comparison uses the current preview and pipeline, warms each engine once, then averages ten runs. It includes pixel copies and computation, but excludes decoding, painting and Worker messaging. Run the reproducible Node.js benchmark with:
+
+```sh
+node scripts/benchmark.mjs
+```
+
+It reports Node/OS/CPU, fixed input and operations, warmup/sample counts, median/p95 and WASM memory, and checks pixel equality before timing. Results do not describe browser performance or imply a universal speed ratio.
+
+## CLI
+
+```sh
 moon run --target native cmd/cli -- --help
+moon run --target native cmd/cli -- info --input input.tiff
+moon run --target native cmd/cli -- convert --from png --to qoi --pipeline grayscale,contrast:1.2 --input input.png --output output.qoi
 ```
 
-Tests cover image processing, retained codecs, format detection, malformed inputs and dimension boundaries. After core changes, run `moon info`, rebuild with `node scripts/build-web.mjs`, and verify artifact reproduction and browser integration. The [handoff](HANDOFF.md) records results for the source after decoder removal; historical decoder-suite totals do not describe the current suite.
+`info` reads only metadata for AVIF; `convert` accepts neither AVIF input nor output. See the [CLI guide](https://github.com/0717lee/pixelforge/blob/main/cmd/cli/README.md) for formats, pipelines, exit behavior and file replacement. CLI examples are excluded from the mooncakes library package; use a repository checkout.
 
-## 📮 Published on mooncakes.io
+## Development and contributions
 
-> The module is `0717lee/pixelforge`. Other MoonBit projects can depend on it with `moon add 0717lee/pixelforge`.
+See [CONTRIBUTING](CONTRIBUTING.md) for the toolchain, checks, conventions and generated Web artifacts. [HANDOFF](HANDOFF.md) records scope and validation evidence; the [release guide](docs/RELEASING.md) covers version, package documentation and GitHub Release synchronization.
 
-```bash
-moon login             # log in to mooncakes.io
-moon publish           # publish
-```
+Directory entry points: core code and tests at the root; examples in `cmd/`; Playground in `web/`; linear-memory bindings in `wasmcore/`; build, documentation, CLI and benchmark scripts in `scripts/`.
 
-## 📄 License
+Include the version, backend and minimal reproduction in issues. Follow [SECURITY](SECURITY.md) for private reports and [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) for participation.
 
-Apache-2.0
+## License
+
+[Apache-2.0](LICENSE); attribution is in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).

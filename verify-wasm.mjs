@@ -4,6 +4,9 @@
 // Playground does. Uses the committed artifact in web/dist so it runs from a
 // fresh clone without a MoonBit build.
 import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { apply_filter } from "./web/dist/web.js";
+import { WasmPipeline } from "./web/wasm-pipeline.js";
 
 const bytes = await readFile(new URL("./web/dist/wasmcore.wasm", import.meta.url));
 const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -87,6 +90,35 @@ new Uint8Array(memory.buffer, identityPtr, identitySrc.length).set(identitySrc);
 const identityReturned = process_in_place(identityPtr, 1, 2, 999, 0);
 check("wasm unknown filter keeps pointer", [identityReturned], [identityPtr]);
 check("wasm unknown filter keeps bytes", Array.from(new Uint8Array(memory.buffer).subarray(identityPtr, identityPtr + identitySrc.length)), identitySrc);
+
+// Exercise the actual host used by both the Playground and Worker. A new
+// input allocation on every render previously grew memory without a bound.
+const pipeline = new WasmPipeline(await WebAssembly.compile(bytes));
+const pixels = Uint8ClampedArray.from({ length: 256 * 256 * 4 }, (_, i) => i % 251);
+const operations = [{ id: 1, amount: 0 }, { id: 4, amount: 0 }, { id: 2, amount: 10 }];
+let expected = pixels;
+for (const { id, amount } of operations) expected = apply_filter(expected, 256, 256, id, amount);
+const first = pipeline.apply(pixels, 256, 256, operations);
+assert.deepEqual(Array.from(first), Array.from(expected));
+for (let i = 0; i < 5; i++) pipeline.apply(pixels, 256, 256, operations);
+const warmBytes = pipeline.instance.exports.memory.buffer.byteLength;
+let last;
+for (let i = 0; i < 200; i++) last = pipeline.apply(pixels, 256, 256, operations);
+assert.equal(pipeline.instance.exports.memory.buffer.byteLength, warmBytes, "WASM memory must plateau after warmup");
+assert.deepEqual(Array.from(last), Array.from(expected));
+assert.deepEqual(Array.from(first), Array.from(expected), "later renders must not overwrite earlier results");
+console.log(`PASS 200 repeated renders: stable WASM memory at ${warmBytes} bytes, JS/WASM pixels agree`);
+
+for (let round = 0; round < 10; round++) {
+  for (const [width, height] of [[2, 3], [128, 128], [3, 2], [256, 256]]) {
+    const input = Uint8ClampedArray.from({ length: width * height * 4 }, (_, i) => (i + round) % 256);
+    const output = pipeline.apply(input, width, height, [{ id: 1, amount: 0 }]);
+    assert.deepEqual(Array.from(output), Array.from(apply_filter(input, width, height, 1, 0)));
+    assert.ok(pipeline.instance.exports.memory.buffer.byteLength <= warmBytes, "image changes must not accumulate old allocations");
+  }
+}
+assert.throws(() => pipeline.apply(new Uint8Array(1), 1, 1, []), /Invalid WASM/);
+console.log("PASS repeated image-size changes and independent output buffers");
 
 if (failures > 0) {
   console.error(`WASM verification failed: ${failures} check(s)`);

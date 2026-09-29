@@ -1,6 +1,31 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 (2026-09-29)
+
+### Reliability and integration
+
+- Reuse the WASM host pixel buffer across renders in both the Playground and
+  Worker. Replace the instance when its buffer length changes; regression
+  checks cover memory stability, image-size changes and JS/WASM pixel equality.
+- Fix nearest-neighbor sample arithmetic overflowing on long, valid images.
+  Nearest, bilinear and bicubic resizing now produce transparent pixels at the
+  requested target size when the source image is empty.
+- Recognize BigTIFF in both byte orders, probe its scalar dimensions with
+  bounded offsets, and share the library's format detector with the native CLI.
+- Align the CLI version with the source package and add file/hex conversion
+  regressions, including AVIF metadata and rejected output paths.
+
+### Documentation
+
+- Align package, CLI and documentation versions at `0.19.0`, with explicit
+  migration instructions from `0.18.0`.
+- Align both READMEs: executable quickstart, format/backend matrix, error and
+  buffer-ownership contracts, empty-image behavior and JS AVIF host requirements.
+- Add migration and release instructions, documentation checks in CI, and a
+  reproducible benchmark with environment, input and timing statistics.
+- Remove the unsupported universal JS/WASM speed ratio and zero-dependency claim.
+- Define package contents in `.moonignore` and verify the actual archive input
+  list so local reference trees, codec experiments and Python caches are excluded.
 
 ### Remove the built-in AV1/AVIF pixel decoder
 
@@ -21,7 +46,7 @@
   unsupported.
 - Remove the pure-decoder bindings from the browser and Worker paths.
   Playground AVIF loading now relies on the browser's native image support;
-  browser-only AVIF encoding remains available through its existing adapter.
+  JS-host AVIF encoding remains available through its existing adapter.
 - Retain image processing, the other codecs, CLI filters, Playground backend
   switching and PNG export. Rebuild the distributed Web artifacts and validate
   the reduced test suite; final results are recorded in [HANDOFF.md](HANDOFF.md).

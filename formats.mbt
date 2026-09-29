@@ -105,14 +105,14 @@ pub fn detect_image_format(data : Array[Byte]) -> ImageFormat? {
       (
         data[0] == b'I' &&
         data[1] == b'I' &&
-        data[2] == b'*' &&
+        (data[2] == b'*' || data[2] == b'+') &&
         data[3] == b'\x00'
       ) ||
       (
         data[0] == b'M' &&
         data[1] == b'M' &&
         data[2] == b'\x00' &&
-        data[3] == b'*'
+        (data[3] == b'*' || data[3] == b'+')
       )
     ) {
     Some(Tiff)
@@ -495,33 +495,80 @@ fn bmff_metadata(data : Array[Byte], format : ImageFormat) -> ImageMetadata? {
 
 ///|
 fn tiff_metadata(data : Array[Byte], format : ImageFormat) -> ImageMetadata? {
-  let little = data[0] == b'I'
-  let rd16 = (p : Int) => if little { le16(data, p) } else { be16(data, p) }
-  let rd32 = (p : Int) => if little { le32(data, p) } else { be32(data, p) }
   if data.length() < 8 {
     return None
   }
-  let ifd = rd32(4)
-  if ifd < 8 || ifd + 2 > data.length() {
+  let little = data[0] == b'I'
+  let big = tiff_u16(data, 2, little) == 43
+  if big &&
+    (
+      data.length() < 16 ||
+      tiff_u16(data, 4, little) != 8 ||
+      tiff_u16(data, 6, little) != 0
+    ) {
     return None
   }
-  let count = rd16(ifd)
-  let mut p = ifd + 2
+  let ifd = if big {
+    match tiff_u64_int(data, 8, little) {
+      Some(value) => value
+      None => return None
+    }
+  } else {
+    tiff_u32(data, 4, little)
+  }
+  let count_size = if big { 8 } else { 2 }
+  let entry_size = if big { 20 } else { 12 }
+  let next_size = if big { 8 } else { 4 }
+  if ifd < (if big { 16 } else { 8 }) ||
+    !tiff_range(data, ifd, count_size + next_size) {
+    return None
+  }
+  let count = if big {
+    match tiff_u64_int(data, ifd, little) {
+      Some(value) => value
+      None => return None
+    }
+  } else {
+    tiff_u16(data, ifd, little)
+  }
+  let start = ifd + count_size
+  if count > (data.length() - start - next_size) / entry_size {
+    return None
+  }
   let mut w = 0
   let mut h = 0
-  for _ in 0..<count {
-    if p + 12 > data.length() {
+  for i in 0..<count {
+    let p = start + i * entry_size
+    let tag = tiff_u16(data, p, little)
+    if tag != 256 && tag != 257 {
+      continue
+    }
+    let n = if big {
+      match tiff_u64_int(data, p + 4, little) {
+        Some(value) => value
+        None => return None
+      }
+    } else {
+      tiff_u32(data, p + 4, little)
+    }
+    if n != 1 {
       return None
     }
-    let tag = rd16(p)
-    let value = if rd16(p + 2) == 3 { rd16(p + 8) } else { rd32(p + 8) }
+    let kind = tiff_u16(data, p + 2, little)
+    let values = if big {
+      tiff_big_values(data, p, kind, n, little)
+    } else {
+      tiff_values(data, p, kind, n, little)
+    }
+    let value = match values {
+      Some(values) => values[0]
+      None => return None
+    }
     if tag == 256 {
       w = value
-    }
-    if tag == 257 {
+    } else {
       h = value
     }
-    p += 12
   }
   if w > 0 && h > 0 {
     Some({ format, width: w, height: h, animated: false, })

@@ -6,7 +6,7 @@ in [LICENSE](LICENSE); additional upstream notices are retained below.
 
 | Dependency | Version | Use and upstream source |
 | --- | --- | --- |
-| `mizchi/image` | 0.4.3 | JPEG decode/encode, WebP encode and browser AVIF encoding adapter; [image-mbt](https://github.com/mizchi/image-mbt) |
+| `mizchi/image` | 0.4.3 | JPEG decode/encode, WebP encode and JS-host AVIF encoding adapter; [image-mbt](https://github.com/mizchi/image-mbt) |
 | `mizchi/zlib` | 0.4.8 | PNG compression used by the image adapter; [zlib.mbt](https://github.com/mizchi/zlib.mbt) |
 | `moonbitlang/x` | 0.5.1 | Native CLI filesystem access; [moonbitlang/x](https://github.com/moonbitlang/x) |
 | `moonbitlang/core` | 0.10.11+6ff76a5f9 | Standard-library types and image-processing mathematics; [moonbitlang/core](https://github.com/moonbitlang/core) |
@@ -16,8 +16,9 @@ The resolved dependency metadata declares Apache-2.0 for each package.
 
 > Copyright 2025 International Digital Economy Academy
 
-The browser AVIF adapter uses host encoding facilities. PixelForge does not
-bundle a native codec binary through that adapter.
+The AVIF adapter requires browser Canvas AVIF encoding or invokes an externally
+installed `ffmpeg` in Node.js. It accepts opaque images only. PixelForge does
+not bundle a native codec binary through this adapter.
 
 ## MoonBit core upstream NOTICE
 

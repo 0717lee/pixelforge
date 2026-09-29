@@ -29,7 +29,7 @@ fn main {
 
 ///|
 fn print_help() -> Unit {
-  println("PixelForge CLI 0.15")
+  println("PixelForge CLI 0.19.0")
   println("Native codec utility (file paths or hexadecimal bytes)")
   println("")
   println("Usage:")
@@ -351,57 +351,9 @@ fn encode_hex(bytes : Array[Byte]) -> String {
 
 ///|
 fn detect_format(bytes : Array[Byte]) -> String {
-  if bytes.length() >= 8 &&
-    bytes[0] == b'\x89' &&
-    bytes[1] == b'P' &&
-    bytes[2] == b'N' &&
-    bytes[3] == b'G' {
-    "png"
-  } else if bytes.length() >= 4 &&
-    bytes[0] == b'q' &&
-    bytes[1] == b'o' &&
-    bytes[2] == b'i' &&
-    bytes[3] == b'f' {
-    "qoi"
-  } else if bytes.length() >= 2 && bytes[0] == b'B' && bytes[1] == b'M' {
-    "bmp"
-  } else if bytes.length() >= 6 &&
-    bytes[0] == b'G' &&
-    bytes[1] == b'I' &&
-    bytes[2] == b'F' {
-    "gif"
-  } else if bytes.length() >= 2 && bytes[0] == b'\xFF' && bytes[1] == b'\xD8' {
-    "jpeg"
-  } else if bytes.length() >= 12 &&
-    bytes[0] == b'R' &&
-    bytes[1] == b'I' &&
-    bytes[2] == b'F' &&
-    bytes[3] == b'F' &&
-    bytes[8] == b'W' &&
-    bytes[9] == b'E' &&
-    bytes[10] == b'B' &&
-    bytes[11] == b'P' {
-    "webp"
-  } else if @pixelforge.detect_image_format(bytes) is Some(@pixelforge.Avif) {
-    "avif"
-  } else if bytes.length() >= 4 &&
-    (
-      (
-        bytes[0] == b'I' &&
-        bytes[1] == b'I' &&
-        bytes[2] == b'*' &&
-        bytes[3] == b'\x00'
-      ) ||
-      (
-        bytes[0] == b'M' &&
-        bytes[1] == b'M' &&
-        bytes[2] == b'\x00' &&
-        bytes[3] == b'*'
-      )
-    ) {
-    "tiff"
-  } else {
-    abort("pixelforge: unknown image signature")
+  match @pixelforge.detect_image_format(bytes) {
+    Some(format) => format.name()
+    None => abort("pixelforge: unknown image signature")
   }
 }
 

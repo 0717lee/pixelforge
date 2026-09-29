@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+// Real native CLI file/hex round trips and rejection paths, using small
+// generated containers rather than a checked-in binary fixture collection.
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, writeFile, rm, access } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { encode_png } from "../web/dist/web.js";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const build = spawnSync("moon", ["build", "--target", "native", "cmd/cli"], { cwd: root, encoding: "utf8" });
+if (build.error) throw build.error;
+assert.equal(build.status, 0, build.stdout + build.stderr);
+const executable = path.join(root, "_build/native/debug/build/cmd/cli/cli.exe");
+
+function run(args, failure = null) {
+  const result = spawnSync(executable, args, { cwd: root, encoding: "utf8" });
+  if (result.error) throw result.error;
+  if (failure) {
+    assert.notEqual(result.status, 0, `unexpected success: ${args.join(" ")}`);
+    assert.match(result.stdout + result.stderr, failure);
+  } else {
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+  return result.stdout;
+}
+
+function bigTiff(little) {
+  const data = Buffer.alloc(213);
+  function uint(p, value, size) {
+    for (let i = 0; i < size; i++) data[p + (little ? i : size - 1 - i)] = i < 4 ? (value >>> (8 * i)) & 255 : 0;
+  }
+  data.write(little ? "II" : "MM");
+  uint(2, 43, 2); uint(4, 8, 2); uint(8, 16, 8); uint(16, 9, 8);
+  [[256, 4, 1], [257, 4, 1], [258, 3, 8], [259, 3, 1], [262, 3, 1],
+    [273, 16, 212], [277, 3, 1], [278, 4, 1], [279, 16, 1]].forEach(([tag, kind, value], i) => {
+    const p = 24 + i * 20;
+    uint(p, tag, 2); uint(p + 2, kind, 2); uint(p + 4, 1, 8);
+    uint(p + 12, value, kind === 3 ? 2 : kind === 4 ? 4 : 8);
+  });
+  data[212] = 99;
+  return data;
+}
+
+function u32(value) {
+  const bytes = Buffer.alloc(4);
+  bytes.writeUInt32BE(value);
+  return bytes;
+}
+function box(kind, ...parts) {
+  const payload = Buffer.concat(parts);
+  return Buffer.concat([u32(payload.length + 8), Buffer.from(kind), payload]);
+}
+const avif = Buffer.concat([
+  box("ftyp", Buffer.from("avif"), u32(0)),
+  box("meta", u32(0),
+    box("pitm", u32(0), Buffer.from([0, 1])),
+    box("iprp",
+      box("ipco", box("ispe", u32(0), u32(2), u32(1))),
+      box("ipma", u32(0), u32(1), Buffer.from([0, 1, 1, 1])))),
+]);
+
+const directory = await mkdtemp(path.join(tmpdir(), "pixelforge-cli-"));
+try {
+  const manifest = await readFile(path.join(root, "moon.mod"), "utf8");
+  const version = manifest.match(/^version\s*=\s*"([^"]+)"/m)[1];
+  assert.equal(run(["--help"]).split(/\r?\n/)[0], `PixelForge CLI ${version}`);
+  for (const little of [true, false]) {
+    const data = bigTiff(little);
+    const info = run(["info", "--input-hex", data.toString("hex")]);
+    assert.match(info, /format=tiff\r?\nwidth=1\r?\nheight=1/);
+    const converted = run(["convert", "--from", "tiff", "--to", "bmp", "--input-hex", data.toString("hex")]);
+    const bmp = Buffer.from(converted.match(/hex=([0-9a-f]+)/)[1], "hex");
+    assert.deepEqual([...bmp.subarray(bmp.readUInt32LE(10))], [99, 99, 99, 255]);
+    run(["info", "--input-hex", data.subarray(0, 40).toString("hex")], /TIFF decode failed/);
+  }
+
+  const input = path.join(directory, "input.png");
+  const qoi = path.join(directory, "filtered.qoi");
+  const bmpPath = path.join(directory, "filtered.bmp");
+  const png = encode_png(Uint8Array.of(255, 0, 0, 255, 0, 255, 0, 255), 2, 1);
+  await writeFile(input, png);
+  run(["convert", "--from", "png", "--to", "qoi", "--pipeline", "grayscale,brightness:10", "--input", input, "--output", qoi]);
+  assert.match(run(["info", "--input", qoi]), /format=qoi\r?\nwidth=2\r?\nheight=1/);
+  run(["convert", "--from", "qoi", "--to", "bmp", "--input", qoi, "--output", bmpPath]);
+  const bmp = await readFile(bmpPath);
+  // Integer luma truncates: floor(255 * 299/1000) + 10 = 86;
+  // floor(255 * 587/1000) + 10 = 159.
+  assert.deepEqual([...bmp.subarray(bmp.readUInt32LE(10))], [86, 86, 86, 255, 159, 159, 159, 255]);
+
+  const avifPath = path.join(directory, "metadata.avif");
+  await writeFile(avifPath, avif);
+  assert.match(run(["info", "--input", avifPath]), /format=avif\r?\nwidth=2\r?\nheight=1\r?\nmetadata_only=true/);
+  const rejected = path.join(directory, "rejected.bin");
+  for (const [args, message] of [
+    [["--from", "avif", "--to", "png", "--input", avifPath], /AVIF pixel decoding is not available/],
+    [["--from", "png", "--to", "avif", "--input", input], /AVIF encoding requires a browser/],
+    [["--from", "png", "--to", "qoi", "--pipeline", "unknown", "--input", input], /unknown pipeline operation/],
+    [["--from", "png", "--to", "qoi", "--pipeline", "brightness:bad", "--input", input], /invalid integer/],
+  ]) {
+    run(["convert", ...args, "--output", rejected], message);
+    await assert.rejects(access(rejected), { code: "ENOENT" });
+  }
+  console.log("OK native CLI: version, BigTIFF both byte orders, PNG/pipeline/QOI/BMP pixels, AVIF metadata and rejected conversions");
+} finally {
+  await rm(directory, { recursive: true, force: true });
+}

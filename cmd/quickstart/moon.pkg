@@ -1,0 +1,5 @@
+import {
+  "0717lee/pixelforge",
+}
+
+pkgtype(kind: "executable")

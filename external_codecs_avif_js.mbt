@@ -1,7 +1,9 @@
-/// Browser-native AVIF encoder. The core does not provide AVIF pixel decoding.
+/// JS-host AVIF encoder. The core does not provide AVIF pixel decoding.
 
 ///|
-/// Encodes an RGBA8 image as AVIF using the browser's native encoder.
+/// Encodes an opaque RGBA8 image through `mizchi/image`'s JS adapter.
+/// Requires Canvas AVIF encoding in browsers or local ffmpeg in Node.js.
+/// Unsupported alpha or encoding failures abort.
 pub fn avif_encode(image : Image) -> Array[Byte] {
   let encoded = @image.encode_avif({
     width: image.width,

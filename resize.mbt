@@ -13,7 +13,7 @@ fn ifloor(v : Double) -> Int {
 ///|
 /// Nearest-neighbor resize: picks the closest source pixel. Fast and exact,
 /// ideal for pixel-art style scaling. Output is `new_width` x `new_height`
-/// (both clamped to at least 1).
+/// (both clamped to at least 1). An empty source produces transparent pixels.
 pub fn Image::resize_nearest(
   self : Image,
   new_width : Int,
@@ -22,9 +22,14 @@ pub fn Image::resize_nearest(
   let w = if new_width < 1 { 1 } else { new_width }
   let h = if new_height < 1 { 1 } else { new_height }
   let out = Image::new(w, h)
+  if self.width == 0 || self.height == 0 {
+    return out
+  }
   for y in 0..<h {
+    let sy = (y.to_int64() * self.height.to_int64() / h.to_int64()).to_int()
     for x in 0..<w {
-      let src = (y * self.height / h * self.width + x * self.width / w) * 4
+      let sx = (x.to_int64() * self.width.to_int64() / w.to_int64()).to_int()
+      let src = (sy * self.width + sx) * 4
       let dst = (y * w + x) * 4
       out.data[dst] = self.data[src]
       out.data[dst + 1] = self.data[src + 1]
@@ -39,6 +44,8 @@ pub fn Image::resize_nearest(
 /// Bilinear resize: blends the four surrounding source pixels by coverage,
 /// using center-aligned sampling with clamp-to-edge, which keeps a same-size
 /// resize an exact identity. All four channels (including alpha) are blended.
+/// Target dimensions are clamped to at least 1; an empty source produces
+/// transparent pixels at the requested size.
 pub fn Image::resize_bilinear(
   self : Image,
   new_width : Int,
@@ -47,6 +54,9 @@ pub fn Image::resize_bilinear(
   let w = if new_width < 1 { 1 } else { new_width }
   let h = if new_height < 1 { 1 } else { new_height }
   let out = Image::new(w, h)
+  if self.width == 0 || self.height == 0 {
+    return out
+  }
   for y in 0..<h {
     let fy = (y.to_double() + 0.5) * self.height.to_double() / h.to_double() -
       0.5

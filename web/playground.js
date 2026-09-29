@@ -6,20 +6,20 @@
 //              are bulk-copied into the exported memory via a Uint8Array view.
 import { apply_filter, encode_png, luma_histogram } from "./dist/web.js";
 import { browserCodecKind, decodeBrowserImage } from "./codecs.js";
+import { WasmPipeline } from "./wasm-pipeline.js";
 
 // Load the genuine-WASM module (no imports required). Fall back to JS if it
 // cannot be loaded for any reason.
 async function loadWasm() {
   try {
     const res = await fetch("./dist/wasmcore.wasm");
-    const { instance } = await WebAssembly.instantiate(await res.arrayBuffer(), {});
-    return instance;
+    return new WasmPipeline(await WebAssembly.compile(await res.arrayBuffer()));
   } catch (err) {
     console.warn("WASM module unavailable, falling back to the JS backend.", err);
     return null;
   }
 }
-const wasmInstance = await loadWasm();
+const wasmPipeline = await loadWasm();
 
 // Off-main-thread pipeline: a module worker running the exact same MoonBit
 // code. Pixel buffers are posted as transferables (no structured clone).
@@ -113,7 +113,7 @@ let activeFilters = [];
 let undoStack = [];
 let redoStack = [];
 let editingHistory = false;
-let engine = "js"; // default to the faster zero-copy backend; WASM is a toggle
+let engine = "js"; // default to JS; performance depends on the image and pipeline
 let threading = "main"; // "main" | "worker"
 
 const FILTER_META = {
@@ -136,26 +136,9 @@ function asClamped(buf) {
   return new Uint8ClampedArray(buf.buffer, buf.byteOffset, buf.length);
 }
 
-// Genuine-WASM pipeline: allocate one linear-memory input buffer, apply every
-// operation in place, then copy the final result out (memory may have grown
-// during a call, so each view is recreated).
+// Main-thread and Worker paths share the same buffer ownership policy.
 function applyPipelineWasm(src, w, h, ops) {
-  const ex = wasmInstance.exports;
-  const len = w * h * 4;
-  const ptr = ex.alloc(len);
-  new Uint8Array(ex.memory.buffer, ptr, len).set(src);
-  for (const op of ops) {
-    if (typeof ex.process_in_place === "function") {
-      const returned = ex.process_in_place(ptr, w, h, op.id, op.amount);
-      if (returned !== ptr) throw new Error("WASM in-place buffer pointer changed");
-    } else {
-      const resultPtr = ex.process(ptr, w, h, op.id, op.amount);
-      const memoryView = new Uint8Array(ex.memory.buffer);
-      if (resultPtr < 0 || resultPtr + len > memoryView.byteLength) throw new Error("WASM returned an invalid result pointer");
-      new Uint8Array(ex.memory.buffer, ptr, len).set(memoryView.subarray(resultPtr, resultPtr + len));
-    }
-  }
-  return new Uint8ClampedArray(new Uint8Array(ex.memory.buffer).subarray(ptr, ptr + len));
+  return wasmPipeline.apply(src, w, h, ops);
 }
 
 function applyOne(data, w, h, id, amount, eng) {
@@ -484,7 +467,7 @@ function runBenchmark() {
 }
 
 function benchEngine(eng, iterations) {
-  if (eng === "wasm" && !wasmInstance) return null;
+  if (eng === "wasm" && !wasmPipeline) return null;
   runPipeline(eng); // warm up
   const t0 = performance.now();
   for (let i = 0; i < iterations; i++) runPipeline(eng);
@@ -607,7 +590,7 @@ $("redoBtn").addEventListener("click", () => {
 
 for (const chip of enginesEl.querySelectorAll(".chip")) {
   chip.addEventListener("click", () => {
-    if (chip.dataset.engine === "wasm" && !wasmInstance) return;
+    if (chip.dataset.engine === "wasm" && !wasmPipeline) return;
     engine = chip.dataset.engine;
     invalidateWorkerResults();
     setActiveEngine(engine);
@@ -616,7 +599,7 @@ for (const chip of enginesEl.querySelectorAll(".chip")) {
 }
 
 // Reflect the default engine; disable WASM if the module failed to load.
-if (!wasmInstance) {
+if (!wasmPipeline) {
   enginesEl.querySelector('[data-engine="wasm"]').disabled = true;
   setStatus("WebAssembly 加载失败，已使用 JS 后端。", "error");
 }
