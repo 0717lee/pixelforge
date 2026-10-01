@@ -35,10 +35,13 @@ fn print_help() -> Unit {
   println("Usage:")
   println("  pixelforge info --input PATH")
   println(
-    "  pixelforge convert --from FORMAT --to FORMAT [--pipeline OPS] --input PATH --output PATH",
+    "  pixelforge convert --from FORMAT --to FORMAT [--fit WIDTHxHEIGHT] [--pipeline OPS] --input PATH --output PATH",
   )
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
+  println(
+    "--fit WIDTHxHEIGHT fits within positive bounds before filtering, without enlarging.",
+  )
   println("")
   println("Input pixel formats: png, qoi, bmp, gif, jpeg, webp, tiff, avif")
   println("Output pixel formats: png, qoi, bmp, gif, jpeg, webp")
@@ -86,7 +89,7 @@ fn convert(args : Array[String], start : Int) -> Unit {
   if actual != from {
     abort("pixelforge: input format is \{actual}, but --from=\{from}")
   }
-  let image = decode_image(from, bytes)
+  let image = apply_fit_option(args, start, decode_image(from, bytes))
   let filtered = apply_pipeline_option(args, start, image)
   let output = encode_image(to, filtered)
   if file_mode {
@@ -104,6 +107,32 @@ fn convert(args : Array[String], start : Int) -> Unit {
     println("bytes=\{output.length()}")
     println("hex=\{encode_hex(output)}")
   }
+}
+
+///|
+fn apply_fit_option(
+  args : Array[String],
+  start : Int,
+  image : @pixelforge.Image,
+) -> @pixelforge.Image {
+  if !has_option(args, start, "--fit") {
+    return image
+  }
+  let spec = option(args, start, "--fit")
+  let parts = spec.split("x").collect()
+  if parts.length() != 2 {
+    abort("pixelforge: --fit requires positive WIDTHxHEIGHT")
+  }
+  let width = @string.parse_int(parts[0].to_owned()) catch {
+    _ => abort("pixelforge: --fit requires positive WIDTHxHEIGHT")
+  }
+  let height = @string.parse_int(parts[1].to_owned()) catch {
+    _ => abort("pixelforge: --fit requires positive WIDTHxHEIGHT")
+  }
+  if width <= 0 || height <= 0 {
+    abort("pixelforge: --fit requires positive WIDTHxHEIGHT")
+  }
+  image.thumbnail(width, height)
 }
 
 ///|

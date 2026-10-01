@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `Image::thumbnail(max_width, max_height)` to fit within integer bounds
+  without cropping or enlarging; use overflow-safe aspect-ratio arithmetic.
+- Add CLI `--fit WIDTHxHEIGHT` before filtering, report output dimensions,
+  and reject malformed bounds before opening the output file.
+
 - Add `avif_decode` through the published `0717lee/moonav1@0.2.0` dependency
   for RGBA8 decoding on JavaScript, wasm-gc and native.
 - Accept AVIF input in the native CLI's conversion and filter pipeline; retain

@@ -245,6 +245,7 @@ pub fn Image::sobel(Self) -> Self
 pub fn Image::ssim(Self, Self) -> Double
 pub fn Image::stats(Self) -> Stats
 pub fn Image::threshold(Self, Int) -> Self
+pub fn Image::thumbnail(Self, Int, Int) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
 pub fn Image::unsharp_mask(Self, Int, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self

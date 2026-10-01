@@ -73,6 +73,13 @@ Current public signatures are in [pkg.generated.mbti](pkg.generated.mbti); sourc
 
 `mse` / `psnr` compare RGBA channels; `luma_mse` / `ssim` use Rec.601 luma and ignore alpha. `ssim` uses one population-statistics window over the whole image; equal-sized empty images return 1. Bilinear/bicubic resize interpolates RGBA channels independently without converting to premultiplied alpha.
 
+In the development checkout, `image.thumbnail(320, 240)` uses bilinear sampling
+to fit inside the bounds without cropping or enlarging, returning an independent
+buffer. The shorter dimension rounds down to at least one pixel; nonpositive
+bounds clamp to one, and empty images retain their dimensions. The CLI equivalent
+is `--fit 320x240`: both bounds must be positive integers, and resizing runs
+before the filter pipeline.
+
 ## Formats and backends
 
 “Core” means JavaScript, wasm-gc and native. Playground loading uses browser decoders, whose support is separate from the core codecs.

@@ -4,7 +4,7 @@
 Use a repository checkout: `cmd/` is excluded from the mooncakes library package.
 `convert` can apply an ordered filter pipeline before encoding.
 
-The AVIF input support below is an unreleased addition to the 0.19.0 baseline.
+AVIF input and `--fit` below are unreleased additions to the 0.19.0 baseline.
 
 | Format | Input | Output |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ different output path when you need to keep the original.
 moon run --target native cmd/cli -- info --input input.png
 moon run --target native cmd/cli -- info --input input.avif
 moon run --target native cmd/cli -- convert --from avif --to png --pipeline grayscale --input input.avif --output output.png
+moon run --target native cmd/cli -- convert --from avif --to png --fit 320x240 --input input.avif --output thumbnail.png
 moon run --target native cmd/cli -- convert --from png --to qoi --input input.png --output output.qoi
 moon run --target native cmd/cli -- convert --from png --to png --pipeline grayscale,contrast:1.2 --input input.png --output filtered.png
 ```
@@ -63,6 +64,12 @@ Success exits with code 0. Missing required values, invalid pipeline values,
 unknown signatures and rejected codec data abort with a non-zero exit; the
 exact panic exit code is platform-specific. Processing/encoding failures occur
 before the output is opened. Filesystem write failures can leave a partial file.
+
+`--fit WIDTHxHEIGHT` fits within positive integer bounds before applying filters.
+It uses bilinear sampling, preserves aspect ratio to integer-pixel precision,
+does not crop or enlarge, and rounds the shorter dimension down to at least one
+pixel. It works with file and hexadecimal input. Reported dimensions describe
+the converted output. Invalid bounds fail without creating an output file.
 
 Run `node scripts/check-cli.mjs` from the repository root for BigTIFF byte-order
 checks, PNG → pipeline → QOI → BMP pixel checks, AVIF → invert → PNG conversion

@@ -90,10 +90,26 @@ try {
   // floor(255 * 587/1000) + 10 = 159.
   assert.deepEqual([...bmp.subarray(bmp.readUInt32LE(10))], [86, 86, 86, 255, 159, 159, 159, 255]);
 
+  const thumbnailPath = path.join(directory, "thumbnail.bmp");
+  const thumbnailInfo = run(["convert", "--from", "png", "--to", "bmp", "--fit", "1x1", "--pipeline", "threshold:100", "--input", input, "--output", thumbnailPath]);
+  assert.match(thumbnailInfo, /width=1\r?\nheight=1/);
+  const thumbnail = await readFile(thumbnailPath);
+  assert.equal(thumbnail.readInt32LE(18), 1);
+  assert.equal(Math.abs(thumbnail.readInt32LE(22)), 1);
+  // Fit first: average red/green -> (128,128,0), luma 113 -> white.
+  // Threshold first would yield black/white, whose average is gray instead.
+  assert.deepEqual([...thumbnail.subarray(thumbnail.readUInt32LE(10))], [255, 255, 255, 255]);
+  const noUpscale = run(["convert", "--from", "png", "--to", "bmp", "--fit", "100x100", "--input-hex", Buffer.from(png).toString("hex")]);
+  assert.match(noUpscale, /width=2\r?\nheight=1/);
+
   const avifPath = path.join(directory, "metadata.avif");
   await writeFile(avifPath, avif);
   assert.match(run(["info", "--input", avifPath]), /format=avif\r?\nwidth=2\r?\nheight=1\r?\nmetadata_only=true/);
   const rejected = path.join(directory, "rejected.bin");
+  for (const fit of ["", "0x1", "1x0", "-1x2", "2", "2x", "x2", "2x3x4", "ax2", "2147483648x1"]) {
+    run(["convert", "--from", "png", "--to", "bmp", "--fit", fit, "--input", input, "--output", rejected], /--fit requires positive WIDTHxHEIGHT/);
+    await assert.rejects(access(rejected), { code: "ENOENT" });
+  }
   for (const [args, message] of [
     [["--from", "avif", "--to", "png", "--input", avifPath], /AVIF decode failed/],
     [["--from", "png", "--to", "avif", "--input", input], /AVIF encoding requires a browser/],
@@ -125,7 +141,7 @@ try {
   const truncated = sampleBytes.subarray(0, sampleBytes.length - 1).toString("hex");
   run(["convert", "--from", "avif", "--to", "png", "--input-hex", truncated, "--output", rejected], /AVIF decode failed/);
   await assert.rejects(access(rejected), { code: "ENOENT" });
-  console.log("OK native CLI: version, BigTIFF, PNG/pipeline/QOI/BMP, AVIF-to-PNG pixels against libdav1d, metadata and rejected conversions");
+  console.log("OK native CLI: version, BigTIFF, PNG/pipeline/QOI/BMP, AVIF/libdav1d pixels, thumbnail dimensions and filter order, rejected conversions");
 } finally {
   await rm(directory, { recursive: true, force: true });
 }
