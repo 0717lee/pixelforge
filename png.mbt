@@ -64,6 +64,7 @@ fn push_chunk(
   push_uint_be(out, crc32(out, crc_start, out.length()))
 }
 
+///|
 /// Reverse the low `n` bits of a canonical DEFLATE code.
 fn reverse_bits(code : Int, n : Int) -> Int {
   let mut value = 0
@@ -75,6 +76,7 @@ fn reverse_bits(code : Int, n : Int) -> Int {
   value
 }
 
+///|
 /// Returns a fixed-Huffman literal/length code and its bit length.
 fn fixed_code(symbol : Int) -> (Int, Int) {
   if symbol <= 143 {
@@ -88,16 +90,19 @@ fn fixed_code(symbol : Int) -> (Int, Int) {
   }
 }
 
+///|
 fn fixed_dist_code(symbol : Int) -> (Int, Int) {
   (reverse_bits(symbol, 5), 5)
 }
 
+///|
 priv struct BitWriter {
   out : Array[Byte]
   mut current : Int
   mut bits : Int
 }
 
+///|
 fn BitWriter::write(self : BitWriter, value : Int, count : Int) -> Unit {
   let mut remaining = value
   for _ in 0..<count {
@@ -112,6 +117,7 @@ fn BitWriter::write(self : BitWriter, value : Int, count : Int) -> Unit {
   }
 }
 
+///|
 fn BitWriter::finish(self : BitWriter) -> Unit {
   if self.bits > 0 {
     self.out.push(self.current.to_byte())
@@ -120,6 +126,7 @@ fn BitWriter::finish(self : BitWriter) -> Unit {
   }
 }
 
+///|
 /// Encodes filtered scanlines as one deterministic fixed-Huffman block.
 /// A distance-one match is used only when the preceding byte is identical;
 /// otherwise a literal is emitted to preserve the exact byte stream.
@@ -143,7 +150,8 @@ fn deflate_fixed(raw : Array[Byte]) -> Array[Byte] {
     }
     if pos > 0 && run >= 3 && raw[pos - 1] == raw[pos] {
       let mut index = 0
-      while index < 28 && run > length_base[index] + ((1 << length_extra[index]) - 1) {
+      while index < 28 &&
+            run > length_base[index] + ((1 << length_extra[index]) - 1) {
         index = index + 1
       }
       let (code, bits) = fixed_code(257 + index)
@@ -325,7 +333,7 @@ fn huff_build(lengths : Array[Int], n : Int) -> Huffman? {
 ///|
 /// Inflates a raw DEFLATE stream starting at `br`. Returns `None` on any
 /// malformed structure.
-fn inflate(br : BitReader) -> Array[Byte]? {
+fn inflate(br : BitReader, max_output : Int) -> Array[Byte]? {
   let out : Array[Byte] = []
   let len_base = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67,
@@ -365,7 +373,7 @@ fn inflate(br : BitReader) -> Array[Byte]? {
         return None
       }
       br.pos = br.pos + 4
-      if br.pos + len > br.limit {
+      if br.pos + len > br.limit || len > max_output - out.length() {
         return None
       }
       for i in 0..<len {
@@ -499,6 +507,9 @@ fn inflate(br : BitReader) -> Array[Byte]? {
           return None
         }
         if sym < 256 {
+          if out.length() >= max_output {
+            return None
+          }
           out.push(sym.to_byte())
         } else if sym == 256 {
           break
@@ -521,7 +532,7 @@ fn inflate(br : BitReader) -> Array[Byte]? {
             return None
           }
           let distance = dist_base[dsym] + dextra
-          if distance > out.length() {
+          if distance > out.length() || length > max_output - out.length() {
             return None
           }
           for _ in 0..<length {
@@ -564,22 +575,34 @@ fn BitReader::huff_decode(self : BitReader, h : Huffman) -> Int {
 /// Inflates a zlib stream (`data[from..<to]`) and verifies its Adler-32
 /// trailer. Returns `None` on bad headers, bad DEFLATE data or checksum
 /// mismatch.
-fn zlib_inflate(data : Array[Byte], from : Int, to : Int) -> Array[Byte]? {
-  if to - from < 6 {
+fn zlib_inflate(
+  data : Array[Byte],
+  from : Int,
+  to : Int,
+  max_output? : Int = 400000000,
+) -> Array[Byte]? {
+  if from < 0 ||
+    to < from ||
+    to > data.length() ||
+    to - from < 6 ||
+    max_output < 0 {
     return None
   }
   let cmf = data[from].to_int()
   let flg = data[from + 1].to_int()
-  if cmf % 16 != 8 || (cmf * 256 + flg) % 31 != 0 {
+  if cmf % 16 != 8 || cmf / 16 > 7 || (cmf * 256 + flg) % 31 != 0 {
     return None
   }
   if flg / 32 % 2 == 1 {
     return None // preset dictionaries are not used by PNG
   }
   let br : BitReader = { data, limit: to - 4, pos: from + 2, bit: 0, }
-  let raw = match inflate(br) {
+  let raw = match inflate(br, max_output) {
     Some(r) => r
     None => return None
+  }
+  if br.pos + (if br.bit == 0 { 0 } else { 1 }) != to - 4 {
+    return None
   }
   let expect = (data[to - 4].to_uint() << 24) |
     (data[to - 3].to_uint() << 16) |
@@ -634,12 +657,14 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
   let mut seen_iend = false
   let mut seen_plte = false
   let mut seen_trns = false
+  let mut seen_idat = false
+  let mut ended_idat = false
   while pos + 12 <= data.length() && !seen_iend {
     let len = data[pos].to_int() * 16777216 +
       data[pos + 1].to_int() * 65536 +
       data[pos + 2].to_int() * 256 +
       data[pos + 3].to_int()
-    if len < 0 || pos + 12 + len > data.length() {
+    if len < 0 || len > data.length() - pos - 12 {
       return None
     }
     let type_start = pos + 4
@@ -655,6 +680,13 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
     let t1 = data[type_start + 1].to_int()
     let t2 = data[type_start + 2].to_int()
     let t3 = data[type_start + 3].to_int()
+    let is_idat = t0 == 73 && t1 == 68 && t2 == 65 && t3 == 84
+    if seen_idat && !is_idat {
+      ended_idat = true
+    }
+    if !seen_ihdr && !(t0 == 73 && t1 == 72 && t2 == 68 && t3 == 82) {
+      return None
+    }
     if t0 == 73 && t1 == 72 && t2 == 68 && t3 == 82 {
       // IHDR
       if len != 13 || seen_ihdr {
@@ -673,17 +705,27 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
       depth = data[d + 8].to_int()
       color = data[d + 9].to_int()
       let interlace = data[d + 12].to_int()
-      if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
+      if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
         return None
       }
       if depth != 8 ||
         (color != 6 && color != 2 && color != 0 && color != 4 && color != 3) ||
-        interlace != 0 {
+        interlace != 0 ||
+        data[d + 10] != b'\x00' ||
+        data[d + 11] != b'\x00' {
         return None
       }
     } else if t0 == 80 && t1 == 76 && t2 == 84 && t3 == 69 {
       // PLTE: RGB triples, with at most 256 entries.
-      if !seen_ihdr || seen_plte || len == 0 || len % 3 != 0 || len > 768 {
+      if !seen_ihdr ||
+        seen_plte ||
+        seen_idat ||
+        seen_trns ||
+        color == 0 ||
+        color == 4 ||
+        len == 0 ||
+        len % 3 != 0 ||
+        len > 768 {
         return None
       }
       seen_plte = true
@@ -692,18 +734,30 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
       }
     } else if t0 == 116 && t1 == 82 && t2 == 78 && t3 == 83 {
       // tRNS: transparent sample/color or indexed alpha table.
-      if !seen_ihdr || seen_trns || color == 4 || color == 6 || len == 0 {
+      if !seen_ihdr ||
+        seen_trns ||
+        seen_idat ||
+        (color == 3 && !seen_plte) ||
+        color == 4 ||
+        color == 6 ||
+        len == 0 {
         return None
       }
-      if (color == 0 && len != 2) || (color == 2 && len != 6) ||
+      if (color == 0 && len != 2) ||
+        (color == 2 && len != 6) ||
         (color == 3 && len > 256) {
         return None
       }
       // For 8-bit samples, the 16-bit tRNS values must have zero high bytes.
       if (color == 0 && data[pos + 8] != b'\x00') ||
-        (color == 2 &&
-          (data[pos + 8] != b'\x00' || data[pos + 10] != b'\x00' ||
-            data[pos + 12] != b'\x00')) {
+        (
+          color == 2 &&
+          (
+            data[pos + 8] != b'\x00' ||
+            data[pos + 10] != b'\x00' ||
+            data[pos + 12] != b'\x00'
+          )
+        ) {
         return None
       }
       seen_trns = true
@@ -712,18 +766,24 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
       }
     } else if t0 == 73 && t1 == 68 && t2 == 65 && t3 == 84 {
       // IDAT — concatenate; the zlib stream spans all IDAT chunks.
-      if !seen_ihdr {
+      if !seen_ihdr || ended_idat || (color == 3 && !seen_plte) {
         return None
       }
+      seen_idat = true
       for i in 0..<len {
         idat.push(data[pos + 8 + i])
       }
     } else if t0 == 73 && t1 == 69 && t2 == 78 && t3 == 68 {
+      if len != 0 || !seen_idat {
+        return None
+      }
       seen_iend = true
+    } else if (t0 & 32) == 0 {
+      return None // Unknown critical chunks cannot be ignored.
     }
     pos = crc_pos + 4
   }
-  if !seen_ihdr || !seen_iend || idat.length() == 0 {
+  if !seen_ihdr || !seen_iend || idat.length() == 0 || pos != data.length() {
     return None
   }
   if color == 3 && (!seen_plte || palette.length() == 0) {
@@ -732,10 +792,6 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
   if color == 3 && seen_trns && trns.length() > palette.length() / 3 {
     return None
   }
-  let raw = match zlib_inflate(idat, 0, idat.length()) {
-    Some(r) => r
-    None => return None
-  }
   let bpp = match color {
     6 => 4
     2 => 3
@@ -743,6 +799,11 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
     _ => 1
   }
   let stride = width * bpp
+  let raw = match
+    zlib_inflate(idat, 0, idat.length(), max_output=(stride + 1) * height) {
+    Some(r) => r
+    None => return None
+  }
   if raw.length() != (stride + 1) * height {
     return None
   }
@@ -791,7 +852,8 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
         img.data[base] = gray
         img.data[base + 1] = gray
         img.data[base + 2] = gray
-        img.data[base + 3] = if seen_trns && trns[0].to_int() == 0 &&
+        img.data[base + 3] = if seen_trns &&
+          trns[0].to_int() == 0 &&
           trns[1] == gray {
           b'\x00'
         } else {
@@ -809,9 +871,12 @@ pub fn png_decode(data : Array[Byte]) -> Image? {
         img.data[base + 2] = cur[sample + 2].to_byte()
         img.data[base + 3] = if color == 6 {
           cur[sample + 3].to_byte()
-        } else if seen_trns && trns[0].to_int() == 0 &&
-          trns[1] == cur[sample].to_byte() && trns[2].to_int() == 0 &&
-          trns[3] == cur[sample + 1].to_byte() && trns[4].to_int() == 0 &&
+        } else if seen_trns &&
+          trns[0].to_int() == 0 &&
+          trns[1] == cur[sample].to_byte() &&
+          trns[2].to_int() == 0 &&
+          trns[3] == cur[sample + 1].to_byte() &&
+          trns[4].to_int() == 0 &&
           trns[5] == cur[sample + 2].to_byte() {
           b'\x00'
         } else {

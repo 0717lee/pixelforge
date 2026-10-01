@@ -84,9 +84,15 @@ fn ascii4(
 ///|
 /// Identifies common raster containers from their signatures and brands.
 pub fn detect_image_format(data : Array[Byte]) -> ImageFormat? {
-  if data.length() >= 8 && data[0] == b'\x89' && ascii4(data, 1, 80, 78, 71, 13) {
+  if data.length() >= 8 &&
+    data[0] == b'\x89' &&
+    ascii4(data, 1, 80, 78, 71, 13) &&
+    ascii4(data, 4, 13, 10, 26, 10) {
     Some(Png)
-  } else if data.length() >= 6 && ascii4(data, 0, 71, 73, 70, 56) {
+  } else if data.length() >= 6 &&
+    ascii4(data, 0, 71, 73, 70, 56) &&
+    (data[4] == b'7' || data[4] == b'9') &&
+    data[5] == b'a' {
     Some(Gif)
   } else if data.length() >= 4 && ascii4(data, 0, 113, 111, 105, 102) {
     Some(Qoi)
@@ -231,13 +237,24 @@ fn bmff_avif_brand(data : Array[Byte]) -> Bool? {
 /// Parses dimensions for supported headers. Returns `None` for truncated or
 /// valid-but-unhandled variants whose dimensions are not present in the probe.
 pub fn image_metadata(data : Array[Byte]) -> ImageMetadata? {
+  match image_metadata_unchecked(data) {
+    Some(metadata) if metadata.width > 0 && metadata.height > 0 =>
+      Some(metadata)
+    _ => None
+  }
+}
+
+///|
+fn image_metadata_unchecked(data : Array[Byte]) -> ImageMetadata? {
   let format = match detect_image_format(data) {
     Some(value) => value
     None => return None
   }
   match format {
     Png =>
-      if data.length() >= 24 {
+      if data.length() >= 24 &&
+        be32(data, 8) == 13 &&
+        ascii4(data, 12, 73, 72, 68, 82) {
         Some({
           format,
           width: be32(data, 16),
@@ -311,29 +328,45 @@ fn gif_has_animation(data : Array[Byte]) -> Bool {
 ///|
 fn jpeg_metadata(data : Array[Byte], format : ImageFormat) -> ImageMetadata? {
   let mut p = 2
-  while p + 9 < data.length() {
+  while data.length() - p >= 2 {
     if data[p] != b'\xFF' {
+      return None
+    }
+    while p + 1 < data.length() && data[p + 1] == b'\xFF' {
       p += 1
-      continue
+    }
+    if data.length() - p < 2 {
+      return None
     }
     let marker = data[p + 1].to_int()
     if marker == 0xD9 || marker == 0xDA {
+      return None
+    }
+    if marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7) {
+      p += 2
+      continue
+    }
+    if data.length() - p < 4 {
+      return None
+    }
+    let segment = be16(data, p + 2)
+    if segment < 2 || segment > data.length() - p - 2 {
       return None
     }
     if (marker >= 0xC0 && marker <= 0xC3) ||
       (marker >= 0xC5 && marker <= 0xC7) ||
       (marker >= 0xC9 && marker <= 0xCB) ||
       (marker >= 0xCD && marker <= 0xCF) {
+      if segment < 8 {
+        return None
+      }
+      let components = data[p + 9].to_int()
+      if components == 0 || segment != 8 + 3 * components {
+        return None
+      }
       let h = be16(data, p + 5)
       let w = be16(data, p + 7)
       return Some({ format, width: w, height: h, animated: false, })
-    }
-    if p + 4 > data.length() {
-      return None
-    }
-    let segment = be16(data, p + 2)
-    if segment < 2 {
-      return None
     }
     p = p + 2 + segment
   }

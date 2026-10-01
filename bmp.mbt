@@ -111,7 +111,10 @@ pub fn bmp_decode(data : Array[Byte]) -> Image? {
   }
   let offset = read_u32_le(data, 10)
   let header_size = read_u32_le(data, 14)
-  if header_size < 40 {
+  if header_size < 40 ||
+    header_size > data.length() - 14 ||
+    offset < 14 + header_size ||
+    offset > data.length() {
     return None
   }
   let width = read_i32_le(data, 18)
@@ -120,15 +123,15 @@ pub fn bmp_decode(data : Array[Byte]) -> Image? {
   let height = if top_down { -raw_height } else { raw_height }
   let bpp = read_u16_le(data, 28)
   let compression = read_u32_le(data, 30)
-  if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
+  if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
     return None
   }
-  if (bpp != 24 && bpp != 32) || compression != 0 {
+  if (bpp != 24 && bpp != 32) || compression != 0 || read_u16_le(data, 26) != 1 {
     return None
   }
   let bytes_per_px = bpp / 8
   let stride = (width * bytes_per_px + 3) / 4 * 4
-  if offset < 54 || offset + stride * height > data.length() {
+  if height > (data.length() - offset) / stride {
     return None
   }
   let img = Image::new(width, height)

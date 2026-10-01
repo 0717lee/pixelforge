@@ -144,8 +144,13 @@ pub fn qoi_decode(data : Array[Byte]) -> Image? {
   if width <= 0 || height <= 0 || (channels != 3 && channels != 4) {
     return None
   }
-  if width * height > MAX_IMAGE_PIXELS {
+  if width > MAX_IMAGE_PIXELS / height || u8(13) > 1 {
     return None
+  }
+  for i in 0..<8 {
+    if u8(data.length() - 8 + i) != (if i == 7 { 1 } else { 0 }) {
+      return None
+    }
   }
   let img = Image::new(width, height)
   let index = FixedArray::make(64 * 4, 0)
@@ -220,6 +225,9 @@ pub fn qoi_decode(data : Array[Byte]) -> Image? {
     img.data[base + 1] = clamp_byte(g)
     img.data[base + 2] = clamp_byte(b)
     img.data[base + 3] = clamp_byte(a)
+  }
+  if run != 0 || pos != limit {
+    return None
   }
   Some(img)
 }

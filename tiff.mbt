@@ -256,7 +256,8 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
       } else if compression == 5 {
         tiff_lzw(data, tile_offsets[tile], tile_byte_counts[tile], tile_expected)
       } else if compression == 8 {
-        let inflated = zlib_inflate(data, tile_offsets[tile], tile_offsets[tile] + tile_byte_counts[tile])
+        if !tiff_range(data, tile_offsets[tile], tile_byte_counts[tile]) { return None }
+        let inflated = zlib_inflate(data, tile_offsets[tile], tile_offsets[tile] + tile_byte_counts[tile], max_output=tile_expected)
         match inflated { Some(v) if v.length() == tile_expected => Some(v); _ => None }
       } else { None }
       let raw = match raw { Some(v) => v; None => return None }
@@ -296,7 +297,8 @@ pub fn tiff_decode(data : Array[Byte]) -> Image? {
     } else if compression == 5 {
       tiff_lzw(data, strip_offsets[strip], strip_byte_counts[strip], expected)
     } else if compression == 8 {
-      let inflated = zlib_inflate(data, strip_offsets[strip], strip_offsets[strip] + strip_byte_counts[strip])
+      if !tiff_range(data, strip_offsets[strip], strip_byte_counts[strip]) { return None }
+      let inflated = zlib_inflate(data, strip_offsets[strip], strip_offsets[strip] + strip_byte_counts[strip], max_output=expected)
       match inflated { Some(v) if v.length() == expected => Some(v); _ => None }
     } else {
       None

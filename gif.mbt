@@ -401,7 +401,7 @@ pub fn gif_decode(data : Array[Byte]) -> Image? {
       let height = gif_u16(data, pos + 6)
       let ipacked = data[pos + 8].to_int()
       pos = pos + 9
-      if width <= 0 || height <= 0 || width * height > MAX_IMAGE_PIXELS {
+      if width <= 0 || height <= 0 || width > MAX_IMAGE_PIXELS / height {
         return None
       }
       let interlaced = ipacked / 64 % 2 == 1
