@@ -40,10 +40,10 @@ fn print_help() -> Unit {
   println("  pixelforge info --input-hex HEX")
   println("  pixelforge convert --from FORMAT --to FORMAT --input-hex HEX")
   println("")
-  println("Input pixel formats: png, qoi, bmp, gif, jpeg, webp, tiff")
+  println("Input pixel formats: png, qoi, bmp, gif, jpeg, webp, tiff, avif")
   println("Output pixel formats: png, qoi, bmp, gif, jpeg, webp")
   println(
-    "AVIF is supported by info for metadata only; AVIF pixel conversion is unavailable.",
+    "AVIF input uses MoonAV1; info probes metadata without decoding pixels.",
   )
   println(
     "Pipeline ops: grayscale,invert,brightness:N,contrast:N,blur,sharpen,emboss,edges,sobel,sepia,threshold:N,pixelate:N,median,histogram-equalize,flip-horizontal,flip-vertical,posterize:N,gamma:N,vignette:N,scharr,canny:N,otsu,dither-mono",
@@ -391,9 +391,9 @@ fn decode_image(format : String, bytes : Array[Byte]) -> @pixelforge.Image {
         )
       })
     "avif" =>
-      abort(
-        "pixelforge: AVIF pixel decoding is not available; use info for container metadata",
-      )
+      @pixelforge.avif_decode(bytes).unwrap_or_else(() => {
+        abort("pixelforge: AVIF decode failed or uses unsupported features")
+      })
     _ => abort("pixelforge: unsupported input format \{format}")
   }
 }

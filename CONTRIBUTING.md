@@ -5,10 +5,26 @@ Thanks for helping improve PixelForge. Small, focused pull requests are easiest 
 ## Development setup
 
 Use the compiler release pinned in [ci.yml](https://github.com/0717lee/pixelforge/blob/main/.github/workflows/ci.yml):
-`moonc v0.10.11+6ff76a5f9`. Its bundled CLI reports `moon 0.1.20260827`.
+`moonc v0.10.14+7d59c7ec9`. Its bundled CLI reports `moon 0.1.20260920`.
 These are different components of the same toolchain; the installer takes the
 **compiler release**, not the CLI date version. Confirm with `moon version --all`.
 Native builds require a platform C compiler. Scripts require Node.js 22 or newer.
+
+On Windows, activate an isolated installation in the current PowerShell session:
+
+```powershell
+. ./scripts/use-toolchain.ps1
+# Or: . ./scripts/use-toolchain.ps1 -Toolchain C:/path/to/moonbit
+moon version --all
+```
+
+The script requires the exact pinned compiler and defaults to
+`$env:USERPROFILE/.moon/toolchains/0.10.14`. On Unix, install the same release:
+
+```sh
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- 0.10.14+7d59c7ec9
+export PATH="$HOME/.moon/bin:$PATH"
+```
 
 From the repository root:
 

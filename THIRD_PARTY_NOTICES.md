@@ -6,6 +6,7 @@ in [LICENSE](LICENSE); additional upstream notices are retained below.
 
 | Dependency | Version | Use and upstream source |
 | --- | --- | --- |
+| `0717lee/moonav1` | 0.2.0 | AVIF primary-image, alpha and grid decoding; Apache-2.0; [MoonAV1](https://github.com/0717lee/moonav1), including its [upstream notices](https://github.com/0717lee/moonav1/blob/v0.2.0/THIRD_PARTY_NOTICES.md) |
 | `mizchi/image` | 0.4.3 | JPEG decode/encode, WebP encode and JS-host AVIF encoding adapter; [image-mbt](https://github.com/mizchi/image-mbt) |
 | `mizchi/zlib` | 0.4.8 | PNG compression used by the image adapter; [zlib.mbt](https://github.com/mizchi/zlib.mbt) |
 | `moonbitlang/x` | 0.5.1 | Native CLI filesystem access; [moonbitlang/x](https://github.com/moonbitlang/x) |

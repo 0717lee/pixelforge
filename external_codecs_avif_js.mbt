@@ -1,4 +1,4 @@
-/// JS-host AVIF encoder. The core does not provide AVIF pixel decoding.
+/// JS-host AVIF encoder. Decoding is provided by the MoonAV1 adapter in avif.mbt.
 
 ///|
 /// Encodes an opaque RGBA8 image through `mizchi/image`'s JS adapter.

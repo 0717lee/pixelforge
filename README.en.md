@@ -8,6 +8,8 @@ PixelForge is a MoonBit RGBA8 library with filters, geometry, drawing, analysis 
 
 **The current version is `0.19.0`.** It removes the former AV1/AVIF parsing and pixel-decoding APIs. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
 
+**Unreleased development:** `avif_decode(bytes)` and CLI AVIF input conversion now use `0717lee/moonav1@0.2.0`. The format table below describes this checkout; installing `0.19.0` does not include this feature. Development uses `moonc 0.10.14+7d59c7ec9`; see [CONTRIBUTING](CONTRIBUTING.md) for activation.
+
 ## Quick start
 
 Install the [MoonBit toolchain](https://www.moonbitlang.com/download/), create a project, and add the dependency:
@@ -84,13 +86,13 @@ Current public signatures are in [pkg.generated.mbti](pkg.generated.mbti); sourc
 | JPEG | Yes | Yes | Baseline JPEG through `mizchi/image`; lossy, drops alpha; `jpeg_encode(image, quality)` |
 | WebP | Lossless VP8L | Lossless VP8L | Predictor, cross-color, subtract-green and color-indexing transforms; no lossy VP8 decoding |
 | TIFF | Subset | No | Classic: chunky 8-bit grayscale/RGB/RGBA, strips or tiles, uncompressed/PackBits/LZW/Deflate, Predictor=2; BigTIFF: one strip, uncompressed/PackBits/LZW, offsets and values within supported Int bounds |
-| AVIF | Detection and metadata only | JS host adapter | No AV1 pixel decoder; encoding accepts opaque images only and requires Canvas AVIF encoding in browsers; the dependency uses local `ffmpeg` in Node.js; native/wasm-gc encoding aborts |
+| AVIF | MoonAV1 RGBA8 decode | JS host adapter | `avif_decode` supports js/wasm-gc/native within MoonAV1 0.2.0's decoding limits; encoding accepts opaque images only and requires Canvas AVIF encoding in browsers; the dependency uses local `ffmpeg` in Node.js; native/wasm-gc encoding aborts |
 
 `detect_image_format()` recognizes signatures; `image_metadata()` reads supported dimensions. Neither proves that complete pixel data is decodable. TIFF/BigTIFF detection supports both byte orders. AVIF metadata follows the primary item's associated `ispe`; track-only sequences without primary-item dimensions are unsupported.
 
-`gif_decode_all()` returns frame images, offsets, delays, transparency indices and disposal metadata; callers handle playback and compositing. `gif_decode()` returns the first frame. The core does not decode AVIF grids or animations.
+`gif_decode_all()` returns frame images, offsets, delays, transparency indices and disposal metadata; callers handle playback and compositing. `gif_decode()` returns the first frame. `avif_decode()` returns an owned RGBA8 buffer for the primary AVIF image, including MoonAV1's still-image, alpha and grid paths. Invalid, unsupported or resource-limited inputs return `None`. This adapter does not expose animation playback.
 
-Operators use `moonbitlang/core`; JPEG decode/encode, WebP encoding and AVIF adapters use `mizchi/image`; the native CLI uses `moonbitlang/x/fs`. Dependency versions and attribution are in [moon.mod](moon.mod) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+Operators use `moonbitlang/core`; AVIF decoding uses `0717lee/moonav1`; JPEG decode/encode, WebP encoding and AVIF encoding use `mizchi/image`; the native CLI uses `moonbitlang/x/fs`. Dependency versions and attribution are in [moon.mod](moon.mod) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
 
 ## Errors, sizes and parameters
 
@@ -130,7 +132,7 @@ moon run --target native cmd/cli -- info --input input.tiff
 moon run --target native cmd/cli -- convert --from png --to qoi --pipeline grayscale,contrast:1.2 --input input.png --output output.qoi
 ```
 
-`info` reads only metadata for AVIF; `convert` accepts neither AVIF input nor output. See the [CLI guide](https://github.com/0717lee/pixelforge/blob/main/cmd/cli/README.md) for formats, pipelines, exit behavior and file replacement. CLI examples are excluded from the mooncakes library package; use a repository checkout.
+`info` reads only metadata for AVIF; `convert` accepts AVIF input and applies filters before encoding PNG, QOI or other supported outputs. AVIF output remains unsupported. Example: `moon run --target native cmd/cli -- convert --from avif --to png --pipeline grayscale --input input.avif --output output.png`. See the [CLI guide](https://github.com/0717lee/pixelforge/blob/main/cmd/cli/README.md) for formats, pipelines, exit behavior and file replacement. CLI examples are excluded from the mooncakes library package; use a repository checkout.
 
 ## Development and contributions
 

@@ -95,7 +95,7 @@ try {
   assert.match(run(["info", "--input", avifPath]), /format=avif\r?\nwidth=2\r?\nheight=1\r?\nmetadata_only=true/);
   const rejected = path.join(directory, "rejected.bin");
   for (const [args, message] of [
-    [["--from", "avif", "--to", "png", "--input", avifPath], /AVIF pixel decoding is not available/],
+    [["--from", "avif", "--to", "png", "--input", avifPath], /AVIF decode failed/],
     [["--from", "png", "--to", "avif", "--input", input], /AVIF encoding requires a browser/],
     [["--from", "png", "--to", "qoi", "--pipeline", "unknown", "--input", input], /unknown pipeline operation/],
     [["--from", "png", "--to", "qoi", "--pipeline", "brightness:bad", "--input", input], /invalid integer/],
@@ -103,7 +103,29 @@ try {
     run(["convert", ...args, "--output", rejected], message);
     await assert.rejects(access(rejected), { code: "ENOENT" });
   }
-  console.log("OK native CLI: version, BigTIFF both byte orders, PNG/pipeline/QOI/BMP pixels, AVIF metadata and rejected conversions");
+  const sample = path.join(root, "assets/avif/grayscale.avif");
+  const expected = await readFile(path.join(root, "assets/avif/grayscale.rgba"));
+  const avifPng = path.join(directory, "avif.png");
+  const avifBmp = path.join(directory, "avif.bmp");
+  run(["convert", "--from", "avif", "--to", "png", "--pipeline", "invert", "--input", sample, "--output", avifPng]);
+  run(["convert", "--from", "png", "--to", "bmp", "--input", avifPng, "--output", avifBmp]);
+  const filtered = await readFile(avifBmp);
+  assert.equal(filtered.readInt32LE(18), 4);
+  assert.equal(Math.abs(filtered.readInt32LE(22)), 2);
+  const offset = filtered.readUInt32LE(10);
+  for (let y = 0; y < 2; y++) {
+    const row = filtered.readInt32LE(22) < 0 ? y : 1 - y;
+    for (let x = 0; x < 4; x++) {
+      const p = (y * 4 + x) * 4;
+      const q = offset + (row * 4 + x) * 4;
+      assert.deepEqual([...filtered.subarray(q, q + 4)], [255 - expected[p + 2], 255 - expected[p + 1], 255 - expected[p], expected[p + 3]]);
+    }
+  }
+  const sampleBytes = await readFile(sample);
+  const truncated = sampleBytes.subarray(0, sampleBytes.length - 1).toString("hex");
+  run(["convert", "--from", "avif", "--to", "png", "--input-hex", truncated, "--output", rejected], /AVIF decode failed/);
+  await assert.rejects(access(rejected), { code: "ENOENT" });
+  console.log("OK native CLI: version, BigTIFF, PNG/pipeline/QOI/BMP, AVIF-to-PNG pixels against libdav1d, metadata and rejected conversions");
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

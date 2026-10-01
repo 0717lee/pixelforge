@@ -1,4 +1,4 @@
-/// AVIF encoding requires browser codecs; the core does not decode AVIF pixels.
+/// AVIF encoding requires browser codecs; decoding is provided by avif.mbt.
 
 ///|
 /// AVIF encoding is unavailable on native and wasm-gc targets.

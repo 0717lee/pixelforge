@@ -18,7 +18,7 @@ env:
   # The installer version is the Moon compiler version shown by `moonc`, not
   # the Moon CLI date version. This release remains available in the registry
   # and reproduces the committed JS/WASM artifacts.
-  MOONBIT_VERSION: 0.10.11+6ff76a5f9
+  MOONBIT_VERSION: 0.10.14+7d59c7ec9
 
 jobs:
   check-and-test:

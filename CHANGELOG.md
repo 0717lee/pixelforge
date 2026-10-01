@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add `avif_decode` through the published `0717lee/moonav1@0.2.0` dependency
+  for RGBA8 decoding on JavaScript, wasm-gc and native.
+- Accept AVIF input in the native CLI's conversion and filter pipeline; retain
+  metadata-only `info` and the existing AVIF output restriction.
+- Test adapter pixels against a libdav1d reference, every truncated prefix,
+  buffer ownership and native AVIF -> filter -> PNG file conversion.
+- Pin CI and the Windows development setup to `moonc 0.10.14+7d59c7ec9`.
+
 ## 0.19.0 (2026-09-29)
 
 ### Reliability and integration

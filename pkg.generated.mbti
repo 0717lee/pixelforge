@@ -2,6 +2,8 @@
 package "0717lee/pixelforge"
 
 // Values
+pub fn avif_decode(Array[Byte]) -> Image?
+
 pub fn avif_encode(Image) -> Array[Byte]
 
 pub fn bmp_decode(Array[Byte]) -> Image?

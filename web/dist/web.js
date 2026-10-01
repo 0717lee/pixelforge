@@ -1,3 +1,8 @@
+const $reinterpret_view = new DataView(new ArrayBuffer(8));
+function $i64_reinterpret_f64(a) {
+  $reinterpret_view.setBigUint64(0, BigInt.asUintN(64, a), false);
+  return $reinterpret_view.getFloat64(0, false);
+}
 const _M0MPB7JSArray4push = (arr, val) => { arr.push(val); };
 const _M0MPB7JSArray4copy = (arr) => arr.slice(0);
 const _M0MPB7JSArray3pop = (arr) => arr.pop();
@@ -17,8 +22,8 @@ function $makebytes(a, b) {
   }
   return arr;
 }
-function $bound_check(arr, index) {
-  if (index < 0 || index >= arr.length) throw new Error("Index out of bounds");
+function $oob() {
+  throw new Error("Index out of bounds");
 }
 function _M0TP270717lee10pixelforge9BitWriter(param0, param1, param2) {
   this.out = param0;
@@ -36,6 +41,8 @@ function $make_array_len_and_init(a, b) {
   arr.fill(b);
   return arr;
 }
+const _M0FPC16double8infinity = $i64_reinterpret_f64(9218868437227405312n);
+const _M0FPC16double13neg__infinity = $i64_reinterpret_f64(18442240474082181120n);
 function _M0MPC15array5Array4pushGyE(self, value) {
   _M0MPB7JSArray4push(self, value);
 }
@@ -88,8 +95,17 @@ function _M0MPC15array5Array4makeGiE(len, elem) {
   }
   return arr;
 }
-function _M0FPC14math3pow(_tmp, _tmp$2) {
+function _M0FPC14math13math__pow__js(_tmp, _tmp$2) {
   return Math.pow(_tmp, _tmp$2);
+}
+function _M0FPC14math3pow(base, exponent) {
+  if (base === 1) {
+    return 1;
+  }
+  if (base === -1 && (exponent === _M0FPC16double8infinity || exponent === _M0FPC16double13neg__infinity)) {
+    return 1;
+  }
+  return _M0FPC14math13math__pow__js(base, exponent);
 }
 function _M0FP270717lee10pixelforge20checked__buffer__len(width, height) {
   if (width < 0 || height < 0) {
@@ -130,30 +146,38 @@ function _M0MP270717lee10pixelforge5Image16flip__horizontal(self) {
           const dst = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$3 = out.data;
           const _tmp$4 = self.data;
-          $bound_check(_tmp$4, src);
-          $bound_check(_tmp$3, dst);
-          _tmp$3[dst] = _tmp$4[src];
+          if (dst >>> 0 < _tmp$3.length) {
+            _tmp$3[dst] = src >>> 0 < _tmp$4.length ? _tmp$4[src] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$5 = out.data;
           const _tmp$6 = dst + 1 | 0;
           const _tmp$7 = self.data;
           const _tmp$8 = src + 1 | 0;
-          $bound_check(_tmp$7, _tmp$8);
-          $bound_check(_tmp$5, _tmp$6);
-          _tmp$5[_tmp$6] = _tmp$7[_tmp$8];
+          if (_tmp$6 >>> 0 < _tmp$5.length) {
+            _tmp$5[_tmp$6] = _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$9 = out.data;
           const _tmp$10 = dst + 2 | 0;
           const _tmp$11 = self.data;
           const _tmp$12 = src + 2 | 0;
-          $bound_check(_tmp$11, _tmp$12);
-          $bound_check(_tmp$9, _tmp$10);
-          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          if (_tmp$10 >>> 0 < _tmp$9.length) {
+            _tmp$9[_tmp$10] = _tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$13 = out.data;
           const _tmp$14 = dst + 3 | 0;
           const _tmp$15 = self.data;
           const _tmp$16 = src + 3 | 0;
-          $bound_check(_tmp$15, _tmp$16);
-          $bound_check(_tmp$13, _tmp$14);
-          _tmp$13[_tmp$14] = _tmp$15[_tmp$16];
+          if (_tmp$14 >>> 0 < _tmp$13.length) {
+            _tmp$13[_tmp$14] = _tmp$16 >>> 0 < _tmp$15.length ? _tmp$15[_tmp$16] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -184,30 +208,38 @@ function _M0MP270717lee10pixelforge5Image14flip__vertical(self) {
           const dst = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$3 = out.data;
           const _tmp$4 = self.data;
-          $bound_check(_tmp$4, src);
-          $bound_check(_tmp$3, dst);
-          _tmp$3[dst] = _tmp$4[src];
+          if (dst >>> 0 < _tmp$3.length) {
+            _tmp$3[dst] = src >>> 0 < _tmp$4.length ? _tmp$4[src] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$5 = out.data;
           const _tmp$6 = dst + 1 | 0;
           const _tmp$7 = self.data;
           const _tmp$8 = src + 1 | 0;
-          $bound_check(_tmp$7, _tmp$8);
-          $bound_check(_tmp$5, _tmp$6);
-          _tmp$5[_tmp$6] = _tmp$7[_tmp$8];
+          if (_tmp$6 >>> 0 < _tmp$5.length) {
+            _tmp$5[_tmp$6] = _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$9 = out.data;
           const _tmp$10 = dst + 2 | 0;
           const _tmp$11 = self.data;
           const _tmp$12 = src + 2 | 0;
-          $bound_check(_tmp$11, _tmp$12);
-          $bound_check(_tmp$9, _tmp$10);
-          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          if (_tmp$10 >>> 0 < _tmp$9.length) {
+            _tmp$9[_tmp$10] = _tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob();
+          } else {
+            $oob();
+          }
           const _tmp$13 = out.data;
           const _tmp$14 = dst + 3 | 0;
           const _tmp$15 = self.data;
           const _tmp$16 = src + 3 | 0;
-          $bound_check(_tmp$15, _tmp$16);
-          $bound_check(_tmp$13, _tmp$14);
-          _tmp$13[_tmp$14] = _tmp$15[_tmp$16];
+          if (_tmp$14 >>> 0 < _tmp$13.length) {
+            _tmp$13[_tmp$14] = _tmp$16 >>> 0 < _tmp$15.length ? _tmp$15[_tmp$16] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -250,31 +282,37 @@ function _M0MP270717lee10pixelforge5Image8map__rgb(self, transform) {
     if (p < n) {
       const base = Math.imul(p, 4) | 0;
       const _tmp$2 = self.data;
-      $bound_check(_tmp$2, base);
-      const r = _tmp$2[base];
+      const r = base >>> 0 < _tmp$2.length ? _tmp$2[base] : $oob();
       const _tmp$3 = self.data;
       const _tmp$4 = base + 1 | 0;
-      $bound_check(_tmp$3, _tmp$4);
-      const g = _tmp$3[_tmp$4];
+      const g = _tmp$4 >>> 0 < _tmp$3.length ? _tmp$3[_tmp$4] : $oob();
       const _tmp$5 = self.data;
       const _tmp$6 = base + 2 | 0;
-      $bound_check(_tmp$5, _tmp$6);
-      const b = _tmp$5[_tmp$6];
+      const b = _tmp$6 >>> 0 < _tmp$5.length ? _tmp$5[_tmp$6] : $oob();
       const _bind = transform(r, g, b);
       const _nr = _bind._0;
       const _ng = _bind._1;
       const _nb = _bind._2;
       const _tmp$7 = out.data;
-      $bound_check(_tmp$7, base);
-      _tmp$7[base] = _nr < 0 ? 0 : _nr > 255 ? 255 : _nr & 255;
+      if (base >>> 0 < _tmp$7.length) {
+        _tmp$7[base] = _nr < 0 ? 0 : _nr > 255 ? 255 : _nr & 255;
+      } else {
+        $oob();
+      }
       const _tmp$8 = out.data;
       const _tmp$9 = base + 1 | 0;
-      $bound_check(_tmp$8, _tmp$9);
-      _tmp$8[_tmp$9] = _ng < 0 ? 0 : _ng > 255 ? 255 : _ng & 255;
+      if (_tmp$9 >>> 0 < _tmp$8.length) {
+        _tmp$8[_tmp$9] = _ng < 0 ? 0 : _ng > 255 ? 255 : _ng & 255;
+      } else {
+        $oob();
+      }
       const _tmp$10 = out.data;
       const _tmp$11 = base + 2 | 0;
-      $bound_check(_tmp$10, _tmp$11);
-      _tmp$10[_tmp$11] = _nb < 0 ? 0 : _nb > 255 ? 255 : _nb & 255;
+      if (_tmp$11 >>> 0 < _tmp$10.length) {
+        _tmp$10[_tmp$11] = _nb < 0 ? 0 : _nb > 255 ? 255 : _nb & 255;
+      } else {
+        $oob();
+      }
       _tmp = p + 1 | 0;
       continue;
     } else {
@@ -570,14 +608,12 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
             if (i < stride) {
               const _tmp$6 = img.data;
               const _tmp$7 = (Math.imul(y, stride) | 0) + i | 0;
-              $bound_check(_tmp$6, _tmp$7);
-              const x = _tmp$6[_tmp$7];
+              const x = _tmp$7 >>> 0 < _tmp$6.length ? _tmp$6[_tmp$7] : $oob();
               let a;
               if (i >= 4) {
                 const _tmp$8 = img.data;
                 const _tmp$9 = ((Math.imul(y, stride) | 0) + i | 0) - 4 | 0;
-                $bound_check(_tmp$8, _tmp$9);
-                a = _tmp$8[_tmp$9];
+                a = _tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob();
               } else {
                 a = 0;
               }
@@ -631,14 +667,12 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
         if (i < stride) {
           const _tmp$6 = img.data;
           const _tmp$7 = (Math.imul(y, stride) | 0) + i | 0;
-          $bound_check(_tmp$6, _tmp$7);
-          const x = _tmp$6[_tmp$7];
+          const x = _tmp$7 >>> 0 < _tmp$6.length ? _tmp$6[_tmp$7] : $oob();
           let a;
           if (i >= 4) {
             const _tmp$8 = img.data;
             const _tmp$9 = ((Math.imul(y, stride) | 0) + i | 0) - 4 | 0;
-            $bound_check(_tmp$8, _tmp$9);
-            a = _tmp$8[_tmp$9];
+            a = _tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob();
           } else {
             a = 0;
           }
@@ -750,18 +784,15 @@ function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
                   const base = Math.imul((Math.imul(sy, self.width) | 0) + sx | 0, 4) | 0;
                   const _tmp$5 = sum_r;
                   const _tmp$6 = self.data;
-                  $bound_check(_tmp$6, base);
-                  sum_r = _tmp$5 + (_tmp$6[base] + 0) * w;
+                  sum_r = _tmp$5 + ((base >>> 0 < _tmp$6.length ? _tmp$6[base] : $oob()) + 0) * w;
                   const _tmp$7 = sum_g;
                   const _tmp$8 = self.data;
                   const _tmp$9 = base + 1 | 0;
-                  $bound_check(_tmp$8, _tmp$9);
-                  sum_g = _tmp$7 + (_tmp$8[_tmp$9] + 0) * w;
+                  sum_g = _tmp$7 + ((_tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob()) + 0) * w;
                   const _tmp$10 = sum_b;
                   const _tmp$11 = self.data;
                   const _tmp$12 = base + 2 | 0;
-                  $bound_check(_tmp$11, _tmp$12);
-                  sum_b = _tmp$10 + (_tmp$11[_tmp$12] + 0) * w;
+                  sum_b = _tmp$10 + ((_tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob()) + 0) * w;
                   _tmp$4 = kx + 1 | 0;
                   continue;
                 } else {
@@ -777,25 +808,36 @@ function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
           const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$4 = out.data;
           const _p = _M0MPC16double6Double7to__int(sum_r / kernel.divisor + kernel.bias);
-          $bound_check(_tmp$4, base);
-          _tmp$4[base] = _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
+          if (base >>> 0 < _tmp$4.length) {
+            _tmp$4[base] = _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
+          } else {
+            $oob();
+          }
           const _tmp$5 = out.data;
           const _tmp$6 = base + 1 | 0;
           const _p$2 = _M0MPC16double6Double7to__int(sum_g / kernel.divisor + kernel.bias);
-          $bound_check(_tmp$5, _tmp$6);
-          _tmp$5[_tmp$6] = _p$2 < 0 ? 0 : _p$2 > 255 ? 255 : _p$2 & 255;
+          if (_tmp$6 >>> 0 < _tmp$5.length) {
+            _tmp$5[_tmp$6] = _p$2 < 0 ? 0 : _p$2 > 255 ? 255 : _p$2 & 255;
+          } else {
+            $oob();
+          }
           const _tmp$7 = out.data;
           const _tmp$8 = base + 2 | 0;
           const _p$3 = _M0MPC16double6Double7to__int(sum_b / kernel.divisor + kernel.bias);
-          $bound_check(_tmp$7, _tmp$8);
-          _tmp$7[_tmp$8] = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          if (_tmp$8 >>> 0 < _tmp$7.length) {
+            _tmp$7[_tmp$8] = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          } else {
+            $oob();
+          }
           const _tmp$9 = out.data;
           const _tmp$10 = base + 3 | 0;
           const _tmp$11 = self.data;
           const _tmp$12 = base + 3 | 0;
-          $bound_check(_tmp$11, _tmp$12);
-          $bound_check(_tmp$9, _tmp$10);
-          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          if (_tmp$10 >>> 0 < _tmp$9.length) {
+            _tmp$9[_tmp$10] = _tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -868,8 +910,7 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
                   const py = _p$2 < 0 ? 0 : _p$2 >= h ? h - 1 | 0 : _p$2;
                   const _tmp$5 = gray.data;
                   const _tmp$6 = Math.imul((Math.imul(py, w) | 0) + px | 0, 4) | 0;
-                  $bound_check(_tmp$5, _tmp$6);
-                  const lum = _tmp$5[_tmp$6];
+                  const lum = _tmp$6 >>> 0 < _tmp$5.length ? _tmp$5[_tmp$6] : $oob();
                   sx = sx + (Math.imul(lum, _M0MPC15array5Array2atGiE(kx, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
                   sy = sy + (Math.imul(lum, _M0MPC15array5Array2atGiE(ky, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
                   _tmp$4 = i + 1 | 0;
@@ -1037,23 +1078,34 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
       const v = _M0MPC15array5Array2atGiE(state, p) === 2 ? 255 : 0;
       const base = Math.imul(p, 4) | 0;
       const _tmp$5 = out.data;
-      $bound_check(_tmp$5, base);
-      _tmp$5[base] = v;
+      if (base >>> 0 < _tmp$5.length) {
+        _tmp$5[base] = v;
+      } else {
+        $oob();
+      }
       const _tmp$6 = out.data;
       const _tmp$7 = base + 1 | 0;
-      $bound_check(_tmp$6, _tmp$7);
-      _tmp$6[_tmp$7] = v;
+      if (_tmp$7 >>> 0 < _tmp$6.length) {
+        _tmp$6[_tmp$7] = v;
+      } else {
+        $oob();
+      }
       const _tmp$8 = out.data;
       const _tmp$9 = base + 2 | 0;
-      $bound_check(_tmp$8, _tmp$9);
-      _tmp$8[_tmp$9] = v;
+      if (_tmp$9 >>> 0 < _tmp$8.length) {
+        _tmp$8[_tmp$9] = v;
+      } else {
+        $oob();
+      }
       const _tmp$10 = out.data;
       const _tmp$11 = base + 3 | 0;
       const _tmp$12 = self.data;
       const _tmp$13 = base + 3 | 0;
-      $bound_check(_tmp$12, _tmp$13);
-      $bound_check(_tmp$10, _tmp$11);
-      _tmp$10[_tmp$11] = _tmp$12[_tmp$13];
+      if (_tmp$11 >>> 0 < _tmp$10.length) {
+        _tmp$10[_tmp$11] = _tmp$13 >>> 0 < _tmp$12.length ? _tmp$12[_tmp$13] : $oob();
+      } else {
+        $oob();
+      }
       _tmp$4 = p + 1 | 0;
       continue;
     } else {
@@ -1062,11 +1114,11 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   }
   return out;
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS801(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS799(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS801(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS801(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS801(factor, b) }));
 }
 function _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, err) {
   if ((x + 1 | 0) < w) {
@@ -1105,16 +1157,13 @@ function _M0MP270717lee10pixelforge5Image17dither__grayscale(self, levels) {
     if (p < _bind) {
       const base = Math.imul(p, 4) | 0;
       const _tmp$2 = self.data;
-      $bound_check(_tmp$2, base);
-      const _tmp$3 = Math.imul(299, _tmp$2[base]) | 0;
+      const _tmp$3 = Math.imul(299, base >>> 0 < _tmp$2.length ? _tmp$2[base] : $oob()) | 0;
       const _tmp$4 = self.data;
       const _tmp$5 = base + 1 | 0;
-      $bound_check(_tmp$4, _tmp$5);
-      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$4[_tmp$5]) | 0) | 0;
+      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$5 >>> 0 < _tmp$4.length ? _tmp$4[_tmp$5] : $oob()) | 0) | 0;
       const _tmp$7 = self.data;
       const _tmp$8 = base + 2 | 0;
-      $bound_check(_tmp$7, _tmp$8);
-      _M0MPC15array5Array3setGiE(buf, p, (_tmp$6 + (Math.imul(114, _tmp$7[_tmp$8]) | 0) | 0) / 1000 | 0);
+      _M0MPC15array5Array3setGiE(buf, p, (_tmp$6 + (Math.imul(114, _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) | 0) | 0) / 1000 | 0);
       _tmp = p + 1 | 0;
       continue;
     } else {
@@ -1136,23 +1185,34 @@ function _M0MP270717lee10pixelforge5Image17dither__grayscale(self, levels) {
           const b = newv < 0 ? 0 : newv > 255 ? 255 : newv & 255;
           const base = Math.imul((Math.imul(y, w) | 0) + x | 0, 4) | 0;
           const _tmp$4 = out.data;
-          $bound_check(_tmp$4, base);
-          _tmp$4[base] = b;
+          if (base >>> 0 < _tmp$4.length) {
+            _tmp$4[base] = b;
+          } else {
+            $oob();
+          }
           const _tmp$5 = out.data;
           const _tmp$6 = base + 1 | 0;
-          $bound_check(_tmp$5, _tmp$6);
-          _tmp$5[_tmp$6] = b;
+          if (_tmp$6 >>> 0 < _tmp$5.length) {
+            _tmp$5[_tmp$6] = b;
+          } else {
+            $oob();
+          }
           const _tmp$7 = out.data;
           const _tmp$8 = base + 2 | 0;
-          $bound_check(_tmp$7, _tmp$8);
-          _tmp$7[_tmp$8] = b;
+          if (_tmp$8 >>> 0 < _tmp$7.length) {
+            _tmp$7[_tmp$8] = b;
+          } else {
+            $oob();
+          }
           const _tmp$9 = out.data;
           const _tmp$10 = base + 3 | 0;
           const _tmp$11 = self.data;
           const _tmp$12 = base + 3 | 0;
-          $bound_check(_tmp$11, _tmp$12);
-          $bound_check(_tmp$9, _tmp$10);
-          _tmp$9[_tmp$10] = _tmp$11[_tmp$12];
+          if (_tmp$10 >>> 0 < _tmp$9.length) {
+            _tmp$9[_tmp$10] = _tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$3 = x + 1 | 0;
           continue;
         } else {
@@ -1191,22 +1251,18 @@ function _M0MP270717lee10pixelforge5Image5gamma(self, value) {
     const i = _tmp;
     if (i < 256) {
       const normalized = (i + 0) / 255;
-      $bound_check(lut, i);
-      lut[i] = _M0MPC16double6Double7to__int(_M0FPC14math3pow(normalized, inv) * 255 + 0.5);
+      if (i >>> 0 < lut.length) {
+        lut[i] = _M0MPC16double6Double7to__int(_M0FPC14math3pow(normalized, inv) * 255 + 0.5);
+      } else {
+        $oob();
+      }
       _tmp = i + 1 | 0;
       continue;
     } else {
       break;
     }
   }
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g$2, b) => {
-    $bound_check(lut, r);
-    const _tmp$2 = lut[r];
-    $bound_check(lut, g$2);
-    const _tmp$3 = lut[g$2];
-    $bound_check(lut, b);
-    return { _0: _tmp$2, _1: _tmp$3, _2: lut[b] };
-  });
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g$2, b) => ({ _0: r >>> 0 < lut.length ? lut[r] : $oob(), _1: g$2 >>> 0 < lut.length ? lut[g$2] : $oob(), _2: b >>> 0 < lut.length ? lut[b] : $oob() }));
 }
 function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   const n = _M0MP270717lee10pixelforge5Image12pixel__count(self);
@@ -1217,19 +1273,18 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
     if (p < n) {
       const base = Math.imul(p, 4) | 0;
       const _tmp$2 = self.data;
-      $bound_check(_tmp$2, base);
-      const _tmp$3 = Math.imul(299, _tmp$2[base]) | 0;
+      const _tmp$3 = Math.imul(299, base >>> 0 < _tmp$2.length ? _tmp$2[base] : $oob()) | 0;
       const _tmp$4 = self.data;
       const _tmp$5 = base + 1 | 0;
-      $bound_check(_tmp$4, _tmp$5);
-      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$4[_tmp$5]) | 0) | 0;
+      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$5 >>> 0 < _tmp$4.length ? _tmp$4[_tmp$5] : $oob()) | 0) | 0;
       const _tmp$7 = self.data;
       const _tmp$8 = base + 2 | 0;
-      $bound_check(_tmp$7, _tmp$8);
-      const y = (_tmp$6 + (Math.imul(114, _tmp$7[_tmp$8]) | 0) | 0) / 1000 | 0;
-      $bound_check(hist, y);
-      $bound_check(hist, y);
-      hist[y] = hist[y] + 1 | 0;
+      const y = (_tmp$6 + (Math.imul(114, _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) | 0) | 0) / 1000 | 0;
+      if (y >>> 0 < hist.length) {
+        hist[y] = (y >>> 0 < hist.length ? hist[y] : $oob()) + 1 | 0;
+      } else {
+        $oob();
+      }
       _tmp = p + 1 | 0;
       continue;
     } else {
@@ -1242,11 +1297,12 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   while (true) {
     const i = _tmp$2;
     if (i < 256) {
-      const _tmp$3 = acc;
-      $bound_check(hist, i);
-      acc = _tmp$3 + hist[i] | 0;
-      $bound_check(cdf, i);
-      cdf[i] = acc;
+      acc = acc + (i >>> 0 < hist.length ? hist[i] : $oob()) | 0;
+      if (i >>> 0 < cdf.length) {
+        cdf[i] = acc;
+      } else {
+        $oob();
+      }
       _tmp$2 = i + 1 | 0;
       continue;
     } else {
@@ -1258,10 +1314,8 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   while (true) {
     const i = _tmp$3;
     if (i < 256) {
-      $bound_check(cdf, i);
-      if (cdf[i] !== 0) {
-        $bound_check(cdf, i);
-        cdf_min = cdf[i];
+      if ((i >>> 0 < cdf.length ? cdf[i] : $oob()) !== 0) {
+        cdf_min = i >>> 0 < cdf.length ? cdf[i] : $oob();
         break;
       }
       _tmp$3 = i + 1 | 0;
@@ -1276,15 +1330,11 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   while (true) {
     const i = _tmp$4;
     if (i < 256) {
-      let _tmp$5;
-      if (denom <= 0) {
-        _tmp$5 = i;
+      if (i >>> 0 < lut.length) {
+        lut[i] = denom <= 0 ? i : (Math.imul((i >>> 0 < cdf.length ? cdf[i] : $oob()) - cdf_min | 0, 255) | 0) / denom | 0;
       } else {
-        $bound_check(cdf, i);
-        _tmp$5 = (Math.imul(cdf[i] - cdf_min | 0, 255) | 0) / denom | 0;
+        $oob();
       }
-      $bound_check(lut, i);
-      lut[i] = _tmp$5;
       _tmp$4 = i + 1 | 0;
       continue;
     } else {
@@ -1293,8 +1343,7 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   }
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
     const y = (((Math.imul(299, r) | 0) + (Math.imul(587, g) | 0) | 0) + (Math.imul(114, b) | 0) | 0) / 1000 | 0;
-    $bound_check(lut, y);
-    const e = lut[y];
+    const e = y >>> 0 < lut.length ? lut[y] : $oob();
     return { _0: e, _1: e, _2: e };
   });
 }
@@ -1321,9 +1370,11 @@ function _M0FP270717lee10pixelforge15median__channel(img, x, y, ch) {
           const _tmp$3 = k;
           const _tmp$4 = img.data;
           const _tmp$5 = (Math.imul((Math.imul(sy, img.width) | 0) + sx | 0, 4) | 0) + ch | 0;
-          $bound_check(_tmp$4, _tmp$5);
-          $bound_check(vals, _tmp$3);
-          vals[_tmp$3] = _tmp$4[_tmp$5];
+          if (_tmp$3 >>> 0 < vals.length) {
+            vals[_tmp$3] = _tmp$5 >>> 0 < _tmp$4.length ? _tmp$4[_tmp$5] : $oob();
+          } else {
+            $oob();
+          }
           k = k + 1 | 0;
           _tmp$2 = dx + 1 | 0;
           continue;
@@ -1341,24 +1392,24 @@ function _M0FP270717lee10pixelforge15median__channel(img, x, y, ch) {
   while (true) {
     const i = _tmp$2;
     if (i < 9) {
-      $bound_check(vals, i);
-      const v = vals[i];
+      const v = i >>> 0 < vals.length ? vals[i] : $oob();
       let j = i - 1 | 0;
       while (true) {
         let _tmp$3;
         if (j >= 0) {
           const _tmp$4 = j;
-          $bound_check(vals, _tmp$4);
-          _tmp$3 = vals[_tmp$4] > v;
+          _tmp$3 = (_tmp$4 >>> 0 < vals.length ? vals[_tmp$4] : $oob()) > v;
         } else {
           _tmp$3 = false;
         }
         if (_tmp$3) {
           const _tmp$4 = j + 1 | 0;
           const _tmp$5 = j;
-          $bound_check(vals, _tmp$5);
-          $bound_check(vals, _tmp$4);
-          vals[_tmp$4] = vals[_tmp$5];
+          if (_tmp$4 >>> 0 < vals.length) {
+            vals[_tmp$4] = _tmp$5 >>> 0 < vals.length ? vals[_tmp$5] : $oob();
+          } else {
+            $oob();
+          }
           j = j - 1 | 0;
           continue;
         } else {
@@ -1366,16 +1417,18 @@ function _M0FP270717lee10pixelforge15median__channel(img, x, y, ch) {
         }
       }
       const _tmp$3 = j + 1 | 0;
-      $bound_check(vals, _tmp$3);
-      vals[_tmp$3] = v;
+      if (_tmp$3 >>> 0 < vals.length) {
+        vals[_tmp$3] = v;
+      } else {
+        $oob();
+      }
       _tmp$2 = i + 1 | 0;
       continue;
     } else {
       break;
     }
   }
-  $bound_check(vals, 4);
-  const _p = vals[4];
+  const _p = 4 >>> 0 < vals.length ? vals[4] : $oob();
   return _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
 }
 function _M0MP270717lee10pixelforge5Image6median(self) {
@@ -1392,23 +1445,34 @@ function _M0MP270717lee10pixelforge5Image6median(self) {
         if (x < _bind$2) {
           const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$3 = out.data;
-          $bound_check(_tmp$3, base);
-          _tmp$3[base] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 0);
+          if (base >>> 0 < _tmp$3.length) {
+            _tmp$3[base] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 0);
+          } else {
+            $oob();
+          }
           const _tmp$4 = out.data;
           const _tmp$5 = base + 1 | 0;
-          $bound_check(_tmp$4, _tmp$5);
-          _tmp$4[_tmp$5] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 1);
+          if (_tmp$5 >>> 0 < _tmp$4.length) {
+            _tmp$4[_tmp$5] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 1);
+          } else {
+            $oob();
+          }
           const _tmp$6 = out.data;
           const _tmp$7 = base + 2 | 0;
-          $bound_check(_tmp$6, _tmp$7);
-          _tmp$6[_tmp$7] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 2);
+          if (_tmp$7 >>> 0 < _tmp$6.length) {
+            _tmp$6[_tmp$7] = _M0FP270717lee10pixelforge15median__channel(self, x, y, 2);
+          } else {
+            $oob();
+          }
           const _tmp$8 = out.data;
           const _tmp$9 = base + 3 | 0;
           const _tmp$10 = self.data;
           const _tmp$11 = base + 3 | 0;
-          $bound_check(_tmp$10, _tmp$11);
-          $bound_check(_tmp$8, _tmp$9);
-          _tmp$8[_tmp$9] = _tmp$10[_tmp$11];
+          if (_tmp$9 >>> 0 < _tmp$8.length) {
+            _tmp$8[_tmp$9] = _tmp$11 >>> 0 < _tmp$10.length ? _tmp$10[_tmp$11] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -1432,19 +1496,18 @@ function _M0MP270717lee10pixelforge5Image15luma__histogram(self) {
     if (p < n) {
       const base = Math.imul(p, 4) | 0;
       const _tmp$2 = self.data;
-      $bound_check(_tmp$2, base);
-      const _tmp$3 = Math.imul(299, _tmp$2[base]) | 0;
+      const _tmp$3 = Math.imul(299, base >>> 0 < _tmp$2.length ? _tmp$2[base] : $oob()) | 0;
       const _tmp$4 = self.data;
       const _tmp$5 = base + 1 | 0;
-      $bound_check(_tmp$4, _tmp$5);
-      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$4[_tmp$5]) | 0) | 0;
+      const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$5 >>> 0 < _tmp$4.length ? _tmp$4[_tmp$5] : $oob()) | 0) | 0;
       const _tmp$7 = self.data;
       const _tmp$8 = base + 2 | 0;
-      $bound_check(_tmp$7, _tmp$8);
-      const y = (_tmp$6 + (Math.imul(114, _tmp$7[_tmp$8]) | 0) | 0) / 1000 | 0;
-      $bound_check(hist, y);
-      $bound_check(hist, y);
-      hist[y] = hist[y] + 1 | 0;
+      const y = (_tmp$6 + (Math.imul(114, _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) | 0) | 0) / 1000 | 0;
+      if (y >>> 0 < hist.length) {
+        hist[y] = (y >>> 0 < hist.length ? hist[y] : $oob()) + 1 | 0;
+      } else {
+        $oob();
+      }
       _tmp = p + 1 | 0;
       continue;
     } else {
@@ -1464,9 +1527,7 @@ function _M0MP270717lee10pixelforge5Image15otsu__threshold(self) {
   while (true) {
     const i = _tmp;
     if (i < 256) {
-      const _tmp$2 = sum_all;
-      $bound_check(hist, i);
-      sum_all = _tmp$2 + ((Math.imul(i, hist[i]) | 0) + 0);
+      sum_all = sum_all + ((Math.imul(i, i >>> 0 < hist.length ? hist[i] : $oob()) | 0) + 0);
       _tmp = i + 1 | 0;
       continue;
     } else {
@@ -1482,9 +1543,7 @@ function _M0MP270717lee10pixelforge5Image15otsu__threshold(self) {
     const t = _tmp$2;
     if (t < 256) {
       _L: {
-        const _tmp$3 = w_b;
-        $bound_check(hist, t);
-        w_b = _tmp$3 + hist[t] | 0;
+        w_b = w_b + (t >>> 0 < hist.length ? hist[t] : $oob()) | 0;
         if (w_b === 0) {
           break _L;
         }
@@ -1492,9 +1551,7 @@ function _M0MP270717lee10pixelforge5Image15otsu__threshold(self) {
         if (w_f === 0) {
           break;
         }
-        const _tmp$4 = sum_b;
-        $bound_check(hist, t);
-        sum_b = _tmp$4 + ((Math.imul(t, hist[t]) | 0) + 0);
+        sum_b = sum_b + ((Math.imul(t, t >>> 0 < hist.length ? hist[t] : $oob()) | 0) + 0);
         const mean_b = sum_b / (w_b + 0);
         const mean_f = (sum_all - sum_b) / (w_f + 0);
         const diff = mean_b - mean_f;
@@ -1557,18 +1614,15 @@ function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
                   const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
                   const _tmp$5 = sr;
                   const _tmp$6 = self.data;
-                  $bound_check(_tmp$6, base);
-                  sr = _tmp$5 + _tmp$6[base] | 0;
+                  sr = _tmp$5 + (base >>> 0 < _tmp$6.length ? _tmp$6[base] : $oob()) | 0;
                   const _tmp$7 = sg;
                   const _tmp$8 = self.data;
                   const _tmp$9 = base + 1 | 0;
-                  $bound_check(_tmp$8, _tmp$9);
-                  sg = _tmp$7 + _tmp$8[_tmp$9] | 0;
+                  sg = _tmp$7 + (_tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob()) | 0;
                   const _tmp$10 = sb;
                   const _tmp$11 = self.data;
                   const _tmp$12 = base + 2 | 0;
-                  $bound_check(_tmp$11, _tmp$12);
-                  sb = _tmp$10 + _tmp$11[_tmp$12] | 0;
+                  sb = _tmp$10 + (_tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob()) | 0;
                   count = count + 1 | 0;
                   _tmp$4 = x + 1 | 0;
                   continue;
@@ -1598,23 +1652,34 @@ function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
                 if (x < x1) {
                   const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
                   const _tmp$6 = out.data;
-                  $bound_check(_tmp$6, base);
-                  _tmp$6[base] = ar;
+                  if (base >>> 0 < _tmp$6.length) {
+                    _tmp$6[base] = ar;
+                  } else {
+                    $oob();
+                  }
                   const _tmp$7 = out.data;
                   const _tmp$8 = base + 1 | 0;
-                  $bound_check(_tmp$7, _tmp$8);
-                  _tmp$7[_tmp$8] = ag;
+                  if (_tmp$8 >>> 0 < _tmp$7.length) {
+                    _tmp$7[_tmp$8] = ag;
+                  } else {
+                    $oob();
+                  }
                   const _tmp$9 = out.data;
                   const _tmp$10 = base + 2 | 0;
-                  $bound_check(_tmp$9, _tmp$10);
-                  _tmp$9[_tmp$10] = ab;
+                  if (_tmp$10 >>> 0 < _tmp$9.length) {
+                    _tmp$9[_tmp$10] = ab;
+                  } else {
+                    $oob();
+                  }
                   const _tmp$11 = out.data;
                   const _tmp$12 = base + 3 | 0;
                   const _tmp$13 = self.data;
                   const _tmp$14 = base + 3 | 0;
-                  $bound_check(_tmp$13, _tmp$14);
-                  $bound_check(_tmp$11, _tmp$12);
-                  _tmp$11[_tmp$12] = _tmp$13[_tmp$14];
+                  if (_tmp$12 >>> 0 < _tmp$11.length) {
+                    _tmp$11[_tmp$12] = _tmp$14 >>> 0 < _tmp$13.length ? _tmp$13[_tmp$14] : $oob();
+                  } else {
+                    $oob();
+                  }
                   _tmp$5 = x + 1 | 0;
                   continue;
                 } else {
@@ -1676,8 +1741,7 @@ function _M0MP270717lee10pixelforge5Image15gradient__edges(self, gx, gy) {
                   const py = _p$3 < 0 ? 0 : _p$3 >= _p$4 ? _p$4 - 1 | 0 : _p$3;
                   const base = Math.imul((Math.imul(py, self.width) | 0) + px | 0, 4) | 0;
                   const _tmp$5 = gray.data;
-                  $bound_check(_tmp$5, base);
-                  const lum = _tmp$5[base];
+                  const lum = base >>> 0 < _tmp$5.length ? _tmp$5[base] : $oob();
                   const k = (Math.imul(ky, 3) | 0) + kx | 0;
                   sx = sx + (Math.imul(lum, _M0MPC15array5Array2atGiE(gx, k)) | 0) | 0;
                   sy = sy + (Math.imul(lum, _M0MPC15array5Array2atGiE(gy, k)) | 0) | 0;
@@ -1700,23 +1764,34 @@ function _M0MP270717lee10pixelforge5Image15gradient__edges(self, gx, gy) {
           const v = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
           const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$5 = out.data;
-          $bound_check(_tmp$5, base);
-          _tmp$5[base] = v;
+          if (base >>> 0 < _tmp$5.length) {
+            _tmp$5[base] = v;
+          } else {
+            $oob();
+          }
           const _tmp$6 = out.data;
           const _tmp$7 = base + 1 | 0;
-          $bound_check(_tmp$6, _tmp$7);
-          _tmp$6[_tmp$7] = v;
+          if (_tmp$7 >>> 0 < _tmp$6.length) {
+            _tmp$6[_tmp$7] = v;
+          } else {
+            $oob();
+          }
           const _tmp$8 = out.data;
           const _tmp$9 = base + 2 | 0;
-          $bound_check(_tmp$8, _tmp$9);
-          _tmp$8[_tmp$9] = v;
+          if (_tmp$9 >>> 0 < _tmp$8.length) {
+            _tmp$8[_tmp$9] = v;
+          } else {
+            $oob();
+          }
           const _tmp$10 = out.data;
           const _tmp$11 = base + 3 | 0;
           const _tmp$12 = self.data;
           const _tmp$13 = base + 3 | 0;
-          $bound_check(_tmp$12, _tmp$13);
-          $bound_check(_tmp$10, _tmp$11);
-          _tmp$10[_tmp$11] = _tmp$12[_tmp$13];
+          if (_tmp$11 >>> 0 < _tmp$10.length) {
+            _tmp$10[_tmp$11] = _tmp$13 >>> 0 < _tmp$12.length ? _tmp$12[_tmp$13] : $oob();
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -1783,26 +1858,32 @@ function _M0MP270717lee10pixelforge5Image8vignette(self, strength) {
           const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
           const _tmp$3 = out.data;
           const _tmp$4 = out.data;
-          $bound_check(_tmp$4, base);
-          const _p = _M0MPC16double6Double7to__int((_tmp$4[base] + 0) * factor + 0.5);
-          $bound_check(_tmp$3, base);
-          _tmp$3[base] = _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
+          const _p = _M0MPC16double6Double7to__int(((base >>> 0 < _tmp$4.length ? _tmp$4[base] : $oob()) + 0) * factor + 0.5);
+          if (base >>> 0 < _tmp$3.length) {
+            _tmp$3[base] = _p < 0 ? 0 : _p > 255 ? 255 : _p & 255;
+          } else {
+            $oob();
+          }
           const _tmp$5 = out.data;
           const _tmp$6 = base + 1 | 0;
           const _tmp$7 = out.data;
           const _tmp$8 = base + 1 | 0;
-          $bound_check(_tmp$7, _tmp$8);
-          const _p$2 = _M0MPC16double6Double7to__int((_tmp$7[_tmp$8] + 0) * factor + 0.5);
-          $bound_check(_tmp$5, _tmp$6);
-          _tmp$5[_tmp$6] = _p$2 < 0 ? 0 : _p$2 > 255 ? 255 : _p$2 & 255;
+          const _p$2 = _M0MPC16double6Double7to__int(((_tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) + 0) * factor + 0.5);
+          if (_tmp$6 >>> 0 < _tmp$5.length) {
+            _tmp$5[_tmp$6] = _p$2 < 0 ? 0 : _p$2 > 255 ? 255 : _p$2 & 255;
+          } else {
+            $oob();
+          }
           const _tmp$9 = out.data;
           const _tmp$10 = base + 2 | 0;
           const _tmp$11 = out.data;
           const _tmp$12 = base + 2 | 0;
-          $bound_check(_tmp$11, _tmp$12);
-          const _p$3 = _M0MPC16double6Double7to__int((_tmp$11[_tmp$12] + 0) * factor + 0.5);
-          $bound_check(_tmp$9, _tmp$10);
-          _tmp$9[_tmp$10] = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          const _p$3 = _M0MPC16double6Double7to__int(((_tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob()) + 0) * factor + 0.5);
+          if (_tmp$10 >>> 0 < _tmp$9.length) {
+            _tmp$9[_tmp$10] = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          } else {
+            $oob();
+          }
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -1915,8 +1996,11 @@ function _M0FP370717lee10pixelforge3web11encode__png(data, width, height) {
   while (true) {
     const i = _tmp;
     if (i < _bind) {
-      $bound_check(out, i);
-      out[i] = _M0MPC15array5Array2atGyE(bytes, i);
+      if (i >>> 0 < out.length) {
+        out[i] = _M0MPC15array5Array2atGyE(bytes, i);
+      } else {
+        $oob();
+      }
       _tmp = i + 1 | 0;
       continue;
     } else {

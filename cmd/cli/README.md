@@ -4,6 +4,8 @@
 Use a repository checkout: `cmd/` is excluded from the mooncakes library package.
 `convert` can apply an ordered filter pipeline before encoding.
 
+The AVIF input support below is an unreleased addition to the 0.19.0 baseline.
+
 | Format | Input | Output |
 | --- | --- | --- |
 | PNG | Non-interlaced 8-bit | RGBA8 |
@@ -13,7 +15,7 @@ Use a repository checkout: `cmd/` is excluded from the mooncakes library package
 | JPEG | Baseline | Quality 90, alpha discarded |
 | WebP | Lossless VP8L | Lossless VP8L |
 | TIFF / BigTIFF | Supported subset in either byte order | No |
-| AVIF | Metadata through `info` only | No |
+| AVIF | Primary image through MoonAV1 0.2.0 | No |
 
 See the [root format matrix](../../README.en.md) for TIFF compression/sample
 restrictions, GIF alpha behavior and other codec boundaries.
@@ -22,8 +24,9 @@ For AVIF input, `info` reads container metadata without decoding pixels and
 prints `metadata_only=true` alongside the format, dimensions and input size.
 The probe reads the primary item's associated `ispe` dimensions; track-only
 sequences without primary-item dimensions remain unsupported.
-`convert` rejects AVIF input and output. Browser-only AVIF encoding does not
-make it a supported native output format.
+`convert` decodes AVIF input to RGBA8 through MoonAV1, including supported
+alpha and grid images. Invalid or unsupported data fails before output is opened.
+AVIF output remains unsupported on native.
 
 Native builds require a C compiler. The executable reads and writes files
 directly; `--output` replaces an existing file. Preserve the source or choose a
@@ -32,6 +35,7 @@ different output path when you need to keep the original.
 ```text
 moon run --target native cmd/cli -- info --input input.png
 moon run --target native cmd/cli -- info --input input.avif
+moon run --target native cmd/cli -- convert --from avif --to png --pipeline grayscale --input input.avif --output output.png
 moon run --target native cmd/cli -- convert --from png --to qoi --input input.png --output output.qoi
 moon run --target native cmd/cli -- convert --from png --to png --pipeline grayscale,contrast:1.2 --input input.png --output filtered.png
 ```
@@ -61,4 +65,5 @@ exact panic exit code is platform-specific. Processing/encoding failures occur
 before the output is opened. Filesystem write failures can leave a partial file.
 
 Run `node scripts/check-cli.mjs` from the repository root for BigTIFF byte-order
-checks, PNG → pipeline → QOI → BMP pixel checks, AVIF metadata and rejection tests.
+checks, PNG → pipeline → QOI → BMP pixel checks, AVIF → invert → PNG conversion
+against a libdav1d reference, AVIF metadata and rejection tests.
