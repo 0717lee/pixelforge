@@ -66,7 +66,8 @@ exact panic exit code is platform-specific. Processing/encoding failures occur
 before the output is opened. Filesystem write failures can leave a partial file.
 
 `--fit WIDTHxHEIGHT` fits within positive integer bounds before applying filters.
-It uses bilinear sampling, preserves aspect ratio to integer-pixel precision,
+It uses alpha-weighted bilinear sampling to prevent transparent color fringes,
+preserves aspect ratio to integer-pixel precision,
 does not crop or enlarge, and rounds the shorter dimension down to at least one
 pixel. It works with file and hexadecimal input. Reported dimensions describe
 the converted output. Invalid bounds fail without creating an output file.

@@ -46,13 +46,22 @@ pub fn Image::resize_nearest(
 /// resize an exact identity. All four channels (including alpha) are blended.
 /// Target dimensions are clamped to at least 1; an empty source produces
 /// transparent pixels at the requested size.
+/// With `alpha_weighted=true`, interpolate RGB weighted by alpha and return
+/// straight RGBA, preventing hidden transparent colors from bleeding. Newly
+/// sampled pixels whose alpha rounds to zero become transparent black.
+/// Same-size resizes preserve every byte. Sampling uses encoded channel values,
+/// without converting to linear light.
 pub fn Image::resize_bilinear(
   self : Image,
   new_width : Int,
   new_height : Int,
+  alpha_weighted? : Bool = false,
 ) -> Image {
   let w = if new_width < 1 { 1 } else { new_width }
   let h = if new_height < 1 { 1 } else { new_height }
+  if alpha_weighted && w == self.width && h == self.height {
+    return self.copy()
+  }
   let out = Image::new(w, h)
   if self.width == 0 || self.height == 0 {
     return out
@@ -72,7 +81,36 @@ pub fn Image::resize_bilinear(
       let sx0 = clamp_coord(x0, self.width)
       let sx1 = clamp_coord(x0 + 1, self.width)
       let dst = (y * w + x) * 4
+      let a00 = if alpha_weighted {
+        self.data[(sy0 * self.width + sx0) * 4 + 3].to_int().to_double()
+      } else {
+        1.0
+      }
+      let a10 = if alpha_weighted {
+        self.data[(sy0 * self.width + sx1) * 4 + 3].to_int().to_double()
+      } else {
+        1.0
+      }
+      let a01 = if alpha_weighted {
+        self.data[(sy1 * self.width + sx0) * 4 + 3].to_int().to_double()
+      } else {
+        1.0
+      }
+      let a11 = if alpha_weighted {
+        self.data[(sy1 * self.width + sx1) * 4 + 3].to_int().to_double()
+      } else {
+        1.0
+      }
+      let alpha = (a00 * (1.0 - dx) + a10 * dx) * (1.0 - dy) +
+        (a01 * (1.0 - dx) + a11 * dx) * dy
+      if alpha_weighted && alpha < 0.5 {
+        continue
+      }
       for c in 0..<4 {
+        if alpha_weighted && c == 3 {
+          out.data[dst + c] = clamp_byte((alpha + 0.5).to_int())
+          continue
+        }
         let p00 = self.data[(sy0 * self.width + sx0) * 4 + c]
           .to_int()
           .to_double()
@@ -85,10 +123,11 @@ pub fn Image::resize_bilinear(
         let p11 = self.data[(sy1 * self.width + sx1) * 4 + c]
           .to_int()
           .to_double()
-        let top = p00 * (1.0 - dx) + p10 * dx
-        let bottom = p01 * (1.0 - dx) + p11 * dx
+        let top = p00 * a00 * (1.0 - dx) + p10 * a10 * dx
+        let bottom = p01 * a01 * (1.0 - dx) + p11 * a11 * dx
+        let value = top * (1.0 - dy) + bottom * dy
         out.data[dst + c] = clamp_byte(
-          (top * (1.0 - dy) + bottom * dy + 0.5).to_int(),
+          ((if alpha_weighted { value / alpha } else { value }) + 0.5).to_int(),
         )
       }
     }

@@ -1,4 +1,13 @@
 ///|
+test "thumbnail excludes hidden transparent colors from visible pixels" {
+  let image = @pixelforge.Image::new(2, 1)
+  image.set_pixel(0, 0, b'\xFF', b'\x00', b'\x00', b'\x00')
+  image.set_pixel(1, 0, b'\x00', b'\x00', b'\xFF', b'\xFF')
+  let output = image.thumbnail(1, 1)
+  assert_eq(output.get_pixel(0, 0), (b'\x00', b'\x00', b'\xFF', b'\x80'))
+}
+
+///|
 test "thumbnail fits landscape portrait and square bounds" {
   for
     (w, h, bw, bh, ew, eh) in [

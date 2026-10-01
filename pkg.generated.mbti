@@ -230,7 +230,7 @@ pub fn Image::posterize(Self, Int) -> Self
 pub fn Image::psnr(Self, Self) -> Double
 pub fn Image::regionprops(Self, Int) -> Array[ComponentStats]
 pub fn Image::resize_bicubic(Self, Int, Int) -> Self
-pub fn Image::resize_bilinear(Self, Int, Int) -> Self
+pub fn Image::resize_bilinear(Self, Int, Int, alpha_weighted? : Bool) -> Self
 pub fn Image::resize_nearest(Self, Int, Int) -> Self
 pub fn Image::rotate(Self, Double) -> Self
 pub fn Image::rotate90(Self) -> Self

@@ -71,14 +71,21 @@ Current public signatures are in [pkg.generated.mbti](pkg.generated.mbti); sourc
 
 `Image` stores row-major RGBA bytes and requires `width * height * 4` bytes. `from_bytes` wraps the original buffer, so modifying it also changes the image; use `copy()` for independent ownership. Filters, geometry and pipelines return new images; `set_pixel`, drawing and text methods mutate images. Tiles and rows share their source pixels.
 
-`mse` / `psnr` compare RGBA channels; `luma_mse` / `ssim` use Rec.601 luma and ignore alpha. `ssim` uses one population-statistics window over the whole image; equal-sized empty images return 1. Bilinear/bicubic resize interpolates RGBA channels independently without converting to premultiplied alpha.
+`mse` / `psnr` compare RGBA channels; `luma_mse` / `ssim` use Rec.601 luma and ignore alpha. `ssim` uses one population-statistics window over the whole image; equal-sized empty images return 1. By default, bilinear/bicubic resize interpolates RGBA channels independently without converting to premultiplied alpha.
 
-In the development checkout, `image.thumbnail(320, 240)` uses bilinear sampling
+In the development checkout, `image.thumbnail(320, 240)` uses alpha-weighted bilinear sampling
 to fit inside the bounds without cropping or enlarging, returning an independent
 buffer. The shorter dimension rounds down to at least one pixel; nonpositive
 bounds clamp to one, and empty images retain their dimensions. The CLI equivalent
 is `--fit 320x240`: both bounds must be positive integers, and resizing runs
 before the filter pipeline.
+
+Thumbnails prevent hidden RGB in fully transparent pixels from tinting visible
+colors. For exact dimensions, use
+`image.resize_bilinear(320, 240, alpha_weighted=true)`; omitting the option retains
+independent RGBA interpolation. Weighted mode returns straight RGBA, makes newly
+sampled pixels transparent black when alpha rounds to zero, and preserves all
+bytes for same-size resizes. It uses encoded channel values, not linear light.
 
 ## Formats and backends
 

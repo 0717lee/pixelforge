@@ -101,6 +101,11 @@ try {
   assert.deepEqual([...thumbnail.subarray(thumbnail.readUInt32LE(10))], [255, 255, 255, 255]);
   const noUpscale = run(["convert", "--from", "png", "--to", "bmp", "--fit", "100x100", "--input-hex", Buffer.from(png).toString("hex")]);
   assert.match(noUpscale, /width=2\r?\nheight=1/);
+  const transparentPng = encode_png(Uint8Array.of(255, 0, 0, 0, 0, 0, 255, 255), 2, 1);
+  const alphaFit = run(["convert", "--from", "png", "--to", "bmp", "--fit", "1x1", "--input-hex", Buffer.from(transparentPng).toString("hex")]);
+  const alphaBmp = Buffer.from(alphaFit.match(/hex=([0-9a-f]+)/)[1], "hex");
+  // BMP BGRA: transparent red must not tint the surviving blue pixel.
+  assert.deepEqual([...alphaBmp.subarray(alphaBmp.readUInt32LE(10))], [255, 0, 0, 128]);
 
   const avifPath = path.join(directory, "metadata.avif");
   await writeFile(avifPath, avif);

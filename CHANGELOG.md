@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opt-in `resize_bilinear(..., alpha_weighted=true)` and use it for thumbnails
+  and CLI `--fit`, preventing hidden transparent RGB from tinting visible edges.
+  Preserve default bilinear behavior and byte-exact same-size output.
+- Add integer-reference alpha tests, transparent/low-alpha/empty-image cases,
+  ownership checks and a real PNG-to-BMP CLI regression for transparent fringes.
+
 - Fix crop endpoint overflow and reject nonpositive crop extents consistently.
   Reject overflowing padded dimensions before allocation, including empty images.
 
