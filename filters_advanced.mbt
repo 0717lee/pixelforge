@@ -38,30 +38,30 @@ pub fn Image::threshold(self : Image, level : Int) -> Image {
 pub fn Image::pixelate(self : Image, block : Int) -> Image {
   let size = if block < 1 { 1 } else { block }
   let out = Image::new(self.width, self.height)
-  let blocks_y = (self.height + size - 1) / size
-  let blocks_x = (self.width + size - 1) / size
+  let blocks_y = if self.height == 0 { 0 } else { (self.height - 1) / size + 1 }
+  let blocks_x = if self.width == 0 { 0 } else { (self.width - 1) / size + 1 }
   for byi in 0..<blocks_y {
     for bxi in 0..<blocks_x {
       let y0 = byi * size
       let x0 = bxi * size
-      let y1 = imin(y0 + size, self.height)
-      let x1 = imin(x0 + size, self.width)
-      let mut sr = 0
-      let mut sg = 0
-      let mut sb = 0
+      let y1 = y0 + imin(size, self.height - y0)
+      let x1 = x0 + imin(size, self.width - x0)
+      let mut sr = 0L
+      let mut sg = 0L
+      let mut sb = 0L
       let mut count = 0
       for y in y0..<y1 {
         for x in x0..<x1 {
           let base = (y * self.width + x) * 4
-          sr = sr + self.data[base].to_int()
-          sg = sg + self.data[base + 1].to_int()
-          sb = sb + self.data[base + 2].to_int()
+          sr = sr + self.data[base].to_int().to_int64()
+          sg = sg + self.data[base + 1].to_int().to_int64()
+          sb = sb + self.data[base + 2].to_int().to_int64()
           count = count + 1
         }
       }
-      let ar = clamp_byte(sr / count)
-      let ag = clamp_byte(sg / count)
-      let ab = clamp_byte(sb / count)
+      let ar = clamp_byte((sr / count.to_int64()).to_int())
+      let ag = clamp_byte((sg / count.to_int64()).to_int())
+      let ab = clamp_byte((sb / count.to_int64()).to_int())
       for y in y0..<y1 {
         for x in x0..<x1 {
           let base = (y * self.width + x) * 4
@@ -152,7 +152,11 @@ pub fn Image::histogram_equalize(self : Image) -> Image {
   let denom = n - cdf_min
   let lut = FixedArray::make(256, 0)
   for i in 0..<256 {
-    lut[i] = if denom <= 0 { i } else { (cdf[i] - cdf_min) * 255 / denom }
+    lut[i] = if denom <= 0 {
+      i
+    } else {
+      ((cdf[i] - cdf_min).to_int64() * 255L / denom.to_int64()).to_int()
+    }
   }
   self.map_rgb(fn(r, g, b) {
     let y = (299 * r + 587 * g + 114 * b) / 1000

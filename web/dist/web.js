@@ -41,6 +41,8 @@ function $make_array_len_and_init(a, b) {
   arr.fill(b);
   return arr;
 }
+const _M0FPB18double__max__value = $i64_reinterpret_f64(9218868437227405311n);
+const _M0FPB18double__min__value = $i64_reinterpret_f64(18442240474082181119n);
 const _M0FPC16double8infinity = $i64_reinterpret_f64(9218868437227405312n);
 const _M0FPC16double13neg__infinity = $i64_reinterpret_f64(18442240474082181120n);
 function _M0MPC15array5Array4pushGyE(self, value) {
@@ -748,7 +750,35 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
   _M0FP270717lee10pixelforge11push__chunk(out, [73, 69, 78, 68], []);
   return out;
 }
+function _M0MP270717lee10pixelforge6Kernel3new(size, weights, divisor, bias) {
+  if (size <= 0 || (size % 2 | 0) === 0) {
+    $panic();
+  }
+  if (BigInt.asUintN(64, BigInt.asUintN(64, BigInt.asUintN(64, BigInt(size)) * BigInt.asUintN(64, BigInt(size)))) !== BigInt.asUintN(64, BigInt.asUintN(64, BigInt(weights.length)))) {
+    $panic();
+  }
+  if (divisor === 0 || (divisor !== divisor || (divisor > _M0FPB18double__max__value || divisor < _M0FPB18double__min__value || (bias !== bias || (bias > _M0FPB18double__max__value || bias < _M0FPB18double__min__value))))) {
+    $panic();
+  }
+  const _bind = weights.length;
+  let _tmp = 0;
+  while (true) {
+    const _ = _tmp;
+    if (_ < _bind) {
+      const weight = weights[_];
+      if (weight !== weight || (weight > _M0FPB18double__max__value || weight < _M0FPB18double__min__value)) {
+        $panic();
+      }
+      _tmp = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return new _M0TP270717lee10pixelforge6Kernel(size, weights, divisor, bias);
+}
 function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
+  _M0MP270717lee10pixelforge6Kernel3new(kernel.size, kernel.weights, kernel.divisor, kernel.bias);
   const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
   const radius = kernel.size / 2 | 0;
   const _bind = self.height;
@@ -851,15 +881,6 @@ function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
     }
   }
   return out;
-}
-function _M0MP270717lee10pixelforge6Kernel3new(size, weights, divisor, bias) {
-  if (size <= 0 || (size % 2 | 0) === 0) {
-    $panic();
-  }
-  if (weights.length !== (Math.imul(size, size) | 0)) {
-    $panic();
-  }
-  return new _M0TP270717lee10pixelforge6Kernel(size, weights, divisor, bias);
 }
 function _M0MP270717lee10pixelforge6Kernel14gaussian__blur() {
   return _M0MP270717lee10pixelforge6Kernel3new(3, [1, 2, 1, 2, 4, 2, 1, 2, 1], 16, 0);
@@ -1114,11 +1135,11 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   }
   return out;
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS803(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS868(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS803(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS803(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS803(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS868(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS868(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS868(factor, b) }));
 }
 function _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, err) {
   if ((x + 1 | 0) < w) {
@@ -1330,8 +1351,18 @@ function _M0MP270717lee10pixelforge5Image19histogram__equalize(self) {
   while (true) {
     const i = _tmp$4;
     if (i < 256) {
+      let _tmp$5;
+      if (denom <= 0) {
+        _tmp$5 = i;
+      } else {
+        const _tmp$6 = BigInt.asUintN(64, BigInt(denom));
+        if (_tmp$6 === 0n) {
+          $panic();
+        }
+        _tmp$5 = Number(BigInt.asIntN(32, BigInt.asUintN(64, BigInt.asIntN(64, BigInt.asUintN(64, BigInt.asUintN(64, BigInt((i >>> 0 < cdf.length ? cdf[i] : $oob()) - cdf_min | 0)) * 255n)) / BigInt.asIntN(64, _tmp$6)))) | 0;
+      }
       if (i >>> 0 < lut.length) {
-        lut[i] = denom <= 0 ? i : (Math.imul((i >>> 0 < cdf.length ? cdf[i] : $oob()) - cdf_min | 0, 255) | 0) / denom | 0;
+        lut[i] = _tmp$5;
       } else {
         $oob();
       }
@@ -1581,8 +1612,8 @@ function _M0MP270717lee10pixelforge5Image4otsu(self) {
 function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
   const size = block < 1 ? 1 : block;
   const out = _M0MP270717lee10pixelforge5Image3new(self.width, self.height);
-  const blocks_y = ((self.height + size | 0) - 1 | 0) / size | 0;
-  const blocks_x = ((self.width + size | 0) - 1 | 0) / size | 0;
+  const blocks_y = self.height === 0 ? 0 : ((self.height - 1 | 0) / size | 0) + 1 | 0;
+  const blocks_x = self.width === 0 ? 0 : ((self.width - 1 | 0) / size | 0) + 1 | 0;
   let _tmp = 0;
   while (true) {
     const byi = _tmp;
@@ -1593,15 +1624,13 @@ function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
         if (bxi < blocks_x) {
           const y0 = Math.imul(byi, size) | 0;
           const x0 = Math.imul(bxi, size) | 0;
-          const _p = y0 + size | 0;
-          const _p$2 = self.height;
-          const y1 = _p < _p$2 ? _p : _p$2;
-          const _p$3 = x0 + size | 0;
-          const _p$4 = self.width;
-          const x1 = _p$3 < _p$4 ? _p$3 : _p$4;
-          let sr = 0;
-          let sg = 0;
-          let sb = 0;
+          const _p = self.height - y0 | 0;
+          const y1 = y0 + (size < _p ? size : _p) | 0;
+          const _p$2 = self.width - x0 | 0;
+          const x1 = x0 + (size < _p$2 ? size : _p$2) | 0;
+          let sr = 0n;
+          let sg = 0n;
+          let sb = 0n;
           let count = 0;
           let _tmp$3 = y0;
           while (true) {
@@ -1614,15 +1643,15 @@ function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
                   const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
                   const _tmp$5 = sr;
                   const _tmp$6 = self.data;
-                  sr = _tmp$5 + (base >>> 0 < _tmp$6.length ? _tmp$6[base] : $oob()) | 0;
+                  sr = BigInt.asUintN(64, _tmp$5 + BigInt.asUintN(64, BigInt(base >>> 0 < _tmp$6.length ? _tmp$6[base] : $oob())));
                   const _tmp$7 = sg;
                   const _tmp$8 = self.data;
                   const _tmp$9 = base + 1 | 0;
-                  sg = _tmp$7 + (_tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob()) | 0;
+                  sg = BigInt.asUintN(64, _tmp$7 + BigInt.asUintN(64, BigInt(_tmp$9 >>> 0 < _tmp$8.length ? _tmp$8[_tmp$9] : $oob())));
                   const _tmp$10 = sb;
                   const _tmp$11 = self.data;
                   const _tmp$12 = base + 2 | 0;
-                  sb = _tmp$10 + (_tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob()) | 0;
+                  sb = BigInt.asUintN(64, _tmp$10 + BigInt.asUintN(64, BigInt(_tmp$12 >>> 0 < _tmp$11.length ? _tmp$11[_tmp$12] : $oob())));
                   count = count + 1 | 0;
                   _tmp$4 = x + 1 | 0;
                   continue;
@@ -1636,57 +1665,69 @@ function _M0MP270717lee10pixelforge5Image8pixelate(self, block) {
               break;
             }
           }
-          const _p$5 = sr / count | 0;
-          const ar = _p$5 < 0 ? 0 : _p$5 > 255 ? 255 : _p$5 & 255;
-          const _p$6 = sg / count | 0;
-          const ag = _p$6 < 0 ? 0 : _p$6 > 255 ? 255 : _p$6 & 255;
-          const _p$7 = sb / count | 0;
-          const ab = _p$7 < 0 ? 0 : _p$7 > 255 ? 255 : _p$7 & 255;
-          let _tmp$4 = y0;
+          const _tmp$4 = BigInt.asUintN(64, BigInt(count));
+          if (_tmp$4 === 0n) {
+            $panic();
+          }
+          const _p$3 = Number(BigInt.asIntN(32, BigInt.asUintN(64, BigInt.asIntN(64, sr) / BigInt.asIntN(64, _tmp$4)))) | 0;
+          const ar = _p$3 < 0 ? 0 : _p$3 > 255 ? 255 : _p$3 & 255;
+          const _tmp$5 = BigInt.asUintN(64, BigInt(count));
+          if (_tmp$5 === 0n) {
+            $panic();
+          }
+          const _p$4 = Number(BigInt.asIntN(32, BigInt.asUintN(64, BigInt.asIntN(64, sg) / BigInt.asIntN(64, _tmp$5)))) | 0;
+          const ag = _p$4 < 0 ? 0 : _p$4 > 255 ? 255 : _p$4 & 255;
+          const _tmp$6 = BigInt.asUintN(64, BigInt(count));
+          if (_tmp$6 === 0n) {
+            $panic();
+          }
+          const _p$5 = Number(BigInt.asIntN(32, BigInt.asUintN(64, BigInt.asIntN(64, sb) / BigInt.asIntN(64, _tmp$6)))) | 0;
+          const ab = _p$5 < 0 ? 0 : _p$5 > 255 ? 255 : _p$5 & 255;
+          let _tmp$7 = y0;
           while (true) {
-            const y = _tmp$4;
+            const y = _tmp$7;
             if (y < y1) {
-              let _tmp$5 = x0;
+              let _tmp$8 = x0;
               while (true) {
-                const x = _tmp$5;
+                const x = _tmp$8;
                 if (x < x1) {
                   const base = Math.imul((Math.imul(y, self.width) | 0) + x | 0, 4) | 0;
-                  const _tmp$6 = out.data;
-                  if (base >>> 0 < _tmp$6.length) {
-                    _tmp$6[base] = ar;
-                  } else {
-                    $oob();
-                  }
-                  const _tmp$7 = out.data;
-                  const _tmp$8 = base + 1 | 0;
-                  if (_tmp$8 >>> 0 < _tmp$7.length) {
-                    _tmp$7[_tmp$8] = ag;
-                  } else {
-                    $oob();
-                  }
                   const _tmp$9 = out.data;
-                  const _tmp$10 = base + 2 | 0;
-                  if (_tmp$10 >>> 0 < _tmp$9.length) {
-                    _tmp$9[_tmp$10] = ab;
+                  if (base >>> 0 < _tmp$9.length) {
+                    _tmp$9[base] = ar;
                   } else {
                     $oob();
                   }
-                  const _tmp$11 = out.data;
-                  const _tmp$12 = base + 3 | 0;
-                  const _tmp$13 = self.data;
-                  const _tmp$14 = base + 3 | 0;
-                  if (_tmp$12 >>> 0 < _tmp$11.length) {
-                    _tmp$11[_tmp$12] = _tmp$14 >>> 0 < _tmp$13.length ? _tmp$13[_tmp$14] : $oob();
+                  const _tmp$10 = out.data;
+                  const _tmp$11 = base + 1 | 0;
+                  if (_tmp$11 >>> 0 < _tmp$10.length) {
+                    _tmp$10[_tmp$11] = ag;
                   } else {
                     $oob();
                   }
-                  _tmp$5 = x + 1 | 0;
+                  const _tmp$12 = out.data;
+                  const _tmp$13 = base + 2 | 0;
+                  if (_tmp$13 >>> 0 < _tmp$12.length) {
+                    _tmp$12[_tmp$13] = ab;
+                  } else {
+                    $oob();
+                  }
+                  const _tmp$14 = out.data;
+                  const _tmp$15 = base + 3 | 0;
+                  const _tmp$16 = self.data;
+                  const _tmp$17 = base + 3 | 0;
+                  if (_tmp$15 >>> 0 < _tmp$14.length) {
+                    _tmp$14[_tmp$15] = _tmp$17 >>> 0 < _tmp$16.length ? _tmp$16[_tmp$17] : $oob();
+                  } else {
+                    $oob();
+                  }
+                  _tmp$8 = x + 1 | 0;
                   continue;
                 } else {
                   break;
                 }
               }
-              _tmp$4 = y + 1 | 0;
+              _tmp$7 = y + 1 | 0;
               continue;
             } else {
               break;

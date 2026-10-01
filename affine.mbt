@@ -22,19 +22,19 @@ const PI : Double = 3.141592653589793
 ///|
 /// Identity transform.
 pub fn Affine::identity() -> Affine {
-  { a: 1.0, b: 0.0, c: 0.0, d: 0.0, e: 1.0, f: 0.0 }
+  { a: 1.0, b: 0.0, c: 0.0, d: 0.0, e: 1.0, f: 0.0, }
 }
 
 ///|
 /// Translation by `(dx, dy)`.
 pub fn Affine::translation(dx : Double, dy : Double) -> Affine {
-  { a: 1.0, b: 0.0, c: dx, d: 0.0, e: 1.0, f: dy }
+  { a: 1.0, b: 0.0, c: dx, d: 0.0, e: 1.0, f: dy, }
 }
 
 ///|
 /// Scaling about the origin.
 pub fn Affine::scaling(sx : Double, sy : Double) -> Affine {
-  { a: sx, b: 0.0, c: 0.0, d: 0.0, e: sy, f: 0.0 }
+  { a: sx, b: 0.0, c: 0.0, d: 0.0, e: sy, f: 0.0, }
 }
 
 ///|
@@ -44,13 +44,13 @@ pub fn Affine::rotation(degrees : Double) -> Affine {
   let rad = degrees * PI / 180.0
   let cs = @math.cos(rad)
   let sn = @math.sin(rad)
-  { a: cs, b: -sn, c: 0.0, d: sn, e: cs, f: 0.0 }
+  { a: cs, b: -sn, c: 0.0, d: sn, e: cs, f: 0.0, }
 }
 
 ///|
 /// Shear: `x' = x + shx*y`, `y' = shy*x + y`.
 pub fn Affine::shear(shx : Double, shy : Double) -> Affine {
-  { a: 1.0, b: shx, c: 0.0, d: shy, e: 1.0, f: 0.0 }
+  { a: 1.0, b: shx, c: 0.0, d: shy, e: 1.0, f: 0.0, }
 }
 
 ///|
@@ -77,22 +77,27 @@ pub fn Affine::then(self : Affine, next : Affine) -> Affine {
 /// Inverse transform, or `None` when the matrix is singular
 /// (determinant close to zero) and cannot be inverted.
 pub fn Affine::invert(self : Affine) -> Affine? {
+  for value in [self.a, self.b, self.c, self.d, self.e, self.f] {
+    if value.is_nan() || value.is_inf() {
+      return None
+    }
+  }
   let det = self.a * self.e - self.b * self.d
-  if det < 1.0e-12 && det > -1.0e-12 {
+  if det.is_nan() || det.is_inf() || (det < 1.0e-12 && det > -1.0e-12) {
     return None
   }
   let ia = self.e / det
   let ib = -self.b / det
   let id = -self.d / det
   let ie = self.a / det
-  Some({
-    a: ia,
-    b: ib,
-    c: -(ia * self.c + ib * self.f),
-    d: id,
-    e: ie,
-    f: -(id * self.c + ie * self.f),
-  })
+  let ic = -(ia * self.c + ib * self.f)
+  let iff = -(id * self.c + ie * self.f)
+  for value in [ia, ib, ic, id, ie, iff] {
+    if value.is_nan() || value.is_inf() {
+      return None
+    }
+  }
+  Some({ a: ia, b: ib, c: ic, d: id, e: ie, f: iff, })
 }
 
 ///|
@@ -104,6 +109,14 @@ fn Image::sample_bilinear(
   fx : Double,
   fy : Double,
 ) -> (Int, Int, Int, Int) {
+  if fx.is_nan() ||
+    fy.is_nan() ||
+    fx <= -1.0 ||
+    fy <= -1.0 ||
+    fx >= self.width.to_double() ||
+    fy >= self.height.to_double() {
+    return (0, 0, 0, 0)
+  }
   let x0 = ifloor(fx)
   let y0 = ifloor(fy)
   let dx = fx - x0.to_double()

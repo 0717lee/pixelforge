@@ -5,6 +5,59 @@
 /// against the image bounds.
 
 ///|
+fn drawing_span(start : Int64, end : Int64, limit : Int) -> (Int, Int) {
+  let bound = limit.to_int64()
+  let lo = if start < 0 {
+    0
+  } else if start > bound {
+    limit
+  } else {
+    start.to_int()
+  }
+  let hi = if end < 0 { 0 } else if end > bound { limit } else { end.to_int() }
+  (lo, hi)
+}
+
+///|
+fn Image::plot_wide(
+  self : Image,
+  x : Int64,
+  y : Int64,
+  r : Byte,
+  g : Byte,
+  b : Byte,
+  a : Byte,
+) -> Unit {
+  if x >= 0 && y >= 0 && x < self.width.to_int64() && y < self.height.to_int64() {
+    self.set_pixel(x.to_int(), y.to_int(), r, g, b, a)
+  }
+}
+
+///|
+fn Image::fill_rect_wide(
+  self : Image,
+  x : Int64,
+  y : Int64,
+  w : Int64,
+  h : Int64,
+  r : Byte,
+  g : Byte,
+  b : Byte,
+  a : Byte,
+) -> Unit {
+  if w <= 0 || h <= 0 {
+    return
+  }
+  let (x0, x1) = drawing_span(x, x + w, self.width)
+  let (y0, y1) = drawing_span(y, y + h, self.height)
+  for py in y0..<y1 {
+    for px in x0..<x1 {
+      self.set_pixel(px, py, r, g, b, a)
+    }
+  }
+}
+
+///|
 /// Writes one RGBA pixel, silently skipping out-of-bounds coordinates so
 /// callers never need to pre-clip.
 fn Image::plot(
@@ -36,26 +89,57 @@ pub fn Image::draw_line(
   b : Byte,
   a : Byte,
 ) -> Unit {
-  let dx = iabs(x1 - x0)
-  let dy = -iabs(y1 - y0)
-  let sx = if x0 < x1 { 1 } else { -1 }
-  let sy = if y0 < y1 { 1 } else { -1 }
-  let mut err = dx + dy
-  let mut x = x0
-  let mut y = y0
-  while true {
-    self.plot(x, y, r, g, b, a)
-    if x == x1 && y == y1 {
-      break
+  let ax = x0.to_int64()
+  let ay = y0.to_int64()
+  let bx = x1.to_int64()
+  let by = y1.to_int64()
+  let sx = if ax < bx { 1L } else { -1L }
+  let sy = if ay < by { 1L } else { -1L }
+  let dx = (bx - ax) * sx
+  let dy = (by - ay) * sy
+  if dx == 0 && dy == 0 {
+    self.plot(x0, y0, r, g, b, a)
+    return
+  }
+  // Closed-form Bresenham positions preserve the original raster phase when
+  // skipping off-canvas steps. UInt64 holds products of two 32-bit spans.
+  if dx >= dy {
+    let (lo, hi) = drawing_span(
+      if ax < bx {
+        ax
+      } else {
+        bx
+      },
+      (if ax > bx { ax } else { bx }) + 1,
+      self.width,
+    )
+    for x in lo..<hi {
+      let k = (x.to_int64() - ax) * sx
+      let step = ((
+        k.reinterpret_as_uint64() * dy.reinterpret_as_uint64() +
+        (dx / 2).reinterpret_as_uint64()
+      ) /
+      dx.reinterpret_as_uint64()).reinterpret_as_int64()
+      self.plot_wide(x.to_int64(), ay + sy * step, r, g, b, a)
     }
-    let e2 = err * 2
-    if e2 >= dy {
-      err = err + dy
-      x = x + sx
-    }
-    if e2 <= dx {
-      err = err + dx
-      y = y + sy
+  } else {
+    let (lo, hi) = drawing_span(
+      if ay < by {
+        ay
+      } else {
+        by
+      },
+      (if ay > by { ay } else { by }) + 1,
+      self.height,
+    )
+    for y in lo..<hi {
+      let k = (y.to_int64() - ay) * sy
+      let step = ((
+        k.reinterpret_as_uint64() * dx.reinterpret_as_uint64() +
+        (dy / 2).reinterpret_as_uint64()
+      ) /
+      dy.reinterpret_as_uint64()).reinterpret_as_int64()
+      self.plot_wide(ax + sx * step, y.to_int64(), r, g, b, a)
     }
   }
 }
@@ -77,14 +161,14 @@ pub fn Image::draw_rect(
   if w < 1 || h < 1 {
     return
   }
-  for i in 0..<w {
-    self.plot(x + i, y, r, g, b, a)
-    self.plot(x + i, y + h - 1, r, g, b, a)
-  }
-  for j in 0..<h {
-    self.plot(x, y + j, r, g, b, a)
-    self.plot(x + w - 1, y + j, r, g, b, a)
-  }
+  let xx = x.to_int64()
+  let yy = y.to_int64()
+  let ww = w.to_int64()
+  let hh = h.to_int64()
+  self.fill_rect_wide(xx, yy, ww, 1, r, g, b, a)
+  self.fill_rect_wide(xx, yy + hh - 1, ww, 1, r, g, b, a)
+  self.fill_rect_wide(xx, yy, 1, hh, r, g, b, a)
+  self.fill_rect_wide(xx + ww - 1, yy, 1, hh, r, g, b, a)
 }
 
 ///|
@@ -100,11 +184,16 @@ pub fn Image::fill_rect(
   b : Byte,
   a : Byte,
 ) -> Unit {
-  for j in 0..<h {
-    for i in 0..<w {
-      self.plot(x + i, y + j, r, g, b, a)
-    }
-  }
+  self.fill_rect_wide(
+    x.to_int64(),
+    y.to_int64(),
+    w.to_int64(),
+    h.to_int64(),
+    r,
+    g,
+    b,
+    a,
+  )
 }
 
 ///|
@@ -128,25 +217,42 @@ pub fn Image::draw_circle(
     self.plot(cx, cy, r, g, b, a)
     return
   }
-  let mut x = radius
-  let mut y = 0
-  let mut err = 1 - radius
-  while x >= y {
-    self.plot(cx + x, cy + y, r, g, b, a)
-    self.plot(cx + y, cy + x, r, g, b, a)
-    self.plot(cx - y, cy + x, r, g, b, a)
-    self.plot(cx - x, cy + y, r, g, b, a)
-    self.plot(cx - x, cy - y, r, g, b, a)
-    self.plot(cx - y, cy - x, r, g, b, a)
-    self.plot(cx + y, cy - x, r, g, b, a)
-    self.plot(cx + x, cy - y, r, g, b, a)
-    y = y + 1
-    if err < 0 {
-      err = err + 2 * y + 1
+  let rr = radius.to_int64() * radius.to_int64()
+  let xx = cx.to_int64()
+  let yy = cy.to_int64()
+  let rad = radius.to_int64()
+  let (y0, y1) = drawing_span(yy - rad, yy + rad + 1, self.height)
+  for y in y0..<y1 {
+    let dy = y.to_int64() - yy
+    let dx = circle_round_sqrt(rr - dy * dy)
+    self.plot_wide(xx - dx, y.to_int64(), r, g, b, a)
+    self.plot_wide(xx + dx, y.to_int64(), r, g, b, a)
+  }
+  let (x0, x1) = drawing_span(xx - rad, xx + rad + 1, self.width)
+  for x in x0..<x1 {
+    let dx = x.to_int64() - xx
+    let dy = circle_round_sqrt(rr - dx * dx)
+    self.plot_wide(x.to_int64(), yy - dy, r, g, b, a)
+    self.plot_wide(x.to_int64(), yy + dy, r, g, b, a)
+  }
+}
+
+///|
+fn circle_round_sqrt(value : Int64) -> Int64 {
+  let mut lo = 0L
+  let mut hi = 2147483647L
+  while lo < hi {
+    let mid = (lo + hi + 1) / 2
+    if mid * mid <= value {
+      lo = mid
     } else {
-      x = x - 1
-      err = err + 2 * (y - x) + 1
+      hi = mid - 1
     }
+  }
+  if value - lo * lo > lo {
+    lo + 1
+  } else {
+    lo
   }
 }
 
@@ -165,11 +271,24 @@ pub fn Image::fill_circle(
   if radius < 0 {
     return
   }
-  let rr = radius * radius
-  for dy in -radius..<(radius + 1) {
-    for dx in -radius..<(radius + 1) {
+  let rad = radius.to_int64()
+  let rr = rad * rad
+  let (x0, x1) = drawing_span(
+    cx.to_int64() - rad,
+    cx.to_int64() + rad + 1,
+    self.width,
+  )
+  let (y0, y1) = drawing_span(
+    cy.to_int64() - rad,
+    cy.to_int64() + rad + 1,
+    self.height,
+  )
+  for y in y0..<y1 {
+    let dy = y.to_int64() - cy.to_int64()
+    for x in x0..<x1 {
+      let dx = x.to_int64() - cx.to_int64()
       if dx * dx + dy * dy <= rr {
-        self.plot(cx + dx, cy + dy, r, g, b, a)
+        self.set_pixel(x, y, r, g, b, a)
       }
     }
   }

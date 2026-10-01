@@ -70,12 +70,36 @@ pub fn Image::draw_char(
   b : Byte,
   a : Byte,
 ) -> Unit {
+  self.draw_char_wide(x.to_int64(), y.to_int64(), ch, scale, r, g, b, a)
+}
+
+///|
+fn Image::draw_char_wide(
+  self : Image,
+  x : Int64,
+  y : Int64,
+  ch : Char,
+  scale : Int,
+  r : Byte,
+  g : Byte,
+  b : Byte,
+  a : Byte,
+) -> Unit {
   let s = if scale < 1 { 1 } else { scale }
   let rows = glyph_rows(ch.to_int())
   for row in 0..<7 {
     for col in 0..<5 {
       if rows[row] / (1 << (4 - col)) % 2 == 1 {
-        self.fill_rect(x + col * s, y + row * s, s, s, r, g, b, a)
+        self.fill_rect_wide(
+          x + col.to_int64() * s.to_int64(),
+          y + row.to_int64() * s.to_int64(),
+          s.to_int64(),
+          s.to_int64(),
+          r,
+          g,
+          b,
+          a,
+        )
       }
     }
   }
@@ -97,9 +121,12 @@ pub fn Image::draw_text(
   a : Byte,
 ) -> Unit {
   let s = if scale < 1 { 1 } else { scale }
-  let mut pen = x
+  let mut pen = x.to_int64()
   for ch in text {
-    self.draw_char(pen, y, ch, s, r, g, b, a)
-    pen = pen + 6 * s
+    if pen >= self.width.to_int64() {
+      break
+    }
+    self.draw_char_wide(pen, y.to_int64(), ch, s, r, g, b, a)
+    pen = pen + 6L * s.to_int64()
   }
 }

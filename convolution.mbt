@@ -24,10 +24,22 @@ pub fn Kernel::new(
   if size <= 0 || size % 2 == 0 {
     abort("Kernel::new: size must be a positive odd number")
   }
-  if weights.length() != size * size {
+  if size.to_int64() * size.to_int64() != weights.length().to_int64() {
     abort("Kernel::new: weights length must equal size * size")
   }
-  { size, weights, divisor, bias }
+  if divisor == 0.0 ||
+    divisor.is_nan() ||
+    divisor.is_inf() ||
+    bias.is_nan() ||
+    bias.is_inf() {
+    abort("Kernel::new: normalization must be finite and divisor nonzero")
+  }
+  for weight in weights {
+    if weight.is_nan() || weight.is_inf() {
+      abort("Kernel::new: weights must be finite")
+    }
+  }
+  { size, weights, divisor, bias, }
 }
 
 ///|
@@ -83,6 +95,7 @@ fn clamp_coord(v : Int, limit : Int) -> Int {
 /// preserving alpha. Out-of-bounds neighbors are clamped to the edge. This is
 /// the compute-heavy core the WebAssembly demo is built to show off.
 pub fn Image::convolve(self : Image, kernel : Kernel) -> Image {
+  ignore(Kernel::new(kernel.size, kernel.weights, kernel.divisor, kernel.bias))
   let out = Image::new(self.width, self.height)
   let radius = kernel.size / 2
   for y in 0..<self.height {

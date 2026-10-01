@@ -94,7 +94,11 @@ pub fn Image::distance_transform(self : Image, threshold : Int) -> Image {
   let out = Image::new(w, h)
   for p in 0..<(w * h) {
     let base = p * 4
-    let v = if max == 0 { 0 } else { dist[p] * 255 / max }
+    let v = if max == 0 {
+      0
+    } else {
+      (dist[p].to_int64() * 255L / max.to_int64()).to_int()
+    }
     let g = clamp_byte(v)
     out.data[base] = g
     out.data[base + 1] = g
