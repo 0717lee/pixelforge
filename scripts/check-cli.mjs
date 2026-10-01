@@ -111,6 +111,19 @@ try {
   await writeFile(avifPath, avif);
   assert.match(run(["info", "--input", avifPath]), /format=avif\r?\nwidth=2\r?\nheight=1\r?\nmetadata_only=true/);
   const rejected = path.join(directory, "rejected.bin");
+  for (const [extra, message] of [
+    [["--unknown", "value"], /unknown option/],
+    [["--to", "bmp"], /duplicate option/],
+    [["--fit", "--pipeline", "invert"], /missing value for --fit/],
+    [["--pipeline", "gamma:NaN"], /finite number|invalid number/],
+    [["--pipeline", "contrast:Infinity"], /finite number|invalid number/],
+  ]) {
+    run(["convert", "--from", "png", "--to", "bmp", "--input", input, "--output", rejected, ...extra], message);
+    await assert.rejects(access(rejected), { code: "ENOENT" });
+  }
+  run(["info", "--input", input, "--fit", "1x1"], /unknown option/);
+  run(["convert", "--from", "png", "--to", "invalid", "--input", input, "--output", rejected], /unsupported output format invalid/);
+  run(["convert", "--from", "png", "--to", "bmp", "--input-hex", Buffer.from(png).toString("hex"), "--output", rejected], /--output requires file input/);
   for (const fit of ["", "0x1", "1x0", "-1x2", "2", "2x", "x2", "2x3x4", "ax2", "2147483648x1"]) {
     run(["convert", "--from", "png", "--to", "bmp", "--fit", fit, "--input", input, "--output", rejected], /--fit requires positive WIDTHxHEIGHT/);
     await assert.rejects(access(rejected), { code: "ENOENT" });
@@ -143,8 +156,9 @@ try {
     }
   }
   const sampleBytes = await readFile(sample);
-  const truncated = sampleBytes.subarray(0, sampleBytes.length - 1).toString("hex");
-  run(["convert", "--from", "avif", "--to", "png", "--input-hex", truncated, "--output", rejected], /AVIF decode failed/);
+  const truncated = path.join(directory, "truncated.avif");
+  await writeFile(truncated, sampleBytes.subarray(0, sampleBytes.length - 1));
+  run(["convert", "--from", "avif", "--to", "png", "--input", truncated, "--output", rejected], /AVIF decode failed/);
   await assert.rejects(access(rejected), { code: "ENOENT" });
   console.log("OK native CLI: version, BigTIFF, PNG/pipeline/QOI/BMP, AVIF/libdav1d pixels, thumbnail dimensions and filter order, rejected conversions");
 } finally {

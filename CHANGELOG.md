@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Reject overflowing dimensions and offsets in PNG, BMP, QOI and GIF decoders;
+  validate BMP planes/DIB bounds and QOI colorspace, end marker and run length.
+- Bound PNG/TIFF DEFLATE output during decoding. Validate PNG chunk ordering,
+  compression/filter methods, unknown critical chunks and terminal IEND.
+- Reject invalid metadata dimensions and truncated JPEG segments; check complete
+  PNG/GIF signatures before identifying their format.
+- Clip line, rectangle, disk and text work to the canvas using wide coordinates.
+  Preserve Bresenham raster positions and midpoint circle pixels at the edges.
+- Use wide arithmetic for mosaic averages, histogram equalization and distance
+  normalization; validate kernel shapes/normalization and finite affine inverses.
+- Reject unknown, duplicate, missing and incompatible CLI options and nonfinite
+  pipeline values. Report the actual unsupported output format.
+- Make Worker engine selection explicit: unavailable WASM reports an error.
+  Validate messages and transfer ranges; verify real JS/WASM processing and
+  error recovery in CI.
+
 - Add opt-in `resize_bilinear(..., alpha_weighted=true)` and use it for thumbnails
   and CLI `--fit`, preventing hidden transparent RGB from tinting visible edges.
   Preserve default bilinear behavior and byte-exact same-size output.

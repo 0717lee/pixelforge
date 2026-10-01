@@ -70,6 +70,9 @@ jobs:
       - name: Verify linear-memory WebAssembly integration
         run: node verify-wasm.mjs
 
+      - name: Verify worker engines and error recovery
+        run: node scripts/check-worker.mjs
+
       - name: Verify native CLI conversions and failures
         run: node scripts/check-cli.mjs
 

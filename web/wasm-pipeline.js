@@ -10,8 +10,11 @@ export class WasmPipeline {
 
   apply(src, width, height, operations) {
     const length = width * height * 4;
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || src.length !== length) {
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width * height > 100_000_000 || src.length !== length) {
       throw new Error("Invalid WASM image dimensions or RGBA buffer length");
+    }
+    if (!Array.isArray(operations) || operations.some(op => !op || !Number.isInteger(op.id) || !Number.isFinite(op.amount))) {
+      throw new Error("Invalid WASM filter operations");
     }
     if (!this.instance || this.bufferLength !== length) {
       this.instance = new WebAssembly.Instance(this.module, {});

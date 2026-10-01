@@ -19,8 +19,10 @@ fn main {
     return
   }
   if command == "info" {
+    validate_options(args, 2, false)
     info(args, 2)
   } else if command == "convert" {
+    validate_options(args, 2, true)
     convert(args, 2)
   } else {
     abort("pixelforge: unknown command '\{command}'. Use --help for usage.")
@@ -269,8 +271,53 @@ fn parse_pipeline_double(
     _ =>
       abort("pixelforge: operation '\{_name}' requires a number in '\{_token}'")
   }
-  @string.parse_double(text) catch {
+  let number = @string.parse_double(text) catch {
     _ => abort("pixelforge: invalid number in pipeline operation '\{_token}'")
+  }
+  if number.is_nan() || number.is_inf() {
+    abort("pixelforge: pipeline requires a finite number in '\{_token}'")
+  }
+  number
+}
+
+///|
+fn validate_options(
+  args : Array[String],
+  start : Int,
+  converting : Bool,
+) -> Unit {
+  let seen : Array[String] = []
+  let mut i = start
+  while i < args.length() {
+    let name = args[i]
+    let allowed = name == "--input" ||
+      name == "--input-hex" ||
+      (
+        converting &&
+        (
+          name == "--from" ||
+          name == "--to" ||
+          name == "--output" ||
+          name == "--pipeline" ||
+          name == "--fit"
+        )
+      )
+    if !allowed {
+      abort("pixelforge: unknown option '\{name}'")
+    }
+    if seen.contains(name) {
+      abort("pixelforge: duplicate option '\{name}'")
+    }
+    if i + 1 >= args.length() || args[i + 1].has_prefix("--") {
+      abort("pixelforge: missing value for \{name}")
+    }
+    seen.push(name)
+    i += 2
+  }
+  if seen.contains("--input-hex") && seen.contains("--output") {
+    abort(
+      "pixelforge: --output requires file input; hex input writes hex to stdout",
+    )
   }
 }
 
@@ -294,7 +341,7 @@ fn has_option(args : Array[String], start : Int, name : String) -> Bool {
     if args[i] == name {
       return true
     }
-    i += 1
+    i += 2
   }
   false
 }
@@ -327,7 +374,7 @@ fn option(args : Array[String], start : Int, name : String) -> String {
       }
       return args[i + 1]
     }
-    i += 1
+    i += 2
   }
   abort("pixelforge: missing required option \{name}. Use --help for usage.")
 }
@@ -441,6 +488,6 @@ fn encode_image(format : String, image : @pixelforge.Image) -> Array[Byte] {
         "pixelforge: AVIF encoding requires a browser and is unavailable in the CLI",
       )
     "tiff" => abort("pixelforge: TIFF encoding is not supported")
-    _ => abort("pixelforge: unsupported output format {format}")
+    _ => abort("pixelforge: unsupported output format \{format}")
   }
 }

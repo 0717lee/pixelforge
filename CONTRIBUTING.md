@@ -39,6 +39,7 @@ node scripts/build-web.mjs
 node scripts/build-web.mjs --check
 node scripts/check-canonicalize-moon-js.mjs
 node scripts/check-browser-codecs.mjs
+node scripts/check-worker.mjs
 node verify-wasm.mjs
 node scripts/check-cli.mjs
 node scripts/check-docs.mjs
@@ -57,6 +58,12 @@ both README examples with `cmd/quickstart`, runs that example on all three
 targets, and checks version labels, format rows and local Markdown links.
 `verify-wasm.mjs` exercises the host shared by the Playground and Worker,
 including 200 repeated renders and changes of image size.
+
+`check-worker.mjs` runs the actual Worker module with real JS/WASM backends
+through a Node host bridge. It checks transferable ownership, unavailable WASM,
+invalid messages and recovery. Browser interaction checks are still required for
+Playground changes. Geometry regressions compare clipped rasterization against
+iterative reference algorithms; numeric regressions include large valid images.
 
 `check-package.mjs` creates a local archive through `moon package --list` and
 rejects reference trees, temporary files and files hidden only by local Git

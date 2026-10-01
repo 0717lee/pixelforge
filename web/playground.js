@@ -72,6 +72,10 @@ try {
       setStatus(`Worker 处理失败：${error}`, "error");
       return;
     }
+    if (payload.engine !== engine) {
+      setStatus("Worker 返回的处理引擎与当前选择不一致。", "error");
+      return;
+    }
     if (!buffer || buffer.byteLength !== w * h * 4) {
       setStatus("Worker 返回了无效的像素缓冲区。", "error");
       return;

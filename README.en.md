@@ -110,6 +110,13 @@ Operators use `moonbitlang/core`; AVIF decoding uses `0717lee/moonav1`; JPEG dec
 
 ## Errors, sizes and parameters
 
+The development checkout validates codec dimensions, offsets and container
+structure, and bounds PNG/TIFF output during decompression. Drawing clips work
+to the canvas with wide coordinate arithmetic; mosaic, histogram and distance
+operations use wide intermediates for large images. Invalid kernels abort;
+nonfinite or noninvertible affine matrices return `None` from `invert` and abort
+when passed to `Image::affine`. Workers report unavailable WASM explicitly.
+
 - Pixel decoders return `Image?` (multi-frame GIF returns an optional frame array). Malformed input or unsupported variants return `None`, which callers must handle.
 - `Image::new` / `from_bytes` abort for negative dimensions, more than 100,000,000 pixels, or a mismatched buffer length. `abort` is a panic that terminates the current execution, not a recoverable decoding error handled by `catch`. Out-of-bounds pixel access and mismatched comparison/compositing sizes also abort.
 - Either dimension may be zero. All three resizers clamp target dimensions to at least 1; an empty source produces a transparent image at that size. Follow each operator's own contract for other operations.

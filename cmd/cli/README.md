@@ -65,6 +65,10 @@ unknown signatures and rejected codec data abort with a non-zero exit; the
 exact panic exit code is platform-specific. Processing/encoding failures occur
 before the output is opened. Filesystem write failures can leave a partial file.
 
+Options must be known, unique name/value pairs. Missing values and nonfinite
+pipeline numbers are rejected. `info` accepts only input options. `--output`
+requires `--input`; hexadecimal input always returns hexadecimal output on stdout.
+
 `--fit WIDTHxHEIGHT` fits within positive integer bounds before applying filters.
 It uses alpha-weighted bilinear sampling to prevent transparent color fringes,
 preserves aspect ratio to integer-pixel precision,
