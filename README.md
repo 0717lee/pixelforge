@@ -151,7 +151,7 @@ moon run --target native cmd/cli -- convert --from png --to qoi --pipeline grays
 
 ## 开发与贡献
 
-工具链、验证命令、规范和 Web 产物更新见 [CONTRIBUTING](CONTRIBUTING.md)。[HANDOFF](HANDOFF.md) 记录维护范围和验收证据；[发布指南](docs/RELEASING.md) 说明版本、包文档与 GitHub Release 的同步步骤。
+工具链、验证命令、规范和 Web 产物更新见 [CONTRIBUTING](CONTRIBUTING.md)。[发布指南](docs/RELEASING.md) 说明版本、包文档与 GitHub Release 的同步步骤。
 
 根目录为核心及单元测试；`cmd/` 为示例；`web/` 为 Playground；`wasmcore/` 为线性内存绑定；`scripts/` 为构建、文档、CLI 和性能验证。
 

@@ -157,7 +157,7 @@ moon run --target native cmd/cli -- convert --from png --to qoi --pipeline grays
 
 ## Development and contributions
 
-See [CONTRIBUTING](CONTRIBUTING.md) for the toolchain, checks, conventions and generated Web artifacts. [HANDOFF](HANDOFF.md) records scope and validation evidence; the [release guide](docs/RELEASING.md) covers version, package documentation and GitHub Release synchronization.
+See [CONTRIBUTING](CONTRIBUTING.md) for the toolchain, checks, conventions and generated Web artifacts. The [release guide](docs/RELEASING.md) covers version, package documentation and GitHub Release synchronization.
 
 Directory entry points: core code and tests at the root; examples in `cmd/`; Playground in `web/`; linear-memory bindings in `wasmcore/`; build, documentation, CLI and benchmark scripts in `scripts/`.
 

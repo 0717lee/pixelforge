@@ -89,7 +89,7 @@
   JS-host AVIF encoding remains available through its existing adapter.
 - Retain image processing, the other codecs, CLI filters, Playground backend
   switching and PNG export. Rebuild the distributed Web artifacts and validate
-  the reduced test suite; final results are recorded in [HANDOFF.md](HANDOFF.md).
+  the reduced test suite; final results are recorded in the [historical handoff](https://github.com/0717lee/pixelforge/blob/28512c093a016408ae7457e68203585c1a5c4154/HANDOFF.md).
 
 Previous decoder implementation and validation remain in Git history. The
 [historical source handoff](https://github.com/0717lee/pixelforge/blob/6f0c711c54f89d34f3e2ef97cde7a0a45458583d/HANDOFF.md)
