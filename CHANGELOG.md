@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix crop endpoint overflow and reject nonpositive crop extents consistently.
+  Reject overflowing padded dimensions before allocation, including empty images.
+
 - Add `Image::thumbnail(max_width, max_height)` to fit within integer bounds
   without cropping or enlarging; use overflow-safe aspect-ratio arithmetic.
 - Add CLI `--fit WIDTHxHEIGHT` before filtering, report output dimensions,

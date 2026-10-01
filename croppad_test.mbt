@@ -3,6 +3,47 @@
 /// clamping of out-of-range requests, and the crop∘pad round trip.
 
 ///|
+test "crop clips oversized positive rectangles without integer overflow" {
+  let image = solid(4, 3, 10, 20, 30, 255)
+  let output = image.crop(1, 1, 2147483647, 2147483647)
+  assert_eq((output.width, output.height), (3, 2))
+  assert_eq(output.get_pixel(2, 1), image.get_pixel(3, 2))
+}
+
+///|
+test "crop rejects negative extents even when endpoint arithmetic wraps" {
+  let image = solid(4, 3, 10, 20, 30, 255)
+  for
+    (x, y, w, h) in [
+      (-2147483648, 0, -1, 3),
+      (0, -2147483648, 4, -1),
+      (-2147483648, -2147483648, -1, -1),
+    ] {
+    let output = image.crop(x, y, w, h)
+    assert_eq((output.width, output.height), (1, 1))
+    assert_eq(output.get_pixel(0, 0), (b'\x00', b'\x00', b'\x00', b'\x00'))
+  }
+}
+
+///|
+test "panic pad rejects width wrapping to zero for an empty image" {
+  ignore(
+    @pixelforge.Image::new(2, 0).pad(
+      2147483647, 0, 2147483647, 0, b'\x00', b'\x00', b'\x00', b'\x00',
+    ),
+  )
+}
+
+///|
+test "panic pad rejects height wrapping to zero for an empty image" {
+  ignore(
+    @pixelforge.Image::new(0, 2).pad(
+      0, 2147483647, 0, 2147483647, b'\x00', b'\x00', b'\x00', b'\x00',
+    ),
+  )
+}
+
+///|
 test "crop extracts an exact sub-rectangle" {
   // 4x4 with a unique value per pixel (row*16 + col*4 in red).
   let img = @pixelforge.Image::new(4, 4)

@@ -9,24 +9,27 @@
 /// never larger than the overlap with the image; out-of-range or empty
 /// requests yield a 1x1 transparent image. Pixels are copied verbatim.
 pub fn Image::crop(self : Image, x : Int, y : Int, w : Int, h : Int) -> Image {
+  if w <= 0 || h <= 0 {
+    return Image::new(1, 1)
+  }
   // Clamp the rectangle to the image.
   let x0 = if x < 0 { 0 } else if x > self.width { self.width } else { x }
   let y0 = if y < 0 { 0 } else if y > self.height { self.height } else { y }
-  let x1_raw = x + w
-  let y1_raw = y + h
-  let x1 = if x1_raw < x0 {
+  let x1_raw = x.to_int64() + w.to_int64()
+  let y1_raw = y.to_int64() + h.to_int64()
+  let x1 = if x1_raw < x0.to_int64() {
     x0
-  } else if x1_raw > self.width {
+  } else if x1_raw > self.width.to_int64() {
     self.width
   } else {
-    x1_raw
+    x1_raw.to_int()
   }
-  let y1 = if y1_raw < y0 {
+  let y1 = if y1_raw < y0.to_int64() {
     y0
-  } else if y1_raw > self.height {
+  } else if y1_raw > self.height.to_int64() {
     self.height
   } else {
-    y1_raw
+    y1_raw.to_int()
   }
   let cw = x1 - x0
   let ch = y1 - y0
@@ -51,6 +54,7 @@ pub fn Image::crop(self : Image, x : Int, y : Int, w : Int, h : Int) -> Image {
 /// Surrounds the image with borders of the given thickness (in pixels),
 /// filled with the color `(r, g, b, a)`. Negative border widths are treated
 /// as zero. The result is `(left+width+right) x (top+height+bottom)`.
+/// Aborts if a resulting dimension exceeds Int range or the image pixel limit.
 pub fn Image::pad(
   self : Image,
   left : Int,
@@ -66,8 +70,13 @@ pub fn Image::pad(
   let t = if top < 0 { 0 } else { top }
   let ri = if right < 0 { 0 } else { right }
   let bo = if bottom < 0 { 0 } else { bottom }
-  let nw = l + self.width + ri
-  let nh = t + self.height + bo
+  let wide_width = l.to_int64() + self.width.to_int64() + ri.to_int64()
+  let wide_height = t.to_int64() + self.height.to_int64() + bo.to_int64()
+  if wide_width > 2147483647L || wide_height > 2147483647L {
+    abort("Image::pad: dimensions exceed Int range")
+  }
+  let nw = wide_width.to_int()
+  let nh = wide_height.to_int()
   let out = Image::new(nw, nh)
   // Fill everything with the border color first.
   for p in 0..<(nw * nh) {
