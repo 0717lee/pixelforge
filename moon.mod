@@ -23,6 +23,7 @@ description = "Pure MoonBit image processing library with filters, morphology, c
 
 import {
   "0717lee/moonav1@0.2.0",
-  "moonbitlang/x@0.5.1",
+  "moonbitlang/x@0.5.6",
   "mizchi/image@0.4.3",
+  "mizchi/zlib@0.4.10",
 }

@@ -10,7 +10,7 @@ pub fn bmp_decode(Array[Byte]) -> Image?
 
 pub fn bmp_encode(Image, Bool) -> Array[Byte]
 
-pub fn clamp_byte(Int) -> Byte
+pub fn clamp_byte(Int32) -> Byte
 
 pub fn detect_image_format(Array[Byte]) -> ImageFormat?
 
@@ -20,17 +20,17 @@ pub fn gif_decode_all(Array[Byte]) -> Array[GifFrame]?
 
 pub fn gif_encode(Image) -> Array[Byte]
 
-pub fn hamming_distance(UInt64, UInt64) -> Int
+pub fn hamming_distance(UInt64, UInt64) -> Int32
 
-pub fn hsl_to_rgb(Double, Double, Double) -> (Int, Int, Int)
+pub fn hsl_to_rgb(Double, Double, Double) -> (Int32, Int32, Int32)
 
-pub fn hsv_to_rgb(Double, Double, Double) -> (Int, Int, Int)
+pub fn hsv_to_rgb(Double, Double, Double) -> (Int32, Int32, Int32)
 
 pub fn image_metadata(Array[Byte]) -> ImageMetadata?
 
 pub fn jpeg_decode(Array[Byte]) -> Image?
 
-pub fn jpeg_encode(Image, Int) -> Array[Byte]
+pub fn jpeg_encode(Image, Int32) -> Array[Byte]
 
 pub fn png_decode(Array[Byte]) -> Image?
 
@@ -40,11 +40,11 @@ pub fn qoi_decode(Array[Byte]) -> Image?
 
 pub fn qoi_encode(Image) -> Array[Byte]
 
-pub fn rgb_to_hsl(Int, Int, Int) -> (Double, Double, Double)
+pub fn rgb_to_hsl(Int32, Int32, Int32) -> (Double, Double, Double)
 
-pub fn rgb_to_hsv(Int, Int, Int) -> (Double, Double, Double)
+pub fn rgb_to_hsv(Int32, Int32, Int32) -> (Double, Double, Double)
 
-pub fn rgb_to_ycbcr(Int, Int, Int) -> (Int, Int, Int)
+pub fn rgb_to_ycbcr(Int32, Int32, Int32) -> (Int32, Int32, Int32)
 
 pub fn tiff_decode(Array[Byte]) -> Image?
 
@@ -52,7 +52,7 @@ pub fn webp_decode(Array[Byte]) -> Image?
 
 pub fn webp_encode(Image) -> Array[Byte]
 
-pub fn ycbcr_to_rgb(Int, Int, Int) -> (Int, Int, Int)
+pub fn ycbcr_to_rgb(Int32, Int32, Int32) -> (Int32, Int32, Int32)
 
 // Errors
 
@@ -86,40 +86,40 @@ pub(all) enum BlendMode {
 }
 
 pub(all) struct BoundingBox {
-  min_x : Int
-  min_y : Int
-  max_x : Int
-  max_y : Int
+  min_x : Int32
+  min_y : Int32
+  max_x : Int32
+  max_y : Int32
 }
 
 pub(all) struct ComponentStats {
-  label : Int
-  area : Int
+  label : Int32
+  area : Int32
   bbox : BoundingBox
   centroid : (Double, Double)
-  min_x : Int
-  min_y : Int
-  max_x : Int
-  max_y : Int
+  min_x : Int32
+  min_y : Int32
+  max_x : Int32
+  max_y : Int32
   centroid_x : Double
   centroid_y : Double
 }
 
 pub(all) struct ContourPoint {
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
 }
 
 pub(all) struct Corner {
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
   response : Double
 }
 
 pub(all) enum Filter {
   Grayscale
   Invert
-  Brightness(Int)
+  Brightness(Int32)
   Contrast(Double)
   Blur
   Sharpen
@@ -127,127 +127,127 @@ pub(all) enum Filter {
   Edges
   Sobel
   Sepia
-  Threshold(Int)
-  Pixelate(Int)
+  Threshold(Int32)
+  Pixelate(Int32)
   Median
   HistogramEqualize
   FlipHorizontal
   FlipVertical
-  Posterize(Int)
+  Posterize(Int32)
   Gamma(Double)
   Vignette(Double)
   Scharr
-  Canny(Int)
+  Canny(Int32)
   Otsu
   DitherMono
 }
 
 pub(all) struct GifFrame {
   image : Image
-  left : Int
-  top : Int
-  delay_cs : Int
-  disposal : Int
-  transparent_index : Int
+  left : Int32
+  top : Int32
+  delay_cs : Int32
+  disposal : Int32
+  transparent_index : Int32
 }
 
 pub(all) struct Image {
-  width : Int
-  height : Int
+  width : Int32
+  height : Int32
   data : FixedArray[Byte]
 }
-pub fn Image::adaptive_mean(Self, Int, Int) -> Self
+pub fn Image::adaptive_mean(Self, Int32, Int32) -> Self
 pub fn Image::add_gaussian_noise(Self, UInt64, Double) -> Self
 pub fn Image::add_salt_pepper(Self, UInt64, Double) -> Self
 pub fn Image::adjust_lightness(Self, Double) -> Self
 pub fn Image::affine(Self, Affine) -> Self
-pub fn Image::apply_filter_id(Self, Int, Double) -> Self
+pub fn Image::apply_filter_id(Self, Int32, Double) -> Self
 pub fn Image::apply_pipeline(Self, Pipeline) -> Self
 pub fn Image::auto_contrast(Self) -> Self
 pub fn Image::average_hash(Self) -> UInt64
-pub fn Image::bilateral(Self, Int, Double, Double) -> Self
+pub fn Image::bilateral(Self, Int32, Double, Double) -> Self
 pub fn Image::blur(Self) -> Self
-pub fn Image::box_blur(Self, Int) -> Self
-pub fn Image::brightness(Self, Int) -> Self
-pub fn Image::canny(Self, Int, Int) -> Self
+pub fn Image::box_blur(Self, Int32) -> Self
+pub fn Image::brightness(Self, Int32) -> Self
+pub fn Image::canny(Self, Int32, Int32) -> Self
 pub fn Image::composite(Self, Self, BlendMode) -> Self
-pub fn Image::contours(Self, Int) -> Array[Array[ContourPoint]]
+pub fn Image::contours(Self, Int32) -> Array[Array[ContourPoint]]
 pub fn Image::contrast(Self, Double) -> Self
 pub fn Image::convolve(Self, Kernel) -> Self
 pub fn Image::copy(Self) -> Self
-pub fn Image::count_components(Self, Int) -> Int
-pub fn Image::crop(Self, Int, Int, Int, Int) -> Self
+pub fn Image::count_components(Self, Int32) -> Int32
+pub fn Image::crop(Self, Int32, Int32, Int32, Int32) -> Self
 pub fn Image::difference_hash(Self) -> UInt64
 pub fn Image::dilate(Self) -> Self
-pub fn Image::distance_transform(Self, Int) -> Self
-pub fn Image::dither_grayscale(Self, Int) -> Self
+pub fn Image::distance_transform(Self, Int32) -> Self
+pub fn Image::dither_grayscale(Self, Int32) -> Self
 pub fn Image::dither_mono(Self) -> Self
-pub fn Image::draw_char(Self, Int, Int, Char, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn Image::draw_circle(Self, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn Image::draw_line(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn Image::draw_rect(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn Image::draw_text(Self, Int, Int, String, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_char(Self, Int32, Int32, Char, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_circle(Self, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_line(Self, Int32, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_rect(Self, Int32, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::draw_text(Self, Int32, Int32, String, Int32, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::edges(Self) -> Self
 pub fn Image::emboss(Self) -> Self
 pub fn Image::erode(Self) -> Self
-pub fn Image::fill_circle(Self, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn Image::fill_rect(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::fill_circle(Self, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::fill_rect(Self, Int32, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::flip_horizontal(Self) -> Self
 pub fn Image::flip_vertical(Self) -> Self
-pub fn Image::flood_fill(Self, Int, Int, Byte, Byte, Byte, Byte, Int) -> Self
+pub fn Image::flood_fill(Self, Int32, Int32, Byte, Byte, Byte, Byte, Int32) -> Self
 pub fn Image::for_each_row(Self, (ImageRow) -> Unit) -> Unit
-pub fn Image::for_each_tile(Self, Int, Int, (ImageTile) -> Unit) -> Unit
-pub fn Image::from_bytes(Int, Int, FixedArray[Byte]) -> Self
+pub fn Image::for_each_tile(Self, Int32, Int32, (ImageTile) -> Unit) -> Unit
+pub fn Image::from_bytes(Int32, Int32, FixedArray[Byte]) -> Self
 pub fn Image::gamma(Self, Double) -> Self
-pub fn Image::gaussian(Self, Int) -> Self
-pub fn Image::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
+pub fn Image::gaussian(Self, Int32) -> Self
+pub fn Image::get_pixel(Self, Int32, Int32) -> (Byte, Byte, Byte, Byte)
 pub fn Image::grayscale(Self) -> Self
-pub fn Image::harris_corners(Self, Double, Int) -> Array[Corner]
+pub fn Image::harris_corners(Self, Double, Int32) -> Array[Corner]
 pub fn Image::histogram_equalize(Self) -> Self
-pub fn Image::histogram_luma(Self) -> FixedArray[Int]
-pub fn Image::histogram_rgb(Self) -> (FixedArray[Int], FixedArray[Int], FixedArray[Int])
-pub fn Image::hog(Self, Int, Int, Int) -> Array[Double]
+pub fn Image::histogram_luma(Self) -> FixedArray[Int32]
+pub fn Image::histogram_rgb(Self) -> (FixedArray[Int32], FixedArray[Int32], FixedArray[Int32])
+pub fn Image::hog(Self, Int32, Int32, Int32) -> Array[Double]
 pub fn Image::hue_rotate(Self, Double) -> Self
 pub fn Image::integral_image(Self) -> Integral
 pub fn Image::invert(Self) -> Self
-pub fn Image::label_components(Self, Int) -> (Array[Int], Int)
+pub fn Image::label_components(Self, Int32) -> (Array[Int32], Int32)
 pub fn Image::lbp_codes(Self) -> FixedArray[Byte]
-pub fn Image::lbp_histogram(Self) -> FixedArray[Int]
-pub fn Image::levels(Self, Int, Int, Double) -> Self
+pub fn Image::lbp_histogram(Self) -> FixedArray[Int32]
+pub fn Image::levels(Self, Int32, Int32, Double) -> Self
 pub fn Image::luma_mse(Self, Self) -> Double
-pub fn Image::map_rgb(Self, (Int, Int, Int) -> (Int, Int, Int)) -> Self
+pub fn Image::map_rgb(Self, (Int32, Int32, Int32) -> (Int32, Int32, Int32)) -> Self
 pub fn Image::median(Self) -> Self
 pub fn Image::morph_close(Self) -> Self
 pub fn Image::morph_open(Self) -> Self
 pub fn Image::mse(Self, Self) -> Double
-pub fn Image::new(Int, Int) -> Self
+pub fn Image::new(Int32, Int32) -> Self
 pub fn Image::otsu(Self) -> Self
-pub fn Image::otsu_threshold(Self) -> Int
-pub fn Image::pad(Self, Int, Int, Int, Int, Byte, Byte, Byte, Byte) -> Self
-pub fn Image::pixel_count(Self) -> Int
-pub fn Image::pixelate(Self, Int) -> Self
-pub fn Image::posterize(Self, Int) -> Self
+pub fn Image::otsu_threshold(Self) -> Int32
+pub fn Image::pad(Self, Int32, Int32, Int32, Int32, Byte, Byte, Byte, Byte) -> Self
+pub fn Image::pixel_count(Self) -> Int32
+pub fn Image::pixelate(Self, Int32) -> Self
+pub fn Image::posterize(Self, Int32) -> Self
 pub fn Image::psnr(Self, Self) -> Double
-pub fn Image::regionprops(Self, Int) -> Array[ComponentStats]
-pub fn Image::resize_bicubic(Self, Int, Int) -> Self
-pub fn Image::resize_bilinear(Self, Int, Int, alpha_weighted? : Bool) -> Self
-pub fn Image::resize_nearest(Self, Int, Int) -> Self
+pub fn Image::regionprops(Self, Int32) -> Array[ComponentStats]
+pub fn Image::resize_bicubic(Self, Int32, Int32) -> Self
+pub fn Image::resize_bilinear(Self, Int32, Int32, alpha_weighted? : Bool) -> Self
+pub fn Image::resize_nearest(Self, Int32, Int32) -> Self
 pub fn Image::rotate(Self, Double) -> Self
 pub fn Image::rotate90(Self) -> Self
 pub fn Image::saturate(Self, Double) -> Self
-pub fn Image::sauvola(Self, Int, Double, Int) -> Self
+pub fn Image::sauvola(Self, Int32, Double, Int32) -> Self
 pub fn Image::scharr(Self) -> Self
 pub fn Image::sepia(Self) -> Self
-pub fn Image::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
+pub fn Image::set_pixel(Self, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
 pub fn Image::sharpen(Self) -> Self
-pub fn Image::skeletonize(Self, Int, Int) -> Self
+pub fn Image::skeletonize(Self, Int32, Int32) -> Self
 pub fn Image::sobel(Self) -> Self
 pub fn Image::ssim(Self, Self) -> Double
 pub fn Image::stats(Self) -> Stats
-pub fn Image::threshold(Self, Int) -> Self
-pub fn Image::thumbnail(Self, Int, Int) -> Self
+pub fn Image::threshold(Self, Int32) -> Self
+pub fn Image::thumbnail(Self, Int32, Int32) -> Self
 pub fn Image::translate(Self, Double, Double) -> Self
-pub fn Image::unsharp_mask(Self, Int, Double) -> Self
+pub fn Image::unsharp_mask(Self, Int32, Double) -> Self
 pub fn Image::vignette(Self, Double) -> Self
 
 pub(all) enum ImageFormat {
@@ -264,43 +264,43 @@ pub fn ImageFormat::name(Self) -> String
 
 pub(all) struct ImageMetadata {
   format : ImageFormat
-  width : Int
-  height : Int
+  width : Int32
+  height : Int32
   animated : Bool
 }
 
 pub(all) struct ImageRow {
   image : Image
-  row_y : Int
+  row_y : Int32
 }
-pub fn ImageRow::get_pixel(Self, Int) -> (Byte, Byte, Byte, Byte)
-pub fn ImageRow::width(Self) -> Int
-pub fn ImageRow::y(Self) -> Int
+pub fn ImageRow::get_pixel(Self, Int32) -> (Byte, Byte, Byte, Byte)
+pub fn ImageRow::width(Self) -> Int32
+pub fn ImageRow::y(Self) -> Int32
 
 pub(all) struct ImageTile {
   image : Image
-  origin_x : Int
-  origin_y : Int
-  tile_width : Int
-  tile_height : Int
+  origin_x : Int32
+  origin_y : Int32
+  tile_width : Int32
+  tile_height : Int32
 }
 pub fn ImageTile::copy(Self) -> Image
-pub fn ImageTile::get_pixel(Self, Int, Int) -> (Byte, Byte, Byte, Byte)
-pub fn ImageTile::height(Self) -> Int
-pub fn ImageTile::set_pixel(Self, Int, Int, Byte, Byte, Byte, Byte) -> Unit
-pub fn ImageTile::width(Self) -> Int
-pub fn ImageTile::x(Self) -> Int
-pub fn ImageTile::y(Self) -> Int
+pub fn ImageTile::get_pixel(Self, Int32, Int32) -> (Byte, Byte, Byte, Byte)
+pub fn ImageTile::height(Self) -> Int32
+pub fn ImageTile::set_pixel(Self, Int32, Int32, Byte, Byte, Byte, Byte) -> Unit
+pub fn ImageTile::width(Self) -> Int32
+pub fn ImageTile::x(Self) -> Int32
+pub fn ImageTile::y(Self) -> Int32
 
 pub(all) struct Integral {
-  width : Int
-  height : Int
+  width : Int32
+  height : Int32
   sat : Array[Int64]
 }
-pub fn Integral::rect_sum(Self, Int, Int, Int, Int, Int) -> Int64
+pub fn Integral::rect_sum(Self, Int32, Int32, Int32, Int32, Int32) -> Int64
 
 pub(all) struct Kernel {
-  size : Int
+  size : Int32
   weights : Array[Double]
   divisor : Double
   bias : Double
@@ -309,7 +309,7 @@ pub fn Kernel::box_blur() -> Self
 pub fn Kernel::edges() -> Self
 pub fn Kernel::emboss() -> Self
 pub fn Kernel::gaussian_blur() -> Self
-pub fn Kernel::new(Int, Array[Double], Double, Double) -> Self
+pub fn Kernel::new(Int32, Array[Double], Double, Double) -> Self
 pub fn Kernel::sharpen() -> Self
 
 pub struct Pipeline {
@@ -319,23 +319,23 @@ pub fn Pipeline::append(Self, Filter) -> Self
 pub fn Pipeline::apply(Self, Image) -> Image
 pub fn Pipeline::from_filter(Filter) -> Self
 pub fn Pipeline::is_empty(Self) -> Bool
-pub fn Pipeline::length(Self) -> Int
+pub fn Pipeline::length(Self) -> Int32
 pub fn Pipeline::new() -> Self
 pub fn Pipeline::then(Self, Self) -> Self
 
 pub struct Stats {
-  min_r : Int
-  max_r : Int
-  mean_r : Int
-  min_g : Int
-  max_g : Int
-  mean_g : Int
-  min_b : Int
-  max_b : Int
-  mean_b : Int
-  luma_min : Int
-  luma_max : Int
-  luma_mean : Int
+  min_r : Int32
+  max_r : Int32
+  mean_r : Int32
+  min_g : Int32
+  max_g : Int32
+  mean_g : Int32
+  min_b : Int32
+  max_b : Int32
+  mean_b : Int32
+  luma_min : Int32
+  luma_max : Int32
+  luma_mean : Int32
 }
 
 // Type aliases

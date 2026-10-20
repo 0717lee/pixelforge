@@ -2,11 +2,11 @@
 package "0717lee/pixelforge/wasmcore"
 
 // Values
-pub fn alloc(Int) -> FixedArray[Byte]
+pub fn alloc(Int32) -> FixedArray[Byte]
 
-pub fn process(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
+pub fn process(FixedArray[Byte], Int32, Int32, Int32, Double) -> FixedArray[Byte]
 
-pub fn process_in_place(FixedArray[Byte], Int, Int, Int, Double) -> FixedArray[Byte]
+pub fn process_in_place(FixedArray[Byte], Int32, Int32, Int32, Double) -> FixedArray[Byte]
 
 // Errors
 

@@ -8,9 +8,9 @@ in [LICENSE](LICENSE); additional upstream notices are retained below.
 | --- | --- | --- |
 | `0717lee/moonav1` | 0.2.0 | AVIF primary-image, alpha and grid decoding; Apache-2.0; [MoonAV1](https://github.com/0717lee/moonav1), including its [upstream notices](https://github.com/0717lee/moonav1/blob/v0.2.0/THIRD_PARTY_NOTICES.md) |
 | `mizchi/image` | 0.4.3 | JPEG decode/encode, WebP encode and JS-host AVIF encoding adapter; [image-mbt](https://github.com/mizchi/image-mbt) |
-| `mizchi/zlib` | 0.4.8 | PNG compression used by the image adapter; [zlib.mbt](https://github.com/mizchi/zlib.mbt) |
-| `moonbitlang/x` | 0.5.1 | Native CLI filesystem access; [moonbitlang/x](https://github.com/moonbitlang/x) |
-| `moonbitlang/core` | 0.10.11+6ff76a5f9 | Standard-library types and image-processing mathematics; [moonbitlang/core](https://github.com/moonbitlang/core) |
+| `mizchi/zlib` | 0.4.10 | PNG compression used by the image adapter; [zlib.mbt](https://github.com/mizchi/zlib.mbt) |
+| `moonbitlang/x` | 0.5.6 | Native CLI filesystem access; [moonbitlang/x](https://github.com/moonbitlang/x) |
+| `moonbitlang/core` | 0.1.20261019+b1a0e846e | Standard-library types and image-processing mathematics; [moonbitlang/core](https://github.com/moonbitlang/core) |
 
 The resolved dependency metadata declares Apache-2.0 for each package.
 `moonbitlang/x` filesystem sources retain:
