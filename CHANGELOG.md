@@ -38,7 +38,7 @@
   metadata-only `info` and the existing AVIF output restriction.
 - Test adapter pixels against a libdav1d reference, every truncated prefix,
   buffer ownership and native AVIF -> filter -> PNG file conversion.
-- Pin CI and the Windows development setup to `moonc 0.10.14+7d59c7ec9`.
+- Pin CI and the Windows development setup to `moonc 0.10.16+b1a0e846e`.
 
 ## 0.19.0 (2026-09-29)
 
