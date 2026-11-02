@@ -8,7 +8,7 @@ PixelForge is a MoonBit RGBA8 library with filters, geometry, drawing, analysis 
 
 **The current version is `0.19.0`.** It removes the former AV1/AVIF parsing and pixel-decoding APIs. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
 
-**Unreleased development:** `avif_decode(bytes)` and CLI AVIF input conversion now use `0717lee/moonav1@0.2.0`. The format table below describes this checkout; installing `0.19.0` does not include this feature. Development uses `moonc 0.10.16+b1a0e846e`; see [CONTRIBUTING](CONTRIBUTING.md) for activation.
+**Unreleased development:** `avif_decode(bytes)` and CLI AVIF input conversion now use `0717lee/moonav1@0.2.0`. The format table below describes this checkout; installing `0.19.0` does not include this feature. Development uses `moonc 0.10.19+97801ee1b`; see [CONTRIBUTING](CONTRIBUTING.md) for activation.
 
 ## Quick start
 

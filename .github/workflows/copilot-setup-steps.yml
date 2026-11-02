@@ -14,7 +14,7 @@ on:
 
 env:
   # The installer expects the moonc release version, not the Moon CLI date.
-  MOONBIT_VERSION: 0.10.16+b1a0e846e
+  MOONBIT_VERSION: 0.10.19+97801ee1b
 
 jobs:
   # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.

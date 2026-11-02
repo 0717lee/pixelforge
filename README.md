@@ -8,7 +8,7 @@ PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、�
 
 **当前版本为 `0.19.0`。** 本版移除了旧 AV1/AVIF 解析和像素解码接口，从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)。历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
-**未发布开发版：** 新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 和 CLI AVIF 输入转换。下方格式表描述当前源码；通过上述版本号安装的 `0.19.0` 不含此功能。开发工具链固定为 `moonc 0.10.16+b1a0e846e`，激活方式见 [贡献指南](CONTRIBUTING.md)。
+**未发布开发版：** 新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 和 CLI AVIF 输入转换。下方格式表描述当前源码；通过上述版本号安装的 `0.19.0` 不含此功能。开发工具链固定为 `moonc 0.10.19+97801ee1b`，激活方式见 [贡献指南](CONTRIBUTING.md)。
 
 ## 快速开始
 
