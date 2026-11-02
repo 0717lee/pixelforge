@@ -5,11 +5,11 @@ function $i64_reinterpret_f64(a) {
 }
 const _M0MPB7JSArray4push = (arr, val) => { arr.push(val); };
 const _M0MPB7JSArray4copy = (arr) => arr.slice(0);
-const _M0MPB7JSArray3pop = (arr) => arr.pop();
 class $PanicError extends Error {}
 function $panic() {
   throw new $PanicError();
 }
+const _M0MPB7JSArray3pop = (arr) => arr.pop();
 function _M0TP270717lee10pixelforge5Image(param0, param1, param2) {
   this.width = param0;
   this.height = param1;
@@ -57,9 +57,6 @@ function _M0MPC15array10FixedArray4copyGyE(self) {
 function _M0MPC16double6Double7to__int(self) {
   return self !== self ? 0 : self >= 2147483647 ? 2147483647 : self <= -2147483648 ? -2147483648 : self | 0;
 }
-function _M0MPC15array5Array11unsafe__popGiE(self) {
-  return _M0MPB7JSArray3pop(self);
-}
 function _M0MPC15array5Array2atGyE(self, index) {
   const len = self.length;
   return index >= 0 && index < len ? self[index] : $panic();
@@ -71,6 +68,9 @@ function _M0MPC15array5Array2atGiE(self, index) {
 function _M0MPC15array5Array2atGdE(self, index) {
   const len = self.length;
   return index >= 0 && index < len ? self[index] : $panic();
+}
+function _M0MPC15array5Array11unsafe__popGiE(self) {
+  return _M0MPB7JSArray3pop(self);
 }
 function _M0MPC15array5Array3setGiE(self, index, value) {
   const len = self.length;
@@ -111,12 +111,14 @@ function _M0FPC14math3pow(base, exponent) {
 }
 function _M0FP270717lee10pixelforge20checked__buffer__len(width, height) {
   if (width < 0 || height < 0) {
+    console.error("Image: width and height must be non-negative");
     $panic();
   }
   if (width === 0 || height === 0) {
     return 0;
   }
   if (width > (100000000 / height | 0)) {
+    console.error("Image: dimensions exceed the maximum pixel count");
     $panic();
   }
   const pixels = Math.imul(width, height) | 0;
@@ -470,42 +472,14 @@ function _M0FP270717lee10pixelforge14deflate__fixed(raw) {
     if (pos < raw.length) {
       let run = 1;
       while (true) {
-        let _tmp;
-        if ((pos + run | 0) < raw.length) {
-          let _tmp$2;
-          if (run < 258) {
-            const _p = _M0MPC15array5Array2atGyE(raw, pos + run | 0);
-            const _p$2 = _M0MPC15array5Array2atGyE(raw, pos);
-            _tmp$2 = _p === _p$2;
-          } else {
-            _tmp$2 = false;
-          }
-          _tmp = _tmp$2;
-        } else {
-          _tmp = false;
-        }
-        if (_tmp) {
+        if ((pos + run | 0) < raw.length && (run < 258 && _M0MPC15array5Array2atGyE(raw, pos + run | 0) === _M0MPC15array5Array2atGyE(raw, pos))) {
           run = run + 1 | 0;
           continue;
         } else {
           break;
         }
       }
-      let _tmp;
-      if (pos > 0) {
-        let _tmp$2;
-        if (run >= 3) {
-          const _p = _M0MPC15array5Array2atGyE(raw, pos - 1 | 0);
-          const _p$2 = _M0MPC15array5Array2atGyE(raw, pos);
-          _tmp$2 = _p === _p$2;
-        } else {
-          _tmp$2 = false;
-        }
-        _tmp = _tmp$2;
-      } else {
-        _tmp = false;
-      }
-      if (_tmp) {
+      if (pos > 0 && (run >= 3 && _M0MPC15array5Array2atGyE(raw, pos - 1 | 0) === _M0MPC15array5Array2atGyE(raw, pos))) {
         let index = 0;
         while (true) {
           if (index < 28 && run > (_M0MPC15array5Array2atGiE(length_base, index) + ((1 << _M0MPC15array5Array2atGiE(length_extra, index)) - 1 | 0) | 0)) {
@@ -752,12 +726,15 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
 }
 function _M0MP270717lee10pixelforge6Kernel3new(size, weights, divisor, bias) {
   if (size <= 0 || (size % 2 | 0) === 0) {
+    console.error("Kernel::new: size must be a positive odd number");
     $panic();
   }
   if (BigInt.asUintN(64, BigInt.asUintN(64, BigInt.asUintN(64, BigInt(size)) * BigInt.asUintN(64, BigInt(size)))) !== BigInt.asUintN(64, BigInt.asUintN(64, BigInt(weights.length)))) {
+    console.error("Kernel::new: weights length must equal size * size");
     $panic();
   }
   if (divisor === 0 || (divisor !== divisor || (divisor > _M0FPB18double__max__value || divisor < _M0FPB18double__min__value || (bias !== bias || (bias > _M0FPB18double__max__value || bias < _M0FPB18double__min__value))))) {
+    console.error("Kernel::new: normalization must be finite and divisor nonzero");
     $panic();
   }
   const _bind = weights.length;
@@ -767,6 +744,7 @@ function _M0MP270717lee10pixelforge6Kernel3new(size, weights, divisor, bias) {
     if (_ < _bind) {
       const weight = weights[_];
       if (weight !== weight || (weight > _M0FPB18double__max__value || weight < _M0FPB18double__min__value)) {
+        console.error("Kernel::new: weights must be finite");
         $panic();
       }
       _tmp = _ + 1 | 0;
@@ -1135,11 +1113,11 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   }
   return out;
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS315(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS315(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS315(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS315(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, b) }));
 }
 function _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, err) {
   if ((x + 1 | 0) < w) {
@@ -2019,6 +1997,7 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
 function _M0MP270717lee10pixelforge5Image11from__bytes(width, height, data) {
   const len = _M0FP270717lee10pixelforge20checked__buffer__len(width, height);
   if (data.length !== len) {
+    console.error("Image::from_bytes: buffer length must equal width * height * 4");
     $panic();
   }
   return new _M0TP270717lee10pixelforge5Image(width, height, data);
