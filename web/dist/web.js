@@ -3,18 +3,24 @@ function $i64_reinterpret_f64(a) {
   $reinterpret_view.setBigUint64(0, BigInt.asUintN(64, a), false);
   return $reinterpret_view.getFloat64(0, false);
 }
-const _M0MPB7JSArray4push = (arr, val) => { arr.push(val); };
-const _M0MPB7JSArray4copy = (arr) => arr.slice(0);
+function $oob() {
+  throw new Error("Index out of bounds");
+}
 class $PanicError extends Error {}
-function $panic() {
-  throw new $PanicError();
+function $panic(message) {
+  throw new $PanicError(message);
 }
-const _M0MPB7JSArray3pop = (arr) => arr.pop();
-function _M0TP270717lee10pixelforge5Image(param0, param1, param2) {
-  this.width = param0;
-  this.height = param1;
-  this.data = param2;
+function _M0TPB13StringBuilder(param0) {
+  this.val = param0;
 }
+function _M0TPC16string10StringView(param0, param1, param2) {
+  this.str = param0;
+  this.start = param1;
+  this.end = param2;
+}
+const _M0FPB19int__to__string__js = (x, radix) => {
+  return x.toString(radix);
+};
 function $makebytes(a, b) {
   const arr = new Uint8Array(a);
   if (b !== 0) {
@@ -22,13 +28,23 @@ function $makebytes(a, b) {
   }
   return arr;
 }
-function $oob() {
-  throw new Error("Index out of bounds");
+function _M0TPB5ArrayGiE(param0, param1) {
+  this.buf = param0;
+  this.len = param1;
+}
+function _M0TP270717lee10pixelforge5Image(param0, param1, param2) {
+  this.width = param0;
+  this.height = param1;
+  this.data = param2;
 }
 function _M0TP270717lee10pixelforge9BitWriter(param0, param1, param2) {
   this.out = param0;
   this.current = param1;
   this.bits = param2;
+}
+function _M0TPB5ArrayGyE(param0, param1) {
+  this.buf = param0;
+  this.len = param1;
 }
 function _M0TP270717lee10pixelforge6Kernel(param0, param1, param2, param3) {
   this.size = param0;
@@ -36,59 +52,453 @@ function _M0TP270717lee10pixelforge6Kernel(param0, param1, param2, param3) {
   this.divisor = param2;
   this.bias = param3;
 }
+function _M0TPB5ArrayGdE(param0, param1) {
+  this.buf = param0;
+  this.len = param1;
+}
 function $make_array_len_and_init(a, b) {
   const arr = new Array(a);
   arr.fill(b);
   return arr;
 }
+const _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger = { method_0: _M0IPB13StringBuilderPB6Logger13write__string, method_1: _M0IP016_24default__implPB6Logger16write__substringGRPB13StringBuilderE, method_2: _M0IPB13StringBuilderPB6Logger11write__view, method_3: _M0IPB13StringBuilderPB6Logger11write__char, method_4: _M0IP016_24default__implPB6Logger28write__string__interpolationGRPB13StringBuilderE, method_5: _M0IP016_24default__implPB6Logger5writeGRPB13StringBuilderE };
 const _M0FPB18double__max__value = $i64_reinterpret_f64(9218868437227405311n);
 const _M0FPB18double__min__value = $i64_reinterpret_f64(18442240474082181119n);
 const _M0FPC16double8infinity = $i64_reinterpret_f64(9218868437227405312n);
 const _M0FPC16double13neg__infinity = $i64_reinterpret_f64(18442240474082181120n);
+function _M0MPC15array10FixedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, len) {
+  if (dst === src && dst_offset < src_offset) {
+    let _tmp = 0;
+    while (true) {
+      const i = _tmp;
+      if (i < len) {
+        const _tmp$2 = dst_offset + i | 0;
+        const _tmp$3 = src_offset + i | 0;
+        if (_tmp$2 >>> 0 < dst.length) {
+          dst[_tmp$2] = _tmp$3 >>> 0 < src.length ? src[_tmp$3] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i + 1 | 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  } else {
+    let _tmp = len - 1 | 0;
+    let _tmp$2 = len > 0;
+    while (true) {
+      const i = _tmp;
+      const _more = _tmp$2;
+      if (_more) {
+        const _tmp$3 = dst_offset + i | 0;
+        const _tmp$4 = src_offset + i | 0;
+        if (_tmp$3 >>> 0 < dst.length) {
+          dst[_tmp$3] = _tmp$4 >>> 0 < src.length ? src[_tmp$4] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i - 1 | 0;
+        _tmp$2 = i > 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  }
+}
+function _M0MPC15array10FixedArray12unsafe__blitGRPB17UnsafeMaybeUninitGiEE(dst, dst_offset, src, src_offset, len) {
+  if (dst === src && dst_offset < src_offset) {
+    let _tmp = 0;
+    while (true) {
+      const i = _tmp;
+      if (i < len) {
+        const _tmp$2 = dst_offset + i | 0;
+        const _tmp$3 = src_offset + i | 0;
+        if (_tmp$2 >>> 0 < dst.length) {
+          dst[_tmp$2] = _tmp$3 >>> 0 < src.length ? src[_tmp$3] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i + 1 | 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  } else {
+    let _tmp = len - 1 | 0;
+    let _tmp$2 = len > 0;
+    while (true) {
+      const i = _tmp;
+      const _more = _tmp$2;
+      if (_more) {
+        const _tmp$3 = dst_offset + i | 0;
+        const _tmp$4 = src_offset + i | 0;
+        if (_tmp$3 >>> 0 < dst.length) {
+          dst[_tmp$3] = _tmp$4 >>> 0 < src.length ? src[_tmp$4] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i - 1 | 0;
+        _tmp$2 = i > 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  }
+}
+function _M0MPC15array10FixedArray12unsafe__blitGRPB17UnsafeMaybeUninitGyEE(dst, dst_offset, src, src_offset, len) {
+  if (dst === src && dst_offset < src_offset) {
+    let _tmp = 0;
+    while (true) {
+      const i = _tmp;
+      if (i < len) {
+        const _tmp$2 = dst_offset + i | 0;
+        const _tmp$3 = src_offset + i | 0;
+        if (_tmp$2 >>> 0 < dst.length) {
+          dst[_tmp$2] = _tmp$3 >>> 0 < src.length ? src[_tmp$3] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i + 1 | 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  } else {
+    let _tmp = len - 1 | 0;
+    let _tmp$2 = len > 0;
+    while (true) {
+      const i = _tmp;
+      const _more = _tmp$2;
+      if (_more) {
+        const _tmp$3 = dst_offset + i | 0;
+        const _tmp$4 = src_offset + i | 0;
+        if (_tmp$3 >>> 0 < dst.length) {
+          dst[_tmp$3] = _tmp$4 >>> 0 < src.length ? src[_tmp$4] : $oob();
+        } else {
+          $oob();
+        }
+        _tmp = i - 1 | 0;
+        _tmp$2 = i > 0;
+        continue;
+      } else {
+        return;
+      }
+    }
+  }
+}
+function _M0MPB18UninitializedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, len) {
+  _M0MPC15array10FixedArray12unsafe__blitGRPB17UnsafeMaybeUninitGyEE(dst, dst_offset, src, src_offset, len);
+}
+function _M0MPB18UninitializedArray12unsafe__blitGiE(dst, dst_offset, src, src_offset, len) {
+  _M0MPC15array10FixedArray12unsafe__blitGRPB17UnsafeMaybeUninitGiEE(dst, dst_offset, src, src_offset, len);
+}
+function _M0MPB18UninitializedArray23unsafe__make__and__blitGyE(src, allocate_len, src_offset, dst_offset, blit_len) {
+  const dst = new Uint8Array(allocate_len);
+  _M0MPB18UninitializedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, blit_len);
+  return dst;
+}
+function _M0MPB18UninitializedArray23unsafe__make__and__blitGiE(src, allocate_len, src_offset, dst_offset, blit_len) {
+  const dst = new Array(allocate_len);
+  _M0MPB18UninitializedArray12unsafe__blitGiE(dst, dst_offset, src, src_offset, blit_len);
+  return dst;
+}
+function _M0MPB13StringBuilder13write__objectGiE(self, obj) {
+  _M0IP016_24default__implPB4Show6outputGiE(obj, { self: self, method_table: _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger });
+}
+function _M0MPB18UninitializedArray23make__and__blit_2einnerGyE(src, allocate_len, len, src_offset, dst_offset) {
+  let _tmp;
+  if (allocate_len >= 0) {
+    let _tmp$2;
+    if (len >= 0) {
+      let _tmp$3;
+      const _p = src.length;
+      if (src_offset >= 0 && src_offset <= (_p - len | 0)) {
+        _tmp$3 = dst_offset >= 0 && dst_offset <= (allocate_len - len | 0);
+      } else {
+        _tmp$3 = false;
+      }
+      _tmp$2 = _tmp$3;
+    } else {
+      _tmp$2 = false;
+    }
+    _tmp = _tmp$2;
+  } else {
+    _tmp = false;
+  }
+  if (_tmp) {
+    return _M0MPB18UninitializedArray23unsafe__make__and__blitGyE(src, allocate_len, src_offset, dst_offset, len);
+  } else {
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
+    return $panic(_string_builder.val);
+  }
+}
+function _M0MPB18UninitializedArray23make__and__blit_2einnerGiE(src, allocate_len, len, src_offset, dst_offset) {
+  let _tmp;
+  if (allocate_len >= 0) {
+    let _tmp$2;
+    if (len >= 0) {
+      let _tmp$3;
+      const _p = src.length;
+      if (src_offset >= 0 && src_offset <= (_p - len | 0)) {
+        _tmp$3 = dst_offset >= 0 && dst_offset <= (allocate_len - len | 0);
+      } else {
+        _tmp$3 = false;
+      }
+      _tmp$2 = _tmp$3;
+    } else {
+      _tmp$2 = false;
+    }
+    _tmp = _tmp$2;
+  } else {
+    _tmp = false;
+  }
+  if (_tmp) {
+    return _M0MPB18UninitializedArray23unsafe__make__and__blitGiE(src, allocate_len, src_offset, dst_offset, len);
+  } else {
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
+    return $panic(_string_builder.val);
+  }
+}
+function _M0MPB13StringBuilder21StringBuilder_2einner(size_hint) {
+  return size_hint >= 0 ? new _M0TPB13StringBuilder("") : $panic("size_hint must be non-negative");
+}
+function _M0IPB13StringBuilderPB6Logger11write__char(self, ch) {
+  self.val = `${self.val}${String.fromCodePoint(ch)}`;
+}
+function _M0IPB13StringBuilderPB6Logger13write__string(self, str) {
+  self.val = `${self.val}${str}`;
+}
+function _M0IP016_24default__implPB6Logger28write__string__interpolationGRPB13StringBuilderE(self, show) {
+  show.method_table.method_0(show.self, { self: self, method_table: _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger });
+}
+function _M0IP016_24default__implPB6Logger5writeGRPB13StringBuilderE(self, show) {
+  show.method_table.method_0(show.self, { self: self, method_table: _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger });
+}
+function _M0MPC16string6String21clamped__view_2einner(self, start, end) {
+  const len = self.length;
+  let lo;
+  if (start <= 0) {
+    lo = 0;
+  } else {
+    if (start >= len) {
+      lo = len;
+    } else {
+      let _tmp;
+      const _p = self.charCodeAt(start);
+      if (_p >= 56320 && _p <= 57343) {
+        const _p$2 = self.charCodeAt(start - 1 | 0);
+        _tmp = _p$2 >= 55296 && _p$2 <= 56319;
+      } else {
+        _tmp = false;
+      }
+      if (_tmp) {
+        lo = start + 1 | 0;
+      } else {
+        lo = start;
+      }
+    }
+  }
+  let hi;
+  if (end === undefined) {
+    hi = len;
+  } else {
+    const _Some = end;
+    const _e = _Some;
+    if (_e <= 0) {
+      hi = 0;
+    } else {
+      if (_e >= len) {
+        hi = len;
+      } else {
+        let _tmp;
+        const _p = self.charCodeAt(_e);
+        if (_p >= 56320 && _p <= 57343) {
+          const _p$2 = self.charCodeAt(_e - 1 | 0);
+          _tmp = _p$2 >= 55296 && _p$2 <= 56319;
+        } else {
+          _tmp = false;
+        }
+        if (_tmp) {
+          hi = _e - 1 | 0;
+        } else {
+          hi = _e;
+        }
+      }
+    }
+  }
+  return lo >= hi ? new _M0TPC16string10StringView(self, lo, lo) : new _M0TPC16string10StringView(self, lo, hi);
+}
+function _M0IP016_24default__implPB6Logger16write__substringGRPB13StringBuilderE(self, value, start, len) {
+  _M0IPB13StringBuilderPB6Logger11write__view(self, _M0MPC16string6String21clamped__view_2einner(value, start, start + len | 0));
+}
+function _M0IP016_24default__implPB4Show6outputGiE(self, logger) {
+  logger.method_table.method_0(logger.self, _M0IPC13int3IntPB4Show10to__string(self));
+}
+function _M0MPC13int3Int18to__string_2einner(self, radix) {
+  return _M0FPB19int__to__string__js(self, radix);
+}
+function _M0MPC16string10StringView9to__owned(self) {
+  return self.str.substring(self.start, self.end);
+}
+function _M0IPB13StringBuilderPB6Logger11write__view(self, str) {
+  self.val = `${self.val}${_M0MPC16string10StringView9to__owned(str)}`;
+}
+function _M0FPB23array__growth__capacity(current, len, required) {
+  if (required < len) {
+    $panic("Array capacity overflow");
+  }
+  const start = current === 0 ? 8 : current;
+  let _tmp = start;
+  while (true) {
+    const space = _tmp;
+    if (space < required) {
+      const next = Math.imul(space, 2) | 0;
+      if (next <= space) {
+        return required;
+      }
+      _tmp = next;
+      continue;
+    } else {
+      return space;
+    }
+  }
+}
+function _M0MPC15array5Array8capacityGyE(self) {
+  return self.buf.length;
+}
+function _M0MPC15array5Array8capacityGiE(self) {
+  return self.buf.length;
+}
+function _M0MPC15array5Array14resize__bufferGyE(self, new_capacity) {
+  const old_buf = self.buf;
+  self.buf = new Uint8Array([]);
+  const len = self.len;
+  const copy_len = len < new_capacity ? len : new_capacity;
+  const new_buf = _M0MPB18UninitializedArray23make__and__blit_2einnerGyE(old_buf, new_capacity, copy_len, 0, 0);
+  self.buf = new_buf;
+}
+function _M0MPC15array5Array14resize__bufferGiE(self, new_capacity) {
+  const old_buf = self.buf;
+  self.buf = [];
+  const len = self.len;
+  const copy_len = len < new_capacity ? len : new_capacity;
+  const new_buf = _M0MPB18UninitializedArray23make__and__blit_2einnerGiE(old_buf, new_capacity, copy_len, 0, 0);
+  self.buf = new_buf;
+}
+function _M0MPC15array5Array7reallocGyE(self, required) {
+  const old_cap = _M0MPC15array5Array8capacityGyE(self);
+  const new_cap = _M0FPB23array__growth__capacity(old_cap, self.len, required);
+  _M0MPC15array5Array14resize__bufferGyE(self, new_cap);
+}
+function _M0MPC15array5Array7reallocGiE(self, required) {
+  const old_cap = _M0MPC15array5Array8capacityGiE(self);
+  const new_cap = _M0FPB23array__growth__capacity(old_cap, self.len, required);
+  _M0MPC15array5Array14resize__bufferGiE(self, new_cap);
+}
 function _M0MPC15array5Array4pushGyE(self, value) {
-  _M0MPB7JSArray4push(self, value);
+  if (self.len === self.buf.length) {
+    _M0MPC15array5Array7reallocGyE(self, self.len + 1 | 0);
+  }
+  const length = self.len;
+  self.buf[length] = value;
+  self.len = length + 1 | 0;
 }
 function _M0MPC15array5Array4pushGiE(self, value) {
-  _M0MPB7JSArray4push(self, value);
+  if (self.len === self.buf.length) {
+    _M0MPC15array5Array7reallocGiE(self, self.len + 1 | 0);
+  }
+  const length = self.len;
+  self.buf[length] = value;
+  self.len = length + 1 | 0;
+}
+function _M0IPC13int3IntPB4Show10to__string(self) {
+  return _M0MPC13int3Int18to__string_2einner(self, 10);
+}
+function _M0MPC15array5Array20unsafe__make__uninitGiE(len) {
+  return new _M0TPB5ArrayGiE(new Array(len), len);
+}
+function _M0MPC15array10FixedArray23unsafe__make__and__blitGyE(src, allocate_len, init, src_offset, dst_offset, blit_len) {
+  const dst = $makebytes(allocate_len, init);
+  _M0MPC15array10FixedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, blit_len);
+  return dst;
+}
+function _M0MPC15array10FixedArray23make__and__blit_2einnerGyE(src, allocate_len, init, len, src_offset, dst_offset) {
+  let _tmp;
+  if (allocate_len >= 0) {
+    let _tmp$2;
+    if (len >= 0) {
+      let _tmp$3;
+      const _p = src.length;
+      if (src_offset >= 0 && src_offset <= (_p - len | 0)) {
+        _tmp$3 = dst_offset >= 0 && dst_offset <= (allocate_len - len | 0);
+      } else {
+        _tmp$3 = false;
+      }
+      _tmp$2 = _tmp$3;
+    } else {
+      _tmp$2 = false;
+    }
+    _tmp = _tmp$2;
+  } else {
+    _tmp = false;
+  }
+  if (_tmp) {
+    return _M0MPC15array10FixedArray23unsafe__make__and__blitGyE(src, allocate_len, init, src_offset, dst_offset, len);
+  } else {
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
+    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
+    return $panic(_string_builder.val);
+  }
 }
 function _M0MPC15array10FixedArray4copyGyE(self) {
-  return _M0MPB7JSArray4copy(self);
+  const len = self.length;
+  return len === 0 ? new Uint8Array([]) : _M0MPC15array10FixedArray23make__and__blit_2einnerGyE(self, len, 0 >>> 0 < self.length ? self[0] : $oob(), len, 0, 0);
 }
 function _M0MPC16double6Double7to__int(self) {
   return self !== self ? 0 : self >= 2147483647 ? 2147483647 : self <= -2147483648 ? -2147483648 : self | 0;
 }
-function _M0MPC15array5Array2atGyE(self, index) {
-  const len = self.length;
-  return index >= 0 && index < len ? self[index] : $panic();
-}
-function _M0MPC15array5Array2atGiE(self, index) {
-  const len = self.length;
-  return index >= 0 && index < len ? self[index] : $panic();
-}
-function _M0MPC15array5Array2atGdE(self, index) {
-  const len = self.length;
-  return index >= 0 && index < len ? self[index] : $panic();
-}
-function _M0MPC15array5Array11unsafe__popGiE(self) {
-  return _M0MPB7JSArray3pop(self);
-}
-function _M0MPC15array5Array3setGiE(self, index, value) {
-  const len = self.length;
-  if (index >= 0 && index < len) {
-    self[index] = value;
-    return;
-  } else {
-    $panic();
-    return;
-  }
-}
 function _M0MPC15array5Array4makeGiE(len, elem) {
-  const arr = new Array(len);
+  const arr = _M0MPC15array5Array20unsafe__make__uninitGiE(len);
   let _tmp = 0;
   while (true) {
     const i = _tmp;
     if (i < len) {
-      arr[i] = elem;
+      arr.buf[i] = elem;
       _tmp = i + 1 | 0;
       continue;
     } else {
@@ -96,6 +506,17 @@ function _M0MPC15array5Array4makeGiE(len, elem) {
     }
   }
   return arr;
+}
+function _M0MPC15array5Array11unsafe__popGiE(self) {
+  const len = self.len;
+  if (len !== 0) {
+    const index = len - 1 | 0;
+    const v = self.buf[index];
+    self.len = index;
+    return v;
+  } else {
+    return $panic();
+  }
 }
 function _M0FPC14math13math__pow__js(_tmp, _tmp$2) {
   return Math.pow(_tmp, _tmp$2);
@@ -111,15 +532,13 @@ function _M0FPC14math3pow(base, exponent) {
 }
 function _M0FP270717lee10pixelforge20checked__buffer__len(width, height) {
   if (width < 0 || height < 0) {
-    console.error("Image: width and height must be non-negative");
-    $panic();
+    $panic("Image: width and height must be non-negative");
   }
   if (width === 0 || height === 0) {
     return 0;
   }
   if (width > (100000000 / height | 0)) {
-    console.error("Image: dimensions exceed the maximum pixel count");
-    $panic();
+    $panic("Image: dimensions exceed the maximum pixel count");
   }
   const pixels = Math.imul(width, height) | 0;
   return Math.imul(pixels, 4) | 0;
@@ -266,7 +685,10 @@ function _M0FP270717lee10pixelforge7adler32(data, from, to) {
     const i = _tmp;
     if (i < to) {
       const _tmp$2 = a;
-      const _p = _M0MPC15array5Array2atGyE(data, i);
+      if (i < 0 || i >= data.len) {
+        $panic();
+      }
+      const _p = data.buf[i];
       a = (((_tmp$2 >>> 0) + (_p >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
       b = (((b >>> 0) + (a >>> 0) | 0) >>> 0) % (65521 >>> 0) | 0;
       _tmp = i + 1 | 0;
@@ -341,7 +763,10 @@ function _M0FP270717lee10pixelforge5crc32(data, from, to) {
     const i = _tmp;
     if (i < to) {
       const _tmp$2 = crc;
-      const _p = _M0MPC15array5Array2atGyE(data, i);
+      if (i < 0 || i >= data.len) {
+        $panic();
+      }
+      const _p = data.buf[i];
       crc = _tmp$2 ^ _p;
       let _tmp$3 = 0;
       while (true) {
@@ -377,14 +802,15 @@ function _M0FP270717lee10pixelforge14push__uint__be(buf, v) {
   _M0MPC15array5Array4pushGyE(buf, _p$4 & 255);
 }
 function _M0FP270717lee10pixelforge11push__chunk(out, ctype, payload) {
-  _M0FP270717lee10pixelforge13push__u32__be(out, payload.length);
-  const crc_start = out.length;
-  const _bind = ctype.length;
+  _M0FP270717lee10pixelforge13push__u32__be(out, payload.len);
+  const crc_start = out.len;
+  const _bind = ctype.len;
+  const _bind$2 = ctype.buf;
   let _tmp = 0;
   while (true) {
     const _ = _tmp;
     if (_ < _bind) {
-      const t = ctype[_];
+      const t = _bind$2[_];
       _M0FP270717lee10pixelforge8push__u8(out, t);
       _tmp = _ + 1 | 0;
       continue;
@@ -392,12 +818,13 @@ function _M0FP270717lee10pixelforge11push__chunk(out, ctype, payload) {
       break;
     }
   }
-  const _bind$2 = payload.length;
+  const _bind$3 = payload.len;
+  const _bind$4 = payload.buf;
   let _tmp$2 = 0;
   while (true) {
     const _ = _tmp$2;
-    if (_ < _bind$2) {
-      const b = payload[_];
+    if (_ < _bind$3) {
+      const b = _bind$4[_];
       _M0MPC15array5Array4pushGyE(out, b);
       _tmp$2 = _ + 1 | 0;
       continue;
@@ -405,7 +832,7 @@ function _M0FP270717lee10pixelforge11push__chunk(out, ctype, payload) {
       break;
     }
   }
-  _M0FP270717lee10pixelforge14push__uint__be(out, _M0FP270717lee10pixelforge5crc32(out, crc_start, out.length));
+  _M0FP270717lee10pixelforge14push__uint__be(out, _M0FP270717lee10pixelforge5crc32(out, crc_start, out.len));
 }
 function _M0FP270717lee10pixelforge13reverse__bits(code, n) {
   let value = 0;
@@ -462,27 +889,87 @@ function _M0MP270717lee10pixelforge9BitWriter6finish(self) {
   }
 }
 function _M0FP270717lee10pixelforge14deflate__fixed(raw) {
-  const writer = new _M0TP270717lee10pixelforge9BitWriter([], 0, 0);
+  const writer = new _M0TP270717lee10pixelforge9BitWriter(new _M0TPB5ArrayGyE(new Uint8Array([]), 0), 0, 0);
   _M0MP270717lee10pixelforge9BitWriter5write(writer, 1, 1);
   _M0MP270717lee10pixelforge9BitWriter5write(writer, 1, 2);
-  const length_base = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-  const length_extra = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  let length_base_buf = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  let length_base_len = 29;
+  let length_extra_buf = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  let length_extra_len = 29;
   let pos = 0;
   while (true) {
-    if (pos < raw.length) {
+    if (pos < raw.len) {
       let run = 1;
       while (true) {
-        if ((pos + run | 0) < raw.length && (run < 258 && _M0MPC15array5Array2atGyE(raw, pos + run | 0) === _M0MPC15array5Array2atGyE(raw, pos))) {
+        let _tmp;
+        if ((pos + run | 0) < raw.len) {
+          let _tmp$2;
+          if (run < 258) {
+            const _bind = pos + run | 0;
+            if (_bind < 0 || _bind >= raw.len) {
+              $panic();
+            }
+            const _tmp$3 = raw.buf[_bind];
+            const _bind$2 = pos;
+            if (_bind$2 < 0 || _bind$2 >= raw.len) {
+              $panic();
+            }
+            _tmp$2 = _tmp$3 === raw.buf[_bind$2];
+          } else {
+            _tmp$2 = false;
+          }
+          _tmp = _tmp$2;
+        } else {
+          _tmp = false;
+        }
+        if (_tmp) {
           run = run + 1 | 0;
           continue;
         } else {
           break;
         }
       }
-      if (pos > 0 && (run >= 3 && _M0MPC15array5Array2atGyE(raw, pos - 1 | 0) === _M0MPC15array5Array2atGyE(raw, pos))) {
+      let _tmp;
+      if (pos > 0) {
+        let _tmp$2;
+        if (run >= 3) {
+          const _bind = pos - 1 | 0;
+          if (_bind < 0 || _bind >= raw.len) {
+            $panic();
+          }
+          const _tmp$3 = raw.buf[_bind];
+          const _bind$2 = pos;
+          if (_bind$2 < 0 || _bind$2 >= raw.len) {
+            $panic();
+          }
+          _tmp$2 = _tmp$3 === raw.buf[_bind$2];
+        } else {
+          _tmp$2 = false;
+        }
+        _tmp = _tmp$2;
+      } else {
+        _tmp = false;
+      }
+      if (_tmp) {
         let index = 0;
         while (true) {
-          if (index < 28 && run > (_M0MPC15array5Array2atGiE(length_base, index) + ((1 << _M0MPC15array5Array2atGiE(length_extra, index)) - 1 | 0) | 0)) {
+          let _tmp$2;
+          if (index < 28) {
+            const _tmp$3 = run;
+            const _bind = index;
+            if (_bind < 0 || _bind >= length_base_len) {
+              $panic();
+            }
+            const _tmp$4 = length_base_buf[_bind];
+            const _bind$2 = index;
+            if (_bind$2 < 0 || _bind$2 >= length_extra_len) {
+              $panic();
+            }
+            _tmp$2 = _tmp$3 > (_tmp$4 + ((1 << length_extra_buf[_bind$2]) - 1 | 0) | 0);
+          } else {
+            _tmp$2 = false;
+          }
+          if (_tmp$2) {
             index = index + 1 | 0;
             continue;
           } else {
@@ -493,16 +980,30 @@ function _M0FP270717lee10pixelforge14deflate__fixed(raw) {
         const _code = _bind._0;
         const _bits = _bind._1;
         _M0MP270717lee10pixelforge9BitWriter5write(writer, _code, _bits);
-        _M0MP270717lee10pixelforge9BitWriter5write(writer, run - _M0MPC15array5Array2atGiE(length_base, index) | 0, _M0MPC15array5Array2atGiE(length_extra, index));
-        const _bind$2 = _M0FP270717lee10pixelforge17fixed__dist__code(0);
-        const _distance_code = _bind$2._0;
-        const _distance_bits = _bind$2._1;
+        const _tmp$2 = run;
+        const _bind$2 = index;
+        if (_bind$2 < 0 || _bind$2 >= length_base_len) {
+          $panic();
+        }
+        const _tmp$3 = _tmp$2 - length_base_buf[_bind$2] | 0;
+        const _bind$3 = index;
+        if (_bind$3 < 0 || _bind$3 >= length_extra_len) {
+          $panic();
+        }
+        _M0MP270717lee10pixelforge9BitWriter5write(writer, _tmp$3, length_extra_buf[_bind$3]);
+        const _bind$4 = _M0FP270717lee10pixelforge17fixed__dist__code(0);
+        const _distance_code = _bind$4._0;
+        const _distance_bits = _bind$4._1;
         _M0MP270717lee10pixelforge9BitWriter5write(writer, _distance_code, _distance_bits);
         pos = pos + run | 0;
       } else {
-        const _bind = _M0FP270717lee10pixelforge11fixed__code(_M0MPC15array5Array2atGyE(raw, pos));
-        const _code = _bind._0;
-        const _bits = _bind._1;
+        const _bind = pos;
+        if (_bind < 0 || _bind >= raw.len) {
+          $panic();
+        }
+        const _bind$2 = _M0FP270717lee10pixelforge11fixed__code(raw.buf[_bind]);
+        const _code = _bind$2._0;
+        const _bits = _bind$2._1;
         _M0MP270717lee10pixelforge9BitWriter5write(writer, _code, _bits);
         pos = pos + 1 | 0;
       }
@@ -529,14 +1030,16 @@ function _M0FP270717lee10pixelforge5paeth(a, b, c) {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 function _M0FP270717lee10pixelforge11png__encode(img) {
-  const out = [];
-  const _bind = [137, 80, 78, 71, 13, 10, 26, 10];
-  const _bind$2 = _bind.length;
+  const out = new _M0TPB5ArrayGyE(new Uint8Array([]), 0);
+  let _bind_buf = [137, 80, 78, 71, 13, 10, 26, 10];
+  let _bind_len = 8;
+  const _bind = _bind_len;
+  const _bind$2 = _bind_buf;
   let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ < _bind$2) {
-      const s = _bind[_];
+    if (_ < _bind) {
+      const s = _bind$2[_];
       _M0FP270717lee10pixelforge8push__u8(out, s);
       _tmp = _ + 1 | 0;
       continue;
@@ -544,16 +1047,18 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
       break;
     }
   }
-  const ihdr = [];
+  const ihdr = new _M0TPB5ArrayGyE(new Uint8Array([]), 0);
   _M0FP270717lee10pixelforge13push__u32__be(ihdr, img.width);
   _M0FP270717lee10pixelforge13push__u32__be(ihdr, img.height);
-  const _bind$3 = [8, 6, 0, 0, 0];
-  const _bind$4 = _bind$3.length;
+  let _bind_buf$2 = [8, 6, 0, 0, 0];
+  let _bind_len$2 = 5;
+  const _bind$3 = _bind_len$2;
+  const _bind$4 = _bind_buf$2;
   let _tmp$2 = 0;
   while (true) {
     const _ = _tmp$2;
-    if (_ < _bind$4) {
-      const v = _bind$3[_];
+    if (_ < _bind$3) {
+      const v = _bind$4[_];
       _M0FP270717lee10pixelforge8push__u8(ihdr, v);
       _tmp$2 = _ + 1 | 0;
       continue;
@@ -561,8 +1066,8 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
       break;
     }
   }
-  _M0FP270717lee10pixelforge11push__chunk(out, [73, 72, 68, 82], ihdr);
-  const raw = [];
+  _M0FP270717lee10pixelforge11push__chunk(out, new _M0TPB5ArrayGiE([73, 72, 68, 82], 4), ihdr);
+  const raw = new _M0TPB5ArrayGyE(new Uint8Array([]), 0);
   const stride = Math.imul(img.width, 4) | 0;
   const prev = _M0MPC15array5Array4makeGiE(stride, 0);
   const cur = _M0MPC15array5Array4makeGiE(stride, 0);
@@ -593,8 +1098,20 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
               } else {
                 a = 0;
               }
-              const b = _M0MPC15array5Array2atGiE(prev, i);
-              const c = i >= 4 ? _M0MPC15array5Array2atGiE(prev, i - 4 | 0) : 0;
+              if (i < 0 || i >= prev.len) {
+                $panic();
+              }
+              const b = prev.buf[i];
+              let c;
+              if (i >= 4) {
+                const _bind$6 = i - 4 | 0;
+                if (_bind$6 < 0 || _bind$6 >= prev.len) {
+                  $panic();
+                }
+                c = prev.buf[_bind$6];
+              } else {
+                c = 0;
+              }
               let pred;
               switch (filter) {
                 case 0: {
@@ -652,8 +1169,20 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
           } else {
             a = 0;
           }
-          const b = _M0MPC15array5Array2atGiE(prev, i);
-          const c = i >= 4 ? _M0MPC15array5Array2atGiE(prev, i - 4 | 0) : 0;
+          if (i < 0 || i >= prev.len) {
+            $panic();
+          }
+          const b = prev.buf[i];
+          let c;
+          if (i >= 4) {
+            const _bind$6 = i - 4 | 0;
+            if (_bind$6 < 0 || _bind$6 >= prev.len) {
+              $panic();
+            }
+            c = prev.buf[_bind$6];
+          } else {
+            c = 0;
+          }
           const _bind$6 = best_filter;
           let pred;
           switch (_bind$6) {
@@ -678,7 +1207,10 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
             }
           }
           _M0MPC15array5Array4pushGyE(raw, ((((x - pred | 0) % 256 | 0) + 256 | 0) % 256 | 0) & 255);
-          _M0MPC15array5Array3setGiE(cur, i, x);
+          if (i < 0 || i >= cur.len) {
+            $panic();
+          }
+          cur.buf[i] = x;
           _tmp$5 = i + 1 | 0;
           continue;
         } else {
@@ -689,7 +1221,14 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
       while (true) {
         const i = _tmp$6;
         if (i < stride) {
-          _M0MPC15array5Array3setGiE(prev, i, _M0MPC15array5Array2atGiE(cur, i));
+          if (i < 0 || i >= cur.len) {
+            $panic();
+          }
+          const _bind$6 = cur.buf[i];
+          if (i < 0 || i >= prev.len) {
+            $panic();
+          }
+          prev.buf[i] = _bind$6;
           _tmp$6 = i + 1 | 0;
           continue;
         } else {
@@ -702,16 +1241,17 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
       break;
     }
   }
-  const idat = [];
+  const idat = new _M0TPB5ArrayGyE(new Uint8Array([]), 0);
   _M0MPC15array5Array4pushGyE(idat, 120);
   _M0MPC15array5Array4pushGyE(idat, 156);
   const _bind$6 = _M0FP270717lee10pixelforge14deflate__fixed(raw);
-  const _bind$7 = _bind$6.length;
+  const _bind$7 = _bind$6.len;
+  const _bind$8 = _bind$6.buf;
   let _tmp$4 = 0;
   while (true) {
     const _ = _tmp$4;
     if (_ < _bind$7) {
-      const b = _bind$6[_];
+      const b = _bind$8[_];
       _M0MPC15array5Array4pushGyE(idat, b);
       _tmp$4 = _ + 1 | 0;
       continue;
@@ -719,33 +1259,30 @@ function _M0FP270717lee10pixelforge11png__encode(img) {
       break;
     }
   }
-  _M0FP270717lee10pixelforge14push__uint__be(idat, _M0FP270717lee10pixelforge7adler32(raw, 0, raw.length));
-  _M0FP270717lee10pixelforge11push__chunk(out, [73, 68, 65, 84], idat);
-  _M0FP270717lee10pixelforge11push__chunk(out, [73, 69, 78, 68], []);
+  _M0FP270717lee10pixelforge14push__uint__be(idat, _M0FP270717lee10pixelforge7adler32(raw, 0, raw.len));
+  _M0FP270717lee10pixelforge11push__chunk(out, new _M0TPB5ArrayGiE([73, 68, 65, 84], 4), idat);
+  _M0FP270717lee10pixelforge11push__chunk(out, new _M0TPB5ArrayGiE([73, 69, 78, 68], 4), new _M0TPB5ArrayGyE(new Uint8Array([]), 0));
   return out;
 }
 function _M0MP270717lee10pixelforge6Kernel3new(size, weights, divisor, bias) {
   if (size <= 0 || (size % 2 | 0) === 0) {
-    console.error("Kernel::new: size must be a positive odd number");
-    $panic();
+    $panic("Kernel::new: size must be a positive odd number");
   }
-  if (BigInt.asUintN(64, BigInt.asUintN(64, BigInt.asUintN(64, BigInt(size)) * BigInt.asUintN(64, BigInt(size)))) !== BigInt.asUintN(64, BigInt.asUintN(64, BigInt(weights.length)))) {
-    console.error("Kernel::new: weights length must equal size * size");
-    $panic();
+  if (BigInt.asUintN(64, BigInt.asUintN(64, BigInt.asUintN(64, BigInt(size)) * BigInt.asUintN(64, BigInt(size)))) !== BigInt.asUintN(64, BigInt.asUintN(64, BigInt(weights.len)))) {
+    $panic("Kernel::new: weights length must equal size * size");
   }
   if (divisor === 0 || (divisor !== divisor || (divisor > _M0FPB18double__max__value || divisor < _M0FPB18double__min__value || (bias !== bias || (bias > _M0FPB18double__max__value || bias < _M0FPB18double__min__value))))) {
-    console.error("Kernel::new: normalization must be finite and divisor nonzero");
-    $panic();
+    $panic("Kernel::new: normalization must be finite and divisor nonzero");
   }
-  const _bind = weights.length;
+  const _bind = weights.len;
+  const _bind$2 = weights.buf;
   let _tmp = 0;
   while (true) {
     const _ = _tmp;
     if (_ < _bind) {
-      const weight = weights[_];
+      const weight = _bind$2[_];
       if (weight !== weight || (weight > _M0FPB18double__max__value || weight < _M0FPB18double__min__value)) {
-        console.error("Kernel::new: weights must be finite");
-        $panic();
+        $panic("Kernel::new: weights must be finite");
       }
       _tmp = _ + 1 | 0;
       continue;
@@ -788,7 +1325,12 @@ function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
                   const _p$3 = (y + ky | 0) - radius | 0;
                   const _p$4 = self.height;
                   const sy = _p$3 < 0 ? 0 : _p$3 >= _p$4 ? _p$4 - 1 | 0 : _p$3;
-                  const w = _M0MPC15array5Array2atGdE(kernel.weights, (Math.imul(ky, kernel.size) | 0) + kx | 0);
+                  const _bind$5 = kernel.weights;
+                  const _bind$6 = (Math.imul(ky, kernel.size) | 0) + kx | 0;
+                  if (_bind$6 < 0 || _bind$6 >= _bind$5.len) {
+                    $panic();
+                  }
+                  const w = _bind$5.buf[_bind$6];
                   const base = Math.imul((Math.imul(sy, self.width) | 0) + sx | 0, 4) | 0;
                   const _tmp$5 = sum_r;
                   const _tmp$6 = self.data;
@@ -861,7 +1403,7 @@ function _M0MP270717lee10pixelforge5Image8convolve(self, kernel) {
   return out;
 }
 function _M0MP270717lee10pixelforge6Kernel14gaussian__blur() {
-  return _M0MP270717lee10pixelforge6Kernel3new(3, [1, 2, 1, 2, 4, 2, 1, 2, 1], 16, 0);
+  return _M0MP270717lee10pixelforge6Kernel3new(3, new _M0TPB5ArrayGdE([1, 2, 1, 2, 4, 2, 1, 2, 1], 9), 16, 0);
 }
 function _M0MP270717lee10pixelforge5Image4blur(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel14gaussian__blur());
@@ -883,8 +1425,10 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   const gx = _M0MPC15array5Array4makeGiE(n, 0);
   const gy = _M0MPC15array5Array4makeGiE(n, 0);
   const mag = _M0MPC15array5Array4makeGiE(n, 0);
-  const kx = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
-  const ky = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+  let kx_buf = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+  let kx_len = 9;
+  let ky_buf = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+  let ky_len = 9;
   let _tmp = 0;
   while (true) {
     const y = _tmp;
@@ -910,8 +1454,18 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
                   const _tmp$5 = gray.data;
                   const _tmp$6 = Math.imul((Math.imul(py, w) | 0) + px | 0, 4) | 0;
                   const lum = _tmp$6 >>> 0 < _tmp$5.length ? _tmp$5[_tmp$6] : $oob();
-                  sx = sx + (Math.imul(lum, _M0MPC15array5Array2atGiE(kx, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
-                  sy = sy + (Math.imul(lum, _M0MPC15array5Array2atGiE(ky, (Math.imul(j, 3) | 0) + i | 0)) | 0) | 0;
+                  const _tmp$7 = sx;
+                  const _bind = (Math.imul(j, 3) | 0) + i | 0;
+                  if (_bind < 0 || _bind >= kx_len) {
+                    $panic();
+                  }
+                  sx = _tmp$7 + (Math.imul(lum, kx_buf[_bind]) | 0) | 0;
+                  const _tmp$8 = sy;
+                  const _bind$2 = (Math.imul(j, 3) | 0) + i | 0;
+                  if (_bind$2 < 0 || _bind$2 >= ky_len) {
+                    $panic();
+                  }
+                  sy = _tmp$8 + (Math.imul(lum, ky_buf[_bind$2]) | 0) | 0;
                   _tmp$4 = i + 1 | 0;
                   continue;
                 } else {
@@ -925,12 +1479,24 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
             }
           }
           const p = (Math.imul(y, w) | 0) + x | 0;
-          _M0MPC15array5Array3setGiE(gx, p, sx);
-          _M0MPC15array5Array3setGiE(gy, p, sy);
+          const _bind = sx;
+          if (p < 0 || p >= gx.len) {
+            $panic();
+          }
+          gx.buf[p] = _bind;
+          const _bind$2 = sy;
+          if (p < 0 || p >= gy.len) {
+            $panic();
+          }
+          gy.buf[p] = _bind$2;
           const _p = sx;
           const _tmp$4 = _p < 0 ? -_p | 0 : _p;
           const _p$2 = sy;
-          _M0MPC15array5Array3setGiE(mag, p, _tmp$4 + (_p$2 < 0 ? -_p$2 | 0 : _p$2) | 0);
+          const _bind$3 = _tmp$4 + (_p$2 < 0 ? -_p$2 | 0 : _p$2) | 0;
+          if (p < 0 || p >= mag.len) {
+            $panic();
+          }
+          mag.buf[p] = _bind$3;
           _tmp$2 = x + 1 | 0;
           continue;
         } else {
@@ -954,13 +1520,22 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
         if (x < w) {
           _L: {
             const p = (Math.imul(y, w) | 0) + x | 0;
-            const m = _M0MPC15array5Array2atGiE(mag, p);
+            if (p < 0 || p >= mag.len) {
+              $panic();
+            }
+            const m = mag.buf[p];
             if (m === 0) {
               break _L;
             }
-            const _p = _M0MPC15array5Array2atGiE(gx, p);
+            if (p < 0 || p >= gx.len) {
+              $panic();
+            }
+            const _p = gx.buf[p];
             const ax = (_p < 0 ? -_p | 0 : _p) + 0;
-            const _p$2 = _M0MPC15array5Array2atGiE(gy, p);
+            if (p < 0 || p >= gy.len) {
+              $panic();
+            }
+            const _p$2 = gy.buf[p];
             const ay = (_p$2 < 0 ? -_p$2 | 0 : _p$2) + 0;
             let dx = 1;
             let dy = 0;
@@ -972,7 +1547,14 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
                 dx = 0;
                 dy = 1;
               } else {
-                if ((Math.imul(_M0MPC15array5Array2atGiE(gx, p), _M0MPC15array5Array2atGiE(gy, p)) | 0) > 0) {
+                if (p < 0 || p >= gx.len) {
+                  $panic();
+                }
+                const _tmp$4 = gx.buf[p];
+                if (p < 0 || p >= gy.len) {
+                  $panic();
+                }
+                if ((Math.imul(_tmp$4, gy.buf[p]) | 0) > 0) {
                   dx = 1;
                   dy = 1;
                 } else {
@@ -989,8 +1571,23 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
             const _tmp$5 = Math.imul(_p$5 < 0 ? 0 : _p$5 >= h ? h - 1 | 0 : _p$5, w) | 0;
             const _p$6 = x - dx | 0;
             const q2 = _tmp$5 + (_p$6 < 0 ? 0 : _p$6 >= w ? w - 1 | 0 : _p$6) | 0;
-            if (m >= _M0MPC15array5Array2atGiE(mag, q1) && m >= _M0MPC15array5Array2atGiE(mag, q2)) {
-              _M0MPC15array5Array3setGiE(thin, p, m);
+            let _tmp$6;
+            if (q1 < 0 || q1 >= mag.len) {
+              $panic();
+            }
+            if (m >= mag.buf[q1]) {
+              if (q2 < 0 || q2 >= mag.len) {
+                $panic();
+              }
+              _tmp$6 = m >= mag.buf[q2];
+            } else {
+              _tmp$6 = false;
+            }
+            if (_tmp$6) {
+              if (p < 0 || p >= thin.len) {
+                $panic();
+              }
+              thin.buf[p] = m;
             }
             break _L;
           }
@@ -1007,17 +1604,29 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
     }
   }
   const state = _M0MPC15array5Array4makeGiE(n, 0);
-  const stack = [];
+  const stack = new _M0TPB5ArrayGiE([], 0);
   let _tmp$3 = 0;
   while (true) {
     const p = _tmp$3;
     if (p < n) {
-      if (_M0MPC15array5Array2atGiE(thin, p) >= high) {
-        _M0MPC15array5Array3setGiE(state, p, 2);
+      if (p < 0 || p >= thin.len) {
+        $panic();
+      }
+      if (thin.buf[p] >= high) {
+        if (p < 0 || p >= state.len) {
+          $panic();
+        }
+        state.buf[p] = 2;
         _M0MPC15array5Array4pushGiE(stack, p);
       } else {
-        if (_M0MPC15array5Array2atGiE(thin, p) >= low) {
-          _M0MPC15array5Array3setGiE(state, p, 1);
+        if (p < 0 || p >= thin.len) {
+          $panic();
+        }
+        if (thin.buf[p] >= low) {
+          if (p < 0 || p >= state.len) {
+            $panic();
+          }
+          state.buf[p] = 1;
         }
       }
       _tmp$3 = p + 1 | 0;
@@ -1027,7 +1636,7 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
     }
   }
   while (true) {
-    if (stack.length > 0) {
+    if (stack.len > 0) {
       const p = _M0MPC15array5Array11unsafe__popGiE(stack);
       const px = p % w | 0;
       const py = p / w | 0;
@@ -1046,8 +1655,14 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
                   break _L;
                 }
                 const q = (Math.imul(ny, w) | 0) + nx | 0;
-                if (_M0MPC15array5Array2atGiE(state, q) === 1) {
-                  _M0MPC15array5Array3setGiE(state, q, 2);
+                if (q < 0 || q >= state.len) {
+                  $panic();
+                }
+                if (state.buf[q] === 1) {
+                  if (q < 0 || q >= state.len) {
+                    $panic();
+                  }
+                  state.buf[q] = 2;
                   _M0MPC15array5Array4pushGiE(stack, q);
                 }
                 break _L;
@@ -1074,7 +1689,15 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   while (true) {
     const p = _tmp$4;
     if (p < n) {
-      const v = _M0MPC15array5Array2atGiE(state, p) === 2 ? 255 : 0;
+      let v;
+      if (p < 0 || p >= state.len) {
+        $panic();
+      }
+      if (state.buf[p] === 2) {
+        v = 255;
+      } else {
+        v = 0;
+      }
       const base = Math.imul(p, 4) | 0;
       const _tmp$5 = out.data;
       if (base >>> 0 < _tmp$5.length) {
@@ -1113,23 +1736,59 @@ function _M0MP270717lee10pixelforge5Image5canny(self, low, high) {
   }
   return out;
 }
-function _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, c) {
+function _M0MP270717lee10pixelforge5Image8contrastN5applyS507(factor, c) {
   return _M0MPC16double6Double7to__int((c + 0 - 128) * factor + 128);
 }
 function _M0MP270717lee10pixelforge5Image8contrast(self, factor) {
-  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS312(factor, b) }));
+  return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => ({ _0: _M0MP270717lee10pixelforge5Image8contrastN5applyS507(factor, r), _1: _M0MP270717lee10pixelforge5Image8contrastN5applyS507(factor, g), _2: _M0MP270717lee10pixelforge5Image8contrastN5applyS507(factor, b) }));
 }
 function _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, err) {
   if ((x + 1 | 0) < w) {
-    _M0MPC15array5Array3setGiE(buf, ((Math.imul(y, w) | 0) + x | 0) + 1 | 0, _M0MPC15array5Array2atGiE(buf, ((Math.imul(y, w) | 0) + x | 0) + 1 | 0) + ((Math.imul(err, 7) | 0) / 16 | 0) | 0);
+    const _bind = ((Math.imul(y, w) | 0) + x | 0) + 1 | 0;
+    const _bind$2 = ((Math.imul(y, w) | 0) + x | 0) + 1 | 0;
+    if (_bind$2 < 0 || _bind$2 >= buf.len) {
+      $panic();
+    }
+    const _bind$3 = buf.buf[_bind$2] + ((Math.imul(err, 7) | 0) / 16 | 0) | 0;
+    if (_bind < 0 || _bind >= buf.len) {
+      $panic();
+    }
+    buf.buf[_bind] = _bind$3;
   }
   if ((y + 1 | 0) < h) {
     if (x > 0) {
-      _M0MPC15array5Array3setGiE(buf, ((Math.imul(y + 1 | 0, w) | 0) + x | 0) - 1 | 0, _M0MPC15array5Array2atGiE(buf, ((Math.imul(y + 1 | 0, w) | 0) + x | 0) - 1 | 0) + ((Math.imul(err, 3) | 0) / 16 | 0) | 0);
+      const _bind = ((Math.imul(y + 1 | 0, w) | 0) + x | 0) - 1 | 0;
+      const _bind$2 = ((Math.imul(y + 1 | 0, w) | 0) + x | 0) - 1 | 0;
+      if (_bind$2 < 0 || _bind$2 >= buf.len) {
+        $panic();
+      }
+      const _bind$3 = buf.buf[_bind$2] + ((Math.imul(err, 3) | 0) / 16 | 0) | 0;
+      if (_bind < 0 || _bind >= buf.len) {
+        $panic();
+      }
+      buf.buf[_bind] = _bind$3;
     }
-    _M0MPC15array5Array3setGiE(buf, (Math.imul(y + 1 | 0, w) | 0) + x | 0, _M0MPC15array5Array2atGiE(buf, (Math.imul(y + 1 | 0, w) | 0) + x | 0) + ((Math.imul(err, 5) | 0) / 16 | 0) | 0);
+    const _bind = (Math.imul(y + 1 | 0, w) | 0) + x | 0;
+    const _bind$2 = (Math.imul(y + 1 | 0, w) | 0) + x | 0;
+    if (_bind$2 < 0 || _bind$2 >= buf.len) {
+      $panic();
+    }
+    const _bind$3 = buf.buf[_bind$2] + ((Math.imul(err, 5) | 0) / 16 | 0) | 0;
+    if (_bind < 0 || _bind >= buf.len) {
+      $panic();
+    }
+    buf.buf[_bind] = _bind$3;
     if ((x + 1 | 0) < w) {
-      _M0MPC15array5Array3setGiE(buf, ((Math.imul(y + 1 | 0, w) | 0) + x | 0) + 1 | 0, _M0MPC15array5Array2atGiE(buf, ((Math.imul(y + 1 | 0, w) | 0) + x | 0) + 1 | 0) + ((Math.imul(err, 1) | 0) / 16 | 0) | 0);
+      const _bind$4 = ((Math.imul(y + 1 | 0, w) | 0) + x | 0) + 1 | 0;
+      const _bind$5 = ((Math.imul(y + 1 | 0, w) | 0) + x | 0) + 1 | 0;
+      if (_bind$5 < 0 || _bind$5 >= buf.len) {
+        $panic();
+      }
+      const _bind$6 = buf.buf[_bind$5] + ((Math.imul(err, 1) | 0) / 16 | 0) | 0;
+      if (_bind$4 < 0 || _bind$4 >= buf.len) {
+        $panic();
+      }
+      buf.buf[_bind$4] = _bind$6;
       return;
     } else {
       return;
@@ -1162,7 +1821,11 @@ function _M0MP270717lee10pixelforge5Image17dither__grayscale(self, levels) {
       const _tmp$6 = _tmp$3 + (Math.imul(587, _tmp$5 >>> 0 < _tmp$4.length ? _tmp$4[_tmp$5] : $oob()) | 0) | 0;
       const _tmp$7 = self.data;
       const _tmp$8 = base + 2 | 0;
-      _M0MPC15array5Array3setGiE(buf, p, (_tmp$6 + (Math.imul(114, _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) | 0) | 0) / 1000 | 0);
+      const _bind$2 = (_tmp$6 + (Math.imul(114, _tmp$8 >>> 0 < _tmp$7.length ? _tmp$7[_tmp$8] : $oob()) | 0) | 0) / 1000 | 0;
+      if (p < 0 || p >= buf.len) {
+        $panic();
+      }
+      buf.buf[p] = _bind$2;
       _tmp = p + 1 | 0;
       continue;
     } else {
@@ -1178,7 +1841,11 @@ function _M0MP270717lee10pixelforge5Image17dither__grayscale(self, levels) {
       while (true) {
         const x = _tmp$3;
         if (x < w) {
-          const old = _M0MPC15array5Array2atGiE(buf, (Math.imul(y, w) | 0) + x | 0);
+          const _bind$2 = (Math.imul(y, w) | 0) + x | 0;
+          if (_bind$2 < 0 || _bind$2 >= buf.len) {
+            $panic();
+          }
+          const old = buf.buf[_bind$2];
           const newv = _M0FP270717lee10pixelforge8quantize(old, l);
           _M0FP270717lee10pixelforge7diffuse(buf, w, h, x, y, old - newv | 0);
           const b = newv < 0 ? 0 : newv > 255 ? 255 : newv & 255;
@@ -1230,13 +1897,13 @@ function _M0MP270717lee10pixelforge5Image12dither__mono(self) {
   return _M0MP270717lee10pixelforge5Image17dither__grayscale(self, 2);
 }
 function _M0MP270717lee10pixelforge6Kernel5edges() {
-  return _M0MP270717lee10pixelforge6Kernel3new(3, [-1, -1, -1, -1, 8, -1, -1, -1, -1], 1, 0);
+  return _M0MP270717lee10pixelforge6Kernel3new(3, new _M0TPB5ArrayGdE([-1, -1, -1, -1, 8, -1, -1, -1, -1], 9), 1, 0);
 }
 function _M0MP270717lee10pixelforge5Image5edges(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel5edges());
 }
 function _M0MP270717lee10pixelforge6Kernel6emboss() {
-  return _M0MP270717lee10pixelforge6Kernel3new(3, [-2, -1, 0, -1, 1, 1, 0, 1, 2], 1, 128);
+  return _M0MP270717lee10pixelforge6Kernel3new(3, new _M0TPB5ArrayGdE([-2, -1, 0, -1, 1, 1, 0, 1, 2], 9), 1, 128);
 }
 function _M0MP270717lee10pixelforge5Image6emboss(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel6emboss());
@@ -1762,8 +2429,16 @@ function _M0MP270717lee10pixelforge5Image15gradient__edges(self, gx, gy) {
                   const _tmp$5 = gray.data;
                   const lum = base >>> 0 < _tmp$5.length ? _tmp$5[base] : $oob();
                   const k = (Math.imul(ky, 3) | 0) + kx | 0;
-                  sx = sx + (Math.imul(lum, _M0MPC15array5Array2atGiE(gx, k)) | 0) | 0;
-                  sy = sy + (Math.imul(lum, _M0MPC15array5Array2atGiE(gy, k)) | 0) | 0;
+                  const _tmp$6 = sx;
+                  if (k < 0 || k >= gx.len) {
+                    $panic();
+                  }
+                  sx = _tmp$6 + (Math.imul(lum, gx.buf[k]) | 0) | 0;
+                  const _tmp$7 = sy;
+                  if (k < 0 || k >= gy.len) {
+                    $panic();
+                  }
+                  sy = _tmp$7 + (Math.imul(lum, gy.buf[k]) | 0) | 0;
                   _tmp$4 = kx + 1 | 0;
                   continue;
                 } else {
@@ -1826,7 +2501,7 @@ function _M0MP270717lee10pixelforge5Image15gradient__edges(self, gx, gy) {
   return out;
 }
 function _M0MP270717lee10pixelforge5Image6scharr(self) {
-  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, [-3, 0, 3, -10, 0, 10, -3, 0, 3], [-3, -10, -3, 0, 0, 0, 3, 10, 3]);
+  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, new _M0TPB5ArrayGiE([-3, 0, 3, -10, 0, 10, -3, 0, 3], 9), new _M0TPB5ArrayGiE([-3, -10, -3, 0, 0, 0, 3, 10, 3], 9));
 }
 function _M0MP270717lee10pixelforge5Image5sepia(self) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -1837,13 +2512,13 @@ function _M0MP270717lee10pixelforge5Image5sepia(self) {
   });
 }
 function _M0MP270717lee10pixelforge6Kernel7sharpen() {
-  return _M0MP270717lee10pixelforge6Kernel3new(3, [0, -1, 0, -1, 5, -1, 0, -1, 0], 1, 0);
+  return _M0MP270717lee10pixelforge6Kernel3new(3, new _M0TPB5ArrayGdE([0, -1, 0, -1, 5, -1, 0, -1, 0], 9), 1, 0);
 }
 function _M0MP270717lee10pixelforge5Image7sharpen(self) {
   return _M0MP270717lee10pixelforge5Image8convolve(self, _M0MP270717lee10pixelforge6Kernel7sharpen());
 }
 function _M0MP270717lee10pixelforge5Image5sobel(self) {
-  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, [-1, 0, 1, -2, 0, 2, -1, 0, 1], [-1, -2, -1, 0, 0, 0, 1, 2, 1]);
+  return _M0MP270717lee10pixelforge5Image15gradient__edges(self, new _M0TPB5ArrayGiE([-1, 0, 1, -2, 0, 2, -1, 0, 1], 9), new _M0TPB5ArrayGiE([-1, -2, -1, 0, 0, 0, 1, 2, 1], 9));
 }
 function _M0MP270717lee10pixelforge5Image9threshold(self, level) {
   return _M0MP270717lee10pixelforge5Image8map__rgb(self, (r, g, b) => {
@@ -1997,8 +2672,7 @@ function _M0MP270717lee10pixelforge5Image17apply__filter__id(self, filter_id, am
 function _M0MP270717lee10pixelforge5Image11from__bytes(width, height, data) {
   const len = _M0FP270717lee10pixelforge20checked__buffer__len(width, height);
   if (data.length !== len) {
-    console.error("Image::from_bytes: buffer length must equal width * height * 4");
-    $panic();
+    $panic("Image::from_bytes: buffer length must equal width * height * 4");
   }
   return new _M0TP270717lee10pixelforge5Image(width, height, data);
 }
@@ -2010,14 +2684,17 @@ function _M0FP370717lee10pixelforge3web13apply__filter(data, width, height, filt
 }
 function _M0FP370717lee10pixelforge3web11encode__png(data, width, height) {
   const bytes = _M0FP270717lee10pixelforge11png__encode(_M0MP270717lee10pixelforge5Image11from__bytes(width, height, data));
-  const out = $makebytes(bytes.length, 0);
-  const _bind = bytes.length;
+  const out = $makebytes(bytes.len, 0);
+  const _bind = bytes.len;
   let _tmp = 0;
   while (true) {
     const i = _tmp;
     if (i < _bind) {
+      if (i < 0 || i >= bytes.len) {
+        $panic();
+      }
       if (i >>> 0 < out.length) {
-        out[i] = _M0MPC15array5Array2atGyE(bytes, i);
+        out[i] = bytes.buf[i];
       } else {
         $oob();
       }
