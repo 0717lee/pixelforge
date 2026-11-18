@@ -6,7 +6,7 @@
 
 PixelForge is a MoonBit RGBA8 library with filters, geometry, drawing, analysis and codecs, plus a native CLI and browser Playground. The core supports JavaScript, wasm-gc and native; the Playground also provides a linear-memory WebAssembly engine.
 
-**The current version is `0.20.0`.** It adds `avif_decode(bytes)` and CLI AVIF input conversion via `0717lee/moonav1@0.2.0`, and upgrades to `moonc 0.10.21+06da1ed44`. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
+**The current version is `0.20.1`.** It adds `avif_decode(bytes)` and CLI AVIF input conversion via `0717lee/moonav1@0.2.0`, and upgrades to `moonc 0.10.21+06da1ed44`. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
 
 Development toolchain activation is described in [CONTRIBUTING](CONTRIBUTING.md); CI covers wasm-gc, js and native.
 
@@ -17,7 +17,7 @@ Install the [MoonBit toolchain](https://www.moonbitlang.com/download/), create a
 ```sh
 moon new pixel-demo --user demo_user
 cd pixel-demo
-moon add 0717lee/pixelforge@0.20.0
+moon add 0717lee/pixelforge@0.20.1
 ```
 
 Set `cmd/main/moon.pkg` to:

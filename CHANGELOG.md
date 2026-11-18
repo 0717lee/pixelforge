@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.1 (2026-11-18)
+
+- Upgrade to MoonBit 0.10.21+06da1ed44; rebuild the committed Web artifacts.
+- Upgrade `mizchi/image` from 0.4.3 to 0.5.0, which explicitly extends `Show`
+  methods and is compatible with the removal of implicit trait method promotion.
+
 ## 0.20.0 (2026-11-18)
 
 - Upgrade CI and development to the current official MoonBit toolchain
