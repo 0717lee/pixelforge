@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/0717lee/pixelforge/actions/workflows/ci.yml)
 
-简体中文 | [English](README.en.md)
+简体中文 | [English](README.en.md) · [Mooncakes](https://mooncakes.io/docs/0717lee/pixelforge)
 
 PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、几何变换、绘图、分析和编解码，以及 native CLI 和浏览器 Playground。核心支持 JavaScript、wasm-gc 和 native；Playground 另提供线性内存 WebAssembly 引擎。
 
-**当前版本为 `0.19.0`。** 本版移除了旧 AV1/AVIF 解析和像素解码接口，从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)。历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
+**当前版本为 `0.20.0`。** 本版新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 与 CLI AVIF 输入转换，并升级到 `moonc 0.10.20+65efd5b93`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
-**未发布开发版：** 新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 和 CLI AVIF 输入转换。下方格式表描述当前源码；通过上述版本号安装的 `0.19.0` 不含此功能。开发工具链固定为 `moonc 0.10.20+65efd5b93`，激活方式见 [贡献指南](CONTRIBUTING.md)。
+开发工具链与激活方式见 [贡献指南](CONTRIBUTING.md)；CI 覆盖 wasm-gc、js、native 三目标。
 
 ## 快速开始
 
@@ -17,7 +17,7 @@ PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、�
 ```sh
 moon new pixel-demo --user demo_user
 cd pixel-demo
-moon add 0717lee/pixelforge@0.19.0
+moon add 0717lee/pixelforge@0.20.0
 ```
 
 将 `cmd/main/moon.pkg` 设置为：

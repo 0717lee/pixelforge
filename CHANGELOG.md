@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.20.0 (2026-11-18)
+
+- Upgrade CI and development to the current official MoonBit toolchain
+  `0.10.20+65efd5b93`; rebuild the committed Web artifacts.
+- Fix `scripts/use-toolchain.ps1` so it verifies `v0.10.20+65efd5b93`
+  instead of the stale `v0.10.16+...` regex.
 
 - Reject overflowing dimensions and offsets in PNG, BMP, QOI and GIF decoders;
   validate BMP planes/DIB bounds and QOI colorspace, end marker and run length.

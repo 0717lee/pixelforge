@@ -31,7 +31,7 @@ fn main {
 
 ///|
 fn print_help() -> Unit {
-  println("PixelForge CLI 0.19.0")
+  println("PixelForge CLI 0.20.0")
   println("Native codec utility (file paths or hexadecimal bytes)")
   println("")
   println("Usage:")
