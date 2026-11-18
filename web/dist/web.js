@@ -234,7 +234,7 @@ function _M0MPB18UninitializedArray23make__and__blit_2einnerGyE(src, allocate_le
   if (_tmp) {
     return _M0MPB18UninitializedArray23unsafe__make__and__blitGyE(src, allocate_len, src_offset, dst_offset, len);
   } else {
-    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
@@ -271,7 +271,7 @@ function _M0MPB18UninitializedArray23make__and__blit_2einnerGiE(src, allocate_le
   if (_tmp) {
     return _M0MPB18UninitializedArray23unsafe__make__and__blitGiE(src, allocate_len, src_offset, dst_offset, len);
   } else {
-    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
@@ -285,8 +285,8 @@ function _M0MPB18UninitializedArray23make__and__blit_2einnerGiE(src, allocate_le
     return $panic(_string_builder.val);
   }
 }
-function _M0MPB13StringBuilder21StringBuilder_2einner(size_hint) {
-  return size_hint >= 0 ? new _M0TPB13StringBuilder("") : $panic("size_hint must be non-negative");
+function _M0MPB13StringBuilder21StringBuilder_2einner(capacity) {
+  return capacity >= 0 ? new _M0TPB13StringBuilder("") : $panic("capacity must be non-negative");
 }
 function _M0IPB13StringBuilderPB6Logger11write__char(self, ch) {
   self.val = `${self.val}${String.fromCodePoint(ch)}`;
@@ -471,7 +471,7 @@ function _M0MPC15array10FixedArray23make__and__blit_2einnerGyE(src, allocate_len
   if (_tmp) {
     return _M0MPC15array10FixedArray23unsafe__make__and__blitGyE(src, allocate_len, init, src_offset, dst_offset, len);
   } else {
-    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(89);
+    const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
     _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");

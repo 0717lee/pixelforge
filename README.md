@@ -6,7 +6,7 @@
 
 PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、几何变换、绘图、分析和编解码，以及 native CLI 和浏览器 Playground。核心支持 JavaScript、wasm-gc 和 native；Playground 另提供线性内存 WebAssembly 引擎。
 
-**当前版本为 `0.20.0`。** 本版新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 与 CLI AVIF 输入转换，并升级到 `moonc 0.10.20+65efd5b93`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
+**当前版本为 `0.20.0`。** 本版新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 与 CLI AVIF 输入转换，并升级到 `moonc 0.10.21+06da1ed44`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
 开发工具链与激活方式见 [贡献指南](CONTRIBUTING.md)；CI 覆盖 wasm-gc、js、native 三目标。
 

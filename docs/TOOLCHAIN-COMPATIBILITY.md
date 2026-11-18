@@ -5,12 +5,12 @@
 ## 实际工具链（`moon version --all`）
 
 ```
-moon     0.1.20261104 (940aa18 2026-11-04)
-moonc    v0.10.20+65efd5b93 (2026-11-05)
-moonrun  0.1.20261104 (940aa18 2026-11-04)
+moon     0.1.20261117 (eb64713 2026-11-17)
+moonc    v0.10.21+06da1ed44 (2026-11-16)
+moonrun  0.1.20261117 (eb64713 2026-11-17)
 ```
 
-CI 固定版本：`0.10.20+65efd5b93`（`ci.yml`、`copilot-setup-steps.yml`）；本地激活方式见 `CONTRIBUTING.md` 与 `scripts/use-toolchain.ps1`。
+CI 固定版本：`0.10.21+06da1ed44`（`ci.yml`、`copilot-setup-steps.yml`）；本地激活方式见 `CONTRIBUTING.md` 与 `scripts/use-toolchain.ps1`。
 
 ## 标准入口验证结果
 
@@ -29,10 +29,16 @@ CI 覆盖 wasm-gc / js / native 三目标的检查与测试，并额外执行 `m
 
 ## 适配记录
 
-- `web/dist/web.js` 与 `web/dist/wasmcore.wasm` 已用 0.10.20 重新生成并提交，保证 `scripts/build-web.mjs --check` 在 CI 中不报 stale。
-- `scripts/use-toolchain.ps1` 的正则原先误写为 `v0.10.16+97801ee1b`，已修正为 `v0.10.20+65efd5b93`。
+- `web/dist/web.js` 与 `web/dist/wasmcore.wasm` 随工具链版本重建并提交，保证 `scripts/build-web.mjs --check` 在 CI 中不报 stale。
+- `scripts/use-toolchain.ps1` 的正则原先误写为 `v0.10.16+97801ee1b`，已修正为 `v0.10.21+06da1ed44`。
 - 警告为 `test_unqualified_package` 等提示，0 error；`moon info` 未产生接口文件漂移。
 
 ## 平台限制
 
 `native` 目标需要平台 C 编译器；CLI 示例不随 mooncakes 库包发布，需使用仓库源码。
+
+## 0.10.21 升级（2026-11-18）
+
+- 官方发布 `moonc 0.10.21+06da1ed44`，CI、CONTRIBUTING、README 与 `scripts/use-toolchain.ps1` 同步固定。
+- 0.10.21 移除了 trait 方法的隐式提升，第三方 `mizchi/image@0.4.3` 因此编译失败；升级到已显式 `extend ... Show::{...}` 的 `0.5.0`。
+- `web/dist` 产物重建，`build-web.mjs --check` 通过；三目标测试 287/287。
