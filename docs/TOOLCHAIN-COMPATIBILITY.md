@@ -1,16 +1,16 @@
-# 工具链兼容验证（2026-11-11）
+# 工具链兼容验证（2026-11-26）
 
 按 MoonBit 开源大赛组委会统一维护提醒，使用官方当前发布工具链重新验证。
 
 ## 实际工具链（`moon version --all`）
 
 ```
-moon     0.1.20261117 (eb64713 2026-11-17)
-moonc    v0.10.21+06da1ed44 (2026-11-16)
-moonrun  0.1.20261117 (eb64713 2026-11-17)
+moon     0.1.20261126 (ccd306a 2026-11-26)
+moonc    v1.0.0-rc1+3c0520448 (2026-11-26)
+moonrun  0.1.20261126 (ccd306a 2026-11-26)
 ```
 
-CI 固定版本：`0.10.21+06da1ed44`（`ci.yml`、`copilot-setup-steps.yml`）；本地激活方式见 `CONTRIBUTING.md` 与 `scripts/use-toolchain.ps1`。
+CI 固定版本：`1.0.0-rc1+3c0520448`（`ci.yml`、`copilot-setup-steps.yml`）；本地激活方式见 `CONTRIBUTING.md` 与 `scripts/use-toolchain.ps1`。
 
 ## 标准入口验证结果
 
@@ -42,3 +42,10 @@ CI 覆盖 wasm-gc / js / native 三目标的检查与测试，并额外执行 `m
 - 官方发布 `moonc 0.10.21+06da1ed44`，CI、CONTRIBUTING、README 与 `scripts/use-toolchain.ps1` 同步固定。
 - 0.10.21 移除了 trait 方法的隐式提升，第三方 `mizchi/image@0.4.3` 因此编译失败；升级到已显式 `extend ... Show::{...}` 的 `0.5.0`。
 - `web/dist` 产物重建，`build-web.mjs --check` 通过；三目标测试 287/287。
+
+## 1.0 升级（2026-11-26）
+
+- 官方发布 `moonc 1.0.0-rc1+3c0520448`（`moon` / `moonrun 0.1.20261126`），CI、CONTRIBUTING、README 与 `scripts/use-toolchain.ps1` 同步固定。
+- 源码无需改动：三目标 `moon check` 0 errors（170 warnings）、`moon test` 各 287/287，`moon info` 未产生接口漂移。
+- `web/dist/web.js` 与 `web/dist/wasmcore.wasm` 按 1.0 工具链重建并提交，`node scripts/build-web.mjs --check` 通过。
+- 其余 CI 门禁（JS 数值规范化、浏览器 codec、线性内存 wasm、Worker、CLI、文档示例、包内容）全部通过。

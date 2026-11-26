@@ -1,4 +1,4 @@
-const $reinterpret_view = new DataView(new ArrayBuffer(8));
+var $reinterpret_view = new DataView(new ArrayBuffer(8));
 function $i64_reinterpret_f64(a) {
   $reinterpret_view.setBigUint64(0, BigInt.asUintN(64, a), false);
   return $reinterpret_view.getFloat64(0, false);
@@ -18,7 +18,7 @@ function _M0TPC16string10StringView(param0, param1, param2) {
   this.start = param1;
   this.end = param2;
 }
-const _M0FPB19int__to__string__js = (x, radix) => {
+var _M0FPB19int__to__string__js = (x, radix) => {
   return x.toString(radix);
 };
 function $makebytes(a, b) {
@@ -61,11 +61,11 @@ function $make_array_len_and_init(a, b) {
   arr.fill(b);
   return arr;
 }
-const _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger = { method_0: _M0IPB13StringBuilderPB6Logger13write__string, method_1: _M0IP016_24default__implPB6Logger16write__substringGRPB13StringBuilderE, method_2: _M0IPB13StringBuilderPB6Logger11write__view, method_3: _M0IPB13StringBuilderPB6Logger11write__char, method_4: _M0IP016_24default__implPB6Logger28write__string__interpolationGRPB13StringBuilderE, method_5: _M0IP016_24default__implPB6Logger5writeGRPB13StringBuilderE };
-const _M0FPB18double__max__value = $i64_reinterpret_f64(9218868437227405311n);
-const _M0FPB18double__min__value = $i64_reinterpret_f64(18442240474082181119n);
-const _M0FPC16double8infinity = $i64_reinterpret_f64(9218868437227405312n);
-const _M0FPC16double13neg__infinity = $i64_reinterpret_f64(18442240474082181120n);
+var _M0FP092moonbitlang_2fcore_2fbuiltin_2fStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger = { method_0: _M0IPB13StringBuilderPB6Logger13write__string, method_1: _M0IP016_24default__implPB6Logger16write__substringGRPB13StringBuilderE, method_2: _M0IPB13StringBuilderPB6Logger11write__view, method_3: _M0IPB13StringBuilderPB6Logger11write__char, method_4: _M0IP016_24default__implPB6Logger28write__string__interpolationGRPB13StringBuilderE, method_5: _M0IP016_24default__implPB6Logger5writeGRPB13StringBuilderE };
+var _M0FPB18double__max__value = $i64_reinterpret_f64(9218868437227405311n);
+var _M0FPB18double__min__value = $i64_reinterpret_f64(18442240474082181119n);
+var _M0FPC16double8infinity = $i64_reinterpret_f64(9218868437227405312n);
+var _M0FPC16double13neg__infinity = $i64_reinterpret_f64(18442240474082181120n);
 function _M0MPC15array10FixedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, len) {
   if (dst === src && dst_offset < src_offset) {
     let _tmp = 0;
@@ -235,15 +235,20 @@ function _M0MPB18UninitializedArray23make__and__blit_2einnerGyE(src, allocate_le
     return _M0MPB18UninitializedArray23unsafe__make__and__blitGyE(src, allocate_len, src_offset, dst_offset, len);
   } else {
     const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    const _p = "bounds check failed: allocate_len = ";
+    _string_builder.val = `${_string_builder.val}${_p}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    const _p$2 = ", src_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$2}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    const _p$3 = ", dst_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$3}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    const _p$4 = ", len = ";
+    _string_builder.val = `${_string_builder.val}${_p$4}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    const _p$5 = ", src.length = ";
+    _string_builder.val = `${_string_builder.val}${_p$5}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
     return $panic(_string_builder.val);
   }
@@ -272,15 +277,20 @@ function _M0MPB18UninitializedArray23make__and__blit_2einnerGiE(src, allocate_le
     return _M0MPB18UninitializedArray23unsafe__make__and__blitGiE(src, allocate_len, src_offset, dst_offset, len);
   } else {
     const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    const _p = "bounds check failed: allocate_len = ";
+    _string_builder.val = `${_string_builder.val}${_p}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    const _p$2 = ", src_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$2}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    const _p$3 = ", dst_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$3}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    const _p$4 = ", len = ";
+    _string_builder.val = `${_string_builder.val}${_p$4}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    const _p$5 = ", src.length = ";
+    _string_builder.val = `${_string_builder.val}${_p$5}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
     return $panic(_string_builder.val);
   }
@@ -472,15 +482,20 @@ function _M0MPC15array10FixedArray23make__and__blit_2einnerGyE(src, allocate_len
     return _M0MPC15array10FixedArray23unsafe__make__and__blitGyE(src, allocate_len, init, src_offset, dst_offset, len);
   } else {
     const _string_builder = _M0MPB13StringBuilder21StringBuilder_2einner(8);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, "bounds check failed: allocate_len = ");
+    const _p = "bounds check failed: allocate_len = ";
+    _string_builder.val = `${_string_builder.val}${_p}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, allocate_len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src_offset = ");
+    const _p$2 = ", src_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$2}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", dst_offset = ");
+    const _p$3 = ", dst_offset = ";
+    _string_builder.val = `${_string_builder.val}${_p$3}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, dst_offset);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", len = ");
+    const _p$4 = ", len = ";
+    _string_builder.val = `${_string_builder.val}${_p$4}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, len);
-    _M0IPB13StringBuilderPB6Logger13write__string(_string_builder, ", src.length = ");
+    const _p$5 = ", src.length = ";
+    _string_builder.val = `${_string_builder.val}${_p$5}`;
     _M0MPB13StringBuilder13write__objectGiE(_string_builder, src.length);
     return $panic(_string_builder.val);
   }

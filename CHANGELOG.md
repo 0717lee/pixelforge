@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Upgrade to MoonBit `1.0.0-rc1+3c0520448` (`moon` / `moonrun 0.1.20261126`); rebuild
+  the committed Web artifacts. No source changes required: 287/287 tests on all three
+  targets and `moon info` reports no interface drift.
+
 ## 0.20.1 (2026-11-18)
 
 - Upgrade to MoonBit 0.10.21+06da1ed44; rebuild the committed Web artifacts.
