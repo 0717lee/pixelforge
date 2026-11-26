@@ -6,7 +6,7 @@
 
 PixelForge is a MoonBit RGBA8 library with filters, geometry, drawing, analysis and codecs, plus a native CLI and browser Playground. The core supports JavaScript, wasm-gc and native; the Playground also provides a linear-memory WebAssembly engine.
 
-**The current version is `0.20.2`.** It upgrades the `0717lee/moonav1` dependency to the latest `0.2.1` (used by `avif_decode(bytes)` and CLI AVIF input conversion), and builds with `moonc 1.0.0-rc1+3c0520448`. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
+**The current version is `0.20.3`.** It upgrades the `0717lee/moonav1` dependency to the latest `0.2.2` (used by `avif_decode(bytes)` and CLI AVIF input conversion), and builds with `moonc 1.0.0-rc1+3c0520448`. Read the [migration guide](docs/MIGRATION.md) before upgrading from `0.18.0`. The historical GitHub `v1.0.0` marker corresponds to the earlier `0.10.0` package, not the current version. See [CHANGELOG](CHANGELOG.md) for history.
 
 Development toolchain activation is described in [CONTRIBUTING](CONTRIBUTING.md); CI covers wasm-gc, js and native.
 
@@ -17,7 +17,7 @@ Install the [MoonBit toolchain](https://www.moonbitlang.com/download/), create a
 ```sh
 moon new pixel-demo --user demo_user
 cd pixel-demo
-moon add 0717lee/pixelforge@0.20.2
+moon add 0717lee/pixelforge@0.20.3
 ```
 
 Set `cmd/main/moon.pkg` to:
@@ -100,7 +100,7 @@ bytes for same-size resizes. It uses encoded channel values, not linear light.
 | JPEG | Yes | Yes | Baseline JPEG through `mizchi/image`; lossy, drops alpha; `jpeg_encode(image, quality)` |
 | WebP | Lossless VP8L | Lossless VP8L | Predictor, cross-color, subtract-green and color-indexing transforms; no lossy VP8 decoding |
 | TIFF | Subset | No | Classic: chunky 8-bit grayscale/RGB/RGBA, strips or tiles, uncompressed/PackBits/LZW/Deflate, Predictor=2; BigTIFF: one strip, uncompressed/PackBits/LZW, offsets and values within supported Int bounds |
-| AVIF | MoonAV1 RGBA8 decode | JS host adapter | `avif_decode` supports js/wasm-gc/native within MoonAV1 0.2.1's decoding limits; encoding accepts opaque images only and requires Canvas AVIF encoding in browsers; the dependency uses local `ffmpeg` in Node.js; native/wasm-gc encoding aborts |
+| AVIF | MoonAV1 RGBA8 decode | JS host adapter | `avif_decode` supports js/wasm-gc/native within MoonAV1 0.2.2's decoding limits; encoding accepts opaque images only and requires Canvas AVIF encoding in browsers; the dependency uses local `ffmpeg` in Node.js; native/wasm-gc encoding aborts |
 
 `detect_image_format()` recognizes signatures; `image_metadata()` reads supported dimensions. Neither proves that complete pixel data is decodable. TIFF/BigTIFF detection supports both byte orders. AVIF metadata follows the primary item's associated `ispe`; track-only sequences without primary-item dimensions are unsupported.
 

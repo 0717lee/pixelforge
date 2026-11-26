@@ -15,7 +15,7 @@ AVIF input and `--fit` below are unreleased additions to the 0.19.0 baseline.
 | JPEG | Baseline | Quality 90, alpha discarded |
 | WebP | Lossless VP8L | Lossless VP8L |
 | TIFF / BigTIFF | Supported subset in either byte order | No |
-| AVIF | Primary image through MoonAV1 0.2.1 | No |
+| AVIF | Primary image through MoonAV1 0.2.2 | No |
 
 See the [root format matrix](../../README.en.md) for TIFF compression/sample
 restrictions, GIF alpha behavior and other codec boundaries.

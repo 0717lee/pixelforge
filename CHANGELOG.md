@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.3 (2026-11-26)
+
+- Upgrade `0717lee/moonav1` from `0.2.1` to the newly published `0.2.2` (MoonBit
+  1.0.0-rc1 toolchain support); refresh dependency references across README,
+  CLI docs, migration notes and third-party notices.
+- Rebuild the committed Web artifacts; 287/287 tests on all three targets,
+  `moon info` reports no interface drift.
+
 ## 0.20.2 (2026-11-26)
 
 - Upgrade to MoonBit `1.0.0-rc1+3c0520448` (`moon` / `moonrun 0.1.20261126`); rebuild
