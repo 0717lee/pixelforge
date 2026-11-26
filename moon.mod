@@ -1,6 +1,6 @@
 name = "0717lee/pixelforge"
 
-version = "0.20.1"
+version = "0.20.2"
 
 readme = "README.md"
 
@@ -22,7 +22,7 @@ preferred_target = "wasm-gc"
 description = "Pure MoonBit image processing library with filters, morphology, color-space operations, affine transforms, drawing, compositing, PNG/GIF/QOI/BMP codecs, TIFF and lossless WebP decoding, and JPEG/WebP encoding adapters. Backend-agnostic (js, wasm-gc, native) with a browser Playground."
 
 import {
-  "0717lee/moonav1@0.2.0",
+  "0717lee/moonav1@0.2.1",
   "moonbitlang/x@0.5.6",
   "mizchi/image@0.5.0",
   "mizchi/zlib@0.4.10",

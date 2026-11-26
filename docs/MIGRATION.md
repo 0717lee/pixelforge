@@ -1,10 +1,10 @@
 # 0.18.0 → 0.19.0
 
 本文记录已发布的 0.19.0 迁移。未发布开发版新增 `avif_decode(bytes)`，通过
-`0717lee/moonav1@0.2.0` 返回 RGBA8，并支持 CLI AVIF 输入；其余旧 AV1
+`0717lee/moonav1@0.2.1` 返回 RGBA8，并支持 CLI AVIF 输入；其余旧 AV1
 接口仍不导出。This guide describes the published 0.19.0 migration. The
 unreleased checkout adds `avif_decode(bytes)` and CLI AVIF input through
-MoonAV1 0.2.0; other former AV1 APIs remain removed.
+MoonAV1 0.2.1; other former AV1 APIs remain removed.
 
 ## 简体中文
 

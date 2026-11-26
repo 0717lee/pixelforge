@@ -6,7 +6,7 @@
 
 PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、几何变换、绘图、分析和编解码，以及 native CLI 和浏览器 Playground。核心支持 JavaScript、wasm-gc 和 native；Playground 另提供线性内存 WebAssembly 引擎。
 
-**当前版本为 `0.20.1`。** 本版新增基于 `0717lee/moonav1@0.2.0` 的 `avif_decode(bytes)` 与 CLI AVIF 输入转换，构建使用 `moonc 1.0.0-rc1+3c0520448`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
+**当前版本为 `0.20.2`。** 本版把 `0717lee/moonav1` 依赖升级到最新的 `0.2.1`；`avif_decode(bytes)` 与 CLI AVIF 输入转换均基于该版本，构建使用 `moonc 1.0.0-rc1+3c0520448`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
 开发工具链与激活方式见 [贡献指南](CONTRIBUTING.md)；CI 覆盖 wasm-gc、js、native 三目标。
 
@@ -17,7 +17,7 @@ PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、�
 ```sh
 moon new pixel-demo --user demo_user
 cd pixel-demo
-moon add 0717lee/pixelforge@0.20.1
+moon add 0717lee/pixelforge@0.20.2
 ```
 
 将 `cmd/main/moon.pkg` 设置为：
@@ -96,7 +96,7 @@ RGBA 独立插值行为。加权模式输出普通 RGBA，重采样后透明度�
 | JPEG | 支持 | 支持 | `mizchi/image` 的 baseline JPEG；有损，不保留 alpha；`jpeg_encode(image, quality)` |
 | WebP | Lossless VP8L | Lossless VP8L | 解码 predictor、cross-color、subtract-green、color-indexing 变换；不解码有损 VP8 |
 | TIFF | 支持子集 | 不支持 | classic：chunky 8-bit 灰度/RGB/RGBA，多条带或 tiles，未压缩/PackBits/LZW/Deflate，Predictor=2；BigTIFF：单条带，未压缩/PackBits/LZW，偏移和值在支持的 Int 范围内 |
-| AVIF | MoonAV1 RGBA8 解码 | JS 宿主适配 | `avif_decode` 支持 js/wasm-gc/native；解码范围遵循 MoonAV1 0.2.0；编码只接受不透明图像，浏览器需支持 Canvas AVIF 编码，依赖在 Node.js 中使用本地 `ffmpeg`；native/wasm-gc 编码 abort |
+| AVIF | MoonAV1 RGBA8 解码 | JS 宿主适配 | `avif_decode` 支持 js/wasm-gc/native；解码范围遵循 MoonAV1 0.2.1；编码只接受不透明图像，浏览器需支持 Canvas AVIF 编码，依赖在 Node.js 中使用本地 `ffmpeg`；native/wasm-gc 编码 abort |
 
 `detect_image_format()` 识别签名；`image_metadata()` 读取支持的尺寸信息，均不证明完整像素数据可解码。TIFF/BigTIFF 支持大小端探测。AVIF metadata 读取主图关联的 `ispe`，不支持无主图尺寸的纯轨道序列。
 
