@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.20.5 (2026-11-28)
+
+- Fix the native CLI version banner and the README install commands, which
+  still named `0.20.4`/`0.20.3`. No library or artifact changes.
+
 ## 0.20.4 (2026-11-28)
 
 - Resolve every `moon check --deny-warn` diagnostic: qualify black-box test

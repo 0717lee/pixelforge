@@ -6,7 +6,7 @@
 
 PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、几何变换、绘图、分析和编解码，以及 native CLI 和浏览器 Playground。核心支持 JavaScript、wasm-gc 和 native；Playground 另提供线性内存 WebAssembly 引擎。
 
-**当前版本为 `0.20.4`。** 本版把 `0717lee/moonav1` 依赖升级到最新的 `0.2.3`，并清零编译器警告；`avif_decode(bytes)` 与 CLI AVIF 输入转换均基于该版本，构建使用 `moonc 1.0.0-rc1+3c0520448`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
+**当前版本为 `0.20.5`。** 本版把 `0717lee/moonav1` 依赖升级到最新的 `0.2.3`，并清零编译器警告；`avif_decode(bytes)` 与 CLI AVIF 输入转换均基于该版本，构建使用 `moonc 1.0.0-rc1+3c0520448`。从 `0.18.0` 升级前请阅读[迁移说明](docs/MIGRATION.md)；历史 GitHub `v1.0.0` 对应早期 `0.10.0` 包，不代表当前版本。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
 开发工具链与激活方式见 [贡献指南](CONTRIBUTING.md)；CI 覆盖 wasm-gc、js、native 三目标。
 
@@ -17,7 +17,7 @@ PixelForge 是使用 MoonBit 编写的 RGBA8 图像处理库，提供滤镜、�
 ```sh
 moon new pixel-demo --user demo_user
 cd pixel-demo
-moon add 0717lee/pixelforge@0.20.3
+moon add 0717lee/pixelforge@0.20.5
 ```
 
 将 `cmd/main/moon.pkg` 设置为：
