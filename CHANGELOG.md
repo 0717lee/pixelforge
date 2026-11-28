@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.4 (2026-11-28)
+
+- Resolve every `moon check --deny-warn` diagnostic: qualify black-box test
+  imports and migrate the remaining deprecated calls in tests and bindings.
+- Move the `web` / `wasmcore` exports from `link.*.exports` to `#export_name`;
+  the exported JavaScript and wasm symbols are unchanged.
+- Upgrade `0717lee/moonav1` from `0.2.2` to `0.2.3`; refresh the dependency
+  references in README, migration notes and third-party notices.
+- Rebuild the committed Web artifacts; 287/287 tests on all three targets,
+  `moon info` reports no interface drift.
+
 ## 0.20.3 (2026-11-26)
 
 - Upgrade `0717lee/moonav1` from `0.2.1` to the newly published `0.2.2` (MoonBit
