@@ -69,7 +69,7 @@ test "tiff_decode reads a baseline little-endian rgb strip" {
   put_tiff16(data, entry(8), 279); put_tiff16(data, entry(8) + 2, 4); put_tiff32(data, entry(8) + 4, 1); put_tiff32(data, entry(8) + 8, 3)
   data[122] = 8; data[124] = 8; data[126] = 8
   data[128] = b'\x11'; data[129] = b'\x22'; data[130] = b'\x33'
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   assert_eq(image.width, 1)
   assert_eq(image.height, 1)
   let (r, g, b, a) = image.get_pixel(0, 0)
@@ -92,7 +92,7 @@ test "tiff_decode expands a PackBits grayscale strip" {
   put_tiff16(data, entry(7), 279); put_tiff16(data, entry(7) + 2, 4); put_tiff32(data, entry(7) + 4, 1); put_tiff32(data, entry(7) + 8, 2)
   put_tiff16(data, entry(8), 284); put_tiff16(data, entry(8) + 2, 3); put_tiff32(data, entry(8) + 4, 1); put_tiff16(data, entry(8) + 8, 1)
   data[122] = 0; data[123] = 77
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   let (r, g, b, a) = image.get_pixel(0, 0)
   assert_eq((r.to_int(), g.to_int(), b.to_int(), a.to_int()), (77, 77, 77, 255))
 }
@@ -114,7 +114,7 @@ test "tiff_decode expands a TIFF LZW grayscale strip" {
   put_tiff16(data, entry(7), 279); put_tiff16(data, entry(7) + 2, 4); put_tiff32(data, entry(7) + 4, 1); put_tiff32(data, entry(7) + 8, compressed.length())
   put_tiff16(data, entry(8), 284); put_tiff16(data, entry(8) + 2, 3); put_tiff32(data, entry(8) + 4, 1); put_tiff16(data, entry(8) + 8, 1)
   for i in 0..<compressed.length() { data[122 + i] = compressed[i] }
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 77)
 }
 
@@ -136,7 +136,7 @@ test "tiff_decode reads multiple uncompressed strips" {
   put_tiff32(data, 122, 138); put_tiff32(data, 126, 139)
   put_tiff32(data, 130, 1); put_tiff32(data, 134, 1)
   data[138] = 10; data[139] = 20
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   assert_eq(image.height, 2)
   assert_eq(image.get_pixel(0, 0).0.to_int(), 10)
   assert_eq(image.get_pixel(0, 1).0.to_int(), 20)
@@ -154,7 +154,7 @@ test "tiff_decode reads a minimal BigTIFF strip" {
   set_entry(0, 256, 4, 1); set_entry(1, 257, 4, 1); set_entry(2, 258, 3, 8); set_entry(3, 259, 3, 1); set_entry(4, 262, 3, 1)
   set_entry(5, 273, 16, 212); set_entry(6, 277, 3, 1); set_entry(7, 278, 4, 1); set_entry(8, 279, 16, 1)
   data[212] = 99
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 99)
 }
 
@@ -175,14 +175,14 @@ test "tiff_decode reads a tiled grayscale image" {
   put_tiff16(data, entry(8), 324); put_tiff16(data, entry(8) + 2, 4); put_tiff32(data, entry(8) + 4, 1); put_tiff32(data, entry(8) + 8, 134)
   put_tiff16(data, entry(9), 325); put_tiff16(data, entry(9) + 2, 4); put_tiff32(data, entry(9) + 4, 1); put_tiff32(data, entry(9) + 8, 2)
   data[134] = 12; data[135] = 34
-  let image = tiff_decode(data).unwrap()
+  let image = @pixelforge.tiff_decode(data).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 12)
   assert_eq(image.get_pixel(1, 0).0.to_int(), 34)
 }
 
 ///|
 test "tiff_decode applies horizontal predictor" {
-  let image = tiff_decode(make_gray_tiff(2, 1, 1, 2, [b'\x0A', b'\x05'])).unwrap()
+  let image = @pixelforge.tiff_decode(make_gray_tiff(2, 1, 1, 2, [b'\x0A', b'\x05'])).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 10)
   assert_eq(image.get_pixel(1, 0).0.to_int(), 15)
 }
@@ -190,6 +190,6 @@ test "tiff_decode applies horizontal predictor" {
 ///|
 test "tiff_decode inflates a zlib Deflate strip" {
   let zlib : Array[Byte] = [b'\x78', b'\x01', b'\x01', b'\x01', b'\x00', b'\xFE', b'\xFF', b'\x2A', b'\x00', b'\x2B', b'\x00', b'\x2B']
-  let image = tiff_decode(make_gray_tiff(1, 1, 8, 1, zlib)).unwrap()
+  let image = @pixelforge.tiff_decode(make_gray_tiff(1, 1, 8, 1, zlib)).unwrap()
   assert_eq(image.get_pixel(0, 0).0.to_int(), 42)
 }

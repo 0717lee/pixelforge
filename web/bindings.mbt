@@ -3,6 +3,7 @@
 /// compiles to a JS `Uint8Array`, so a canvas `ImageData.data` buffer crosses
 /// into MoonBit with zero copies. Filters are selected by integer id — see
 /// `@pixelforge.Image::apply_filter_id` for the id table.
+#export_name("apply_filter")
 pub fn apply_filter(
   data : FixedArray[Byte],
   width : Int,
@@ -20,6 +21,7 @@ pub fn apply_filter(
 /// encoder (`@pixelforge.png_encode`), so the playground's download button
 /// exercises the codec instead of `canvas.toBlob`. Returns the file bytes as
 /// a `Uint8Array`.
+#export_name("encode_png")
 pub fn encode_png(
   data : FixedArray[Byte],
   width : Int,
@@ -39,6 +41,7 @@ pub fn encode_png(
 /// 256-bin luma histogram of an RGBA buffer, for the playground's live
 /// histogram panel. Returns a `FixedArray[Int]` (a plain JS array of 256
 /// numbers on the js backend).
+#export_name("luma_histogram")
 pub fn luma_histogram(
   data : FixedArray[Byte],
   width : Int,

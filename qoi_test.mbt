@@ -6,7 +6,7 @@
 test "qoi_encode header and solid-color size are exact" {
   // Solid 10x1: header(14) + RGB op(4) + RUN(1) + end marker(8) = 27 bytes.
   let img = solid(10, 1, 100, 150, 200, 255)
-  let bytes = qoi_encode(img)
+  let bytes = @pixelforge.qoi_encode(img)
   assert_eq(bytes.length(), 27)
   assert_eq(bytes[0].to_int(), 113) // 'q'
   assert_eq(bytes[1].to_int(), 111) // 'o'
@@ -35,7 +35,7 @@ test "qoi round-trips a varied RGBA image losslessly" {
       )
     }
   }
-  let decoded = qoi_decode(qoi_encode(img)).unwrap()
+  let decoded = @pixelforge.qoi_decode(@pixelforge.qoi_encode(img)).unwrap()
   assert_eq(decoded.width, 8)
   assert_eq(decoded.height, 8)
   for i in 0..<(8 * 8 * 4) {
@@ -47,7 +47,7 @@ test "qoi round-trips a varied RGBA image losslessly" {
 test "qoi round-trips repeated colors through the index" {
   // Alternating two colors: after first occurrences, INDEX ops take over.
   let img = gray_image(6, 1, [10, 200, 10, 200, 10, 200])
-  let decoded = qoi_decode(qoi_encode(img)).unwrap()
+  let decoded = @pixelforge.qoi_decode(@pixelforge.qoi_encode(img)).unwrap()
   for x in 0..<6 {
     assert_eq(
       decoded.get_pixel(x, 0).0.to_int(),
@@ -58,44 +58,44 @@ test "qoi round-trips repeated colors through the index" {
 
 ///|
 test "qoi_decode rejects malformed input" {
-  assert_true(qoi_decode([]) is None)
+  assert_true(@pixelforge.qoi_decode([]) is None)
   let junk : Array[Byte] = []
   for i in 0..<30 {
     junk.push((i % 250).to_byte())
   }
-  assert_true(qoi_decode(junk) is None)
+  assert_true(@pixelforge.qoi_decode(junk) is None)
   // Truncated stream: valid header claiming more pixels than data provides.
   let img = solid(64, 64, 1, 2, 3, 255)
-  let bytes = qoi_encode(img)
+  let bytes = @pixelforge.qoi_encode(img)
   let cut : Array[Byte] = []
   for i in 0..<20 {
     cut.push(bytes[i])
   }
-  assert_true(qoi_decode(cut) is None)
+  assert_true(@pixelforge.qoi_decode(cut) is None)
 }
 
 ///|
 /// Header limits are checked before allocating an image or reading opcodes.
 test "qoi_decode rejects zero dimensions, huge images and bad channels" {
-  let base = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  let base = @pixelforge.qoi_encode(solid(1, 1, 1, 2, 3, 255))
 
   let zero_width = base
   for i in 4..<8 {
     zero_width[i] = b'\x00'
   }
-  assert_true(qoi_decode(zero_width) is None)
+  assert_true(@pixelforge.qoi_decode(zero_width) is None)
 
-  let zero_height = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  let zero_height = @pixelforge.qoi_encode(solid(1, 1, 1, 2, 3, 255))
   for i in 8..<12 {
     zero_height[i] = b'\x00'
   }
-  assert_true(qoi_decode(zero_height) is None)
+  assert_true(@pixelforge.qoi_decode(zero_height) is None)
 
-  let bad_channels = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  let bad_channels = @pixelforge.qoi_encode(solid(1, 1, 1, 2, 3, 255))
   bad_channels[12] = b'\x02'
-  assert_true(qoi_decode(bad_channels) is None)
+  assert_true(@pixelforge.qoi_decode(bad_channels) is None)
 
-  let huge = qoi_encode(solid(1, 1, 1, 2, 3, 255))
+  let huge = @pixelforge.qoi_encode(solid(1, 1, 1, 2, 3, 255))
   // 10001 * 10000 = 100010000 pixels, above the decoder safety limit.
   huge[4] = b'\x00'
   huge[5] = b'\x00'
@@ -105,13 +105,13 @@ test "qoi_decode rejects zero dimensions, huge images and bad channels" {
   huge[9] = b'\x00'
   huge[10] = b'\x27'
   huge[11] = b'\x10' // 10000
-  assert_true(qoi_decode(huge) is None)
+  assert_true(@pixelforge.qoi_decode(huge) is None)
 }
 
 ///|
 /// RGB/RGBA op payloads must not read beyond the reserved end marker.
 test "qoi_decode rejects truncated pixel op payloads" {
-  let bytes = qoi_encode(single(9, 8, 7, 255))
+  let bytes = @pixelforge.qoi_encode(single(9, 8, 7, 255))
   // Keep the header and replace the first opcode with an RGB marker, without
   // supplying its three channel bytes before the end marker.
   bytes[14] = b'\xFE'
@@ -122,5 +122,5 @@ test "qoi_decode rejects truncated pixel op payloads" {
   for i in 0..<17 {
     cut.push(bytes[i])
   }
-  assert_true(qoi_decode(cut) is None)
+  assert_true(@pixelforge.qoi_decode(cut) is None)
 }

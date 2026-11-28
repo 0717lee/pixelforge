@@ -1,19 +1,19 @@
 ///|
 test "image format detection covers modern containers" {
   assert_true(
-    detect_image_format([b'\xFF', b'\xD8', b'\xFF', b'\xE0']) is Some(Jpeg),
+    @pixelforge.detect_image_format([b'\xFF', b'\xD8', b'\xFF', b'\xE0']) is Some(Jpeg),
   )
   assert_true(
-    detect_image_format([
+    @pixelforge.detect_image_format([
       b'R', b'I', b'F', b'F', b'\x00', b'\x00', b'\x00', b'\x00', b'W', b'E', b'B',
       b'P',
     ])
     is Some(Webp),
   )
   assert_true(
-    detect_image_format(formats_test_ftyp(0x61766966, [])) is Some(Avif),
+    @pixelforge.detect_image_format(formats_test_ftyp(0x61766966, [])) is Some(Avif),
   )
-  assert_true(detect_image_format([b'I', b'I', b'*', b'\x00']) is Some(Tiff))
+  assert_true(@pixelforge.detect_image_format([b'I', b'I', b'*', b'\x00']) is Some(Tiff))
 }
 
 ///|
@@ -23,14 +23,14 @@ test "metadata reads png and gif dimensions" {
     b'\x00', b'\x0D', b'I', b'H', b'D', b'R', b'\x00', b'\x00', b'\x00', b'\x02',
     b'\x00', b'\x00', b'\x00', b'\x03',
   ]
-  let p = image_metadata(png).unwrap()
+  let p = @pixelforge.image_metadata(png).unwrap()
   assert_eq(p.format.name(), "png")
   assert_eq(p.width, 2)
   assert_eq(p.height, 3)
   let gif : Array[Byte] = [
     b'G', b'I', b'F', b'8', b'9', b'a', b'\x04', b'\x00', b'\x05', b'\x00',
   ]
-  let g = image_metadata(gif).unwrap()
+  let g = @pixelforge.image_metadata(gif).unwrap()
   assert_eq(g.width, 4)
   assert_eq(g.height, 5)
   assert_false(g.animated)
@@ -106,12 +106,12 @@ test "TIFF metadata supports both byte orders and BigTIFF scalar dimension types
     for big in [true, false] {
       for kind in (if big { [3, 4, 16] } else { [3, 4] }) {
         let data = metadata_tiff_fixture(big, little, kind)
-        assert_true(detect_image_format(data) is Some(Tiff))
-        let metadata = image_metadata(data).unwrap()
+        assert_true(@pixelforge.detect_image_format(data) is Some(Tiff))
+        let metadata = @pixelforge.image_metadata(data).unwrap()
         assert_eq((metadata.width, metadata.height), (23, 17))
         assert_false(metadata.animated)
         for length in 0..<data.length() {
-          assert_true(image_metadata(data[:length].to_owned()) is None)
+          assert_true(@pixelforge.image_metadata(data[:length].to_owned()) is None)
         }
       }
     }
@@ -127,11 +127,11 @@ test "BigTIFF metadata rejects invalid headers, overflowing offsets and nonscala
     let (position, value) = change
     let data = fixture.copy()
     data[position] = value.to_byte()
-    assert_true(image_metadata(data) is None)
+    assert_true(@pixelforge.image_metadata(data) is None)
   }
   let classic = metadata_tiff_fixture(false, true, 4)
   metadata_tiff_uint(classic, 4, 2147483647, 4, true)
-  assert_true(image_metadata(classic) is None)
+  assert_true(@pixelforge.image_metadata(classic) is None)
 }
 
 ///|
@@ -259,13 +259,13 @@ fn formats_test_avif(children : Array[Array[Byte]]) -> Array[Byte] {
 ///|
 test "avif detection requires complete ftyp and explicit avif brands" {
   for brand in [0x61766966, 0x61766973] { // avif, avis
-    assert_true(detect_image_format(formats_test_ftyp(brand, [])) is Some(Avif))
+    assert_true(@pixelforge.detect_image_format(formats_test_ftyp(brand, [])) is Some(Avif))
     assert_true(
-      detect_image_format(formats_test_ftyp(0x6D696631, [brand])) is Some(Avif),
+      @pixelforge.detect_image_format(formats_test_ftyp(0x6D696631, [brand])) is Some(Avif),
     )
   }
   for brand in [0x6D696631, 0x68656963, 0x68656978] { // mif1, heic, heix
-    assert_true(detect_image_format(formats_test_ftyp(brand, [])) is None)
+    assert_true(@pixelforge.detect_image_format(formats_test_ftyp(brand, [])) is None)
   }
   let minor_is_avif = formats_test_box(
     0x66747970,
@@ -274,20 +274,20 @@ test "avif detection requires complete ftyp and explicit avif brands" {
       formats_test_uint(0x61766966, 4),
     ]),
   )
-  assert_true(detect_image_format(minor_is_avif) is None)
+  assert_true(@pixelforge.detect_image_format(minor_is_avif) is None)
   let missing_minor = formats_test_box(
     0x66747970,
     formats_test_uint(0x61766966, 4),
   )
-  assert_true(detect_image_format(missing_minor) is None)
+  assert_true(@pixelforge.detect_image_format(missing_minor) is None)
   let truncated = formats_test_ftyp(0x61766966, [])
   truncated[3] = b'\x18'
-  assert_true(detect_image_format(truncated) is None)
+  assert_true(@pixelforge.detect_image_format(truncated) is None)
   let brand_outside_ftyp = formats_test_join([
     formats_test_ftyp(0x6D696631, []),
     formats_test_box(0x66726565, formats_test_uint(0x61766966, 4)),
   ])
-  assert_true(detect_image_format(brand_outside_ftyp) is None)
+  assert_true(@pixelforge.detect_image_format(brand_outside_ftyp) is None)
 }
 
 ///|
@@ -303,7 +303,7 @@ test "avif metadata selects the primary item rather than auxiliary dimensions" {
       formats_test_ipma([(2, [1]), (7, [0, 2, 0x83])], 0, false),
     ),
   ])
-  let metadata = image_metadata(data).unwrap()
+  let metadata = @pixelforge.image_metadata(data).unwrap()
   assert_eq(metadata.format.name(), "avif")
   assert_eq(metadata.width, 640)
   assert_eq(metadata.height, 360)
@@ -327,7 +327,7 @@ test "avif metadata supports reordered boxes and wide item and property referenc
     ),
     formats_test_pitm(70000, 1),
   ])
-  let metadata = image_metadata(data).unwrap()
+  let metadata = @pixelforge.image_metadata(data).unwrap()
   assert_eq(metadata.width, 1920)
   assert_eq(metadata.height, 1080)
 }
@@ -351,7 +351,7 @@ test "avif metadata derives animation from major or compatible avis brands" {
       formats_test_ftyp(0x61766966, [0x61766973]),
       formats_test_ftyp(0x6D696631, [0x61766973]),
     ] {
-    let metadata = image_metadata(formats_test_join([ftyp, meta])).unwrap()
+    let metadata = @pixelforge.image_metadata(formats_test_join([ftyp, meta])).unwrap()
     assert_true(metadata.animated)
     assert_eq(metadata.width, 8)
     assert_eq(metadata.height, 6)
@@ -391,7 +391,7 @@ test "avif metadata accepts extended sizes and boxes extending to their parent e
     formats_test_uint(0x61766966, 4),
     formats_test_uint(0, 4),
   ])
-  let metadata = image_metadata(formats_test_join([ftyp64, meta64])).unwrap()
+  let metadata = @pixelforge.image_metadata(formats_test_join([ftyp64, meta64])).unwrap()
   assert_eq(metadata.width, 321)
   assert_eq(metadata.height, 123)
 }
@@ -403,9 +403,9 @@ test "avif metadata rejects missing or ambiguous primary property associations" 
     properties,
     formats_test_ipma([(1, [1])], 0, false),
   )
-  assert_true(image_metadata(formats_test_avif([valid_iprp])) is None)
+  assert_true(@pixelforge.image_metadata(formats_test_avif([valid_iprp])) is None)
   assert_true(
-    image_metadata(formats_test_avif([formats_test_pitm(1, 0)])) is None,
+    @pixelforge.image_metadata(formats_test_avif([formats_test_pitm(1, 0)])) is None,
   )
   for
     entries in [
@@ -419,7 +419,7 @@ test "avif metadata rejects missing or ambiguous primary property associations" 
       formats_test_pitm(1, 0),
       formats_test_iprp(properties, formats_test_ipma(entries, 0, false)),
     ])
-    assert_true(image_metadata(data) is None)
+    assert_true(@pixelforge.image_metadata(data) is None)
   }
   let no_ispe = formats_test_avif([
     formats_test_pitm(1, 0),
@@ -428,7 +428,7 @@ test "avif metadata rejects missing or ambiguous primary property associations" 
       formats_test_ipma([(1, [1])], 0, false),
     ),
   ])
-  assert_true(image_metadata(no_ispe) is None)
+  assert_true(@pixelforge.image_metadata(no_ispe) is None)
 }
 
 ///|
@@ -436,7 +436,7 @@ test "avif metadata rejects invalid dimensions and unsupported fullbox versions"
   for dimensions in [(0, 8), (8, 0), (-1, 8), (8, -1)] {
     let (width, height) = dimensions
     assert_true(
-      image_metadata(
+      @pixelforge.image_metadata(
         formats_test_avif([
           formats_test_pitm(1, 0),
           formats_test_iprp(
@@ -448,7 +448,7 @@ test "avif metadata rejects invalid dimensions and unsupported fullbox versions"
       is None,
     )
   }
-  let max_dimensions = image_metadata(
+  let max_dimensions = @pixelforge.image_metadata(
     formats_test_avif([
       formats_test_pitm(1, 0),
       formats_test_iprp(
@@ -481,7 +481,7 @@ test "avif metadata rejects invalid dimensions and unsupported fullbox versions"
         formats_test_iprp([bad_ispe], formats_test_ipma([(1, [1])], 0, false)),
       ],
     ] {
-    assert_true(image_metadata(formats_test_avif(children)) is None)
+    assert_true(@pixelforge.image_metadata(formats_test_avif(children)) is None)
   }
   for version_flags in [0x01000000, 1] {
     let data = formats_test_join([
@@ -498,7 +498,7 @@ test "avif metadata rejects invalid dimensions and unsupported fullbox versions"
         ]),
       ),
     ])
-    assert_true(image_metadata(data) is None)
+    assert_true(@pixelforge.image_metadata(data) is None)
   }
 }
 
@@ -516,12 +516,12 @@ test "avif metadata rejects truncated boxes and properties outside parent bounda
     for i in 0..<length {
       truncated.push(valid[i])
     }
-    assert_true(image_metadata(truncated) is None)
+    assert_true(@pixelforge.image_metadata(truncated) is None)
   }
   let escaped_property = formats_test_ispe(8, 6)
   escaped_property[3] = b'\x18' // ispe exceeds ipco even though later file bytes exist.
   assert_true(
-    image_metadata(
+    @pixelforge.image_metadata(
       formats_test_avif([
         formats_test_pitm(1, 0),
         formats_test_iprp(
@@ -550,7 +550,7 @@ test "avif metadata rejects truncated boxes and properties outside parent bounda
       ]),
     ] {
     assert_true(
-      image_metadata(
+      @pixelforge.image_metadata(
         formats_test_avif([
           formats_test_pitm(1, 0),
           malformed,
@@ -567,5 +567,5 @@ test "avif metadata rejects truncated boxes and properties outside parent bounda
     formats_test_pitm(1, 0),
     formats_test_box(0x66726565, formats_test_ispe(8, 6)),
   ])
-  assert_true(image_metadata(unassociated_payload) is None)
+  assert_true(@pixelforge.image_metadata(unassociated_payload) is None)
 }

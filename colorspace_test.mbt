@@ -3,13 +3,13 @@
 
 ///|
 test "rgb_to_hsv on primary colors" {
-  let (h, s, v) = rgb_to_hsv(255, 0, 0)
+  let (h, s, v) = @pixelforge.rgb_to_hsv(255, 0, 0)
   assert_eq(h.to_int(), 0)
   assert_eq((s * 100.0).to_int(), 100)
   assert_eq((v * 100.0).to_int(), 100)
-  let (hg, _, _) = rgb_to_hsv(0, 255, 0)
+  let (hg, _, _) = @pixelforge.rgb_to_hsv(0, 255, 0)
   assert_eq(hg.to_int(), 120)
-  let (hb, _, _) = rgb_to_hsv(0, 0, 255)
+  let (hb, _, _) = @pixelforge.rgb_to_hsv(0, 0, 255)
   assert_eq(hb.to_int(), 240)
 }
 
@@ -27,8 +27,8 @@ test "hsv round-trips 8-bit colors" {
   ]
   for i in 0..<samples.length() {
     let (r, g, b) = samples[i]
-    let (h, s, v) = rgb_to_hsv(r, g, b)
-    let (r2, g2, b2) = hsv_to_rgb(h, s, v)
+    let (h, s, v) = @pixelforge.rgb_to_hsv(r, g, b)
+    let (r2, g2, b2) = @pixelforge.hsv_to_rgb(h, s, v)
     assert_eq(r2, r)
     assert_eq(g2, g)
     assert_eq(b2, b)
@@ -41,8 +41,8 @@ test "ycbcr round-trips within one step" {
   let samples = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (12, 200, 99)]
   for i in 0..<samples.length() {
     let (r, g, b) = samples[i]
-    let (y, cb, cr) = rgb_to_ycbcr(r, g, b)
-    let (r2, g2, b2) = ycbcr_to_rgb(y, cb, cr)
+    let (y, cb, cr) = @pixelforge.rgb_to_ycbcr(r, g, b)
+    let (r2, g2, b2) = @pixelforge.ycbcr_to_rgb(y, cb, cr)
     assert_true(iabs_pub(r2 - r) <= 1)
     assert_true(iabs_pub(g2 - g) <= 1)
     assert_true(iabs_pub(b2 - b) <= 1)
@@ -61,7 +61,7 @@ fn iabs_pub(v : Int) -> Int {
 
 ///|
 test "gray stays gray under ycbcr" {
-  let (y, cb, cr) = rgb_to_ycbcr(128, 128, 128)
+  let (y, cb, cr) = @pixelforge.rgb_to_ycbcr(128, 128, 128)
   assert_eq(y, 128)
   assert_eq(cb, 128)
   assert_eq(cr, 128)

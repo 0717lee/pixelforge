@@ -7,6 +7,7 @@
 /// with no per-element FFI. `process` runs a filter and returns the address of
 /// a fresh result buffer, while `process_in_place` copies each result back into
 /// the caller-owned allocation for pointer-stable multi-operation pipelines.
+#export_name("alloc")
 pub fn alloc(len : Int) -> FixedArray[Byte] {
   FixedArray::make(len, b'\x00')
 }
@@ -14,6 +15,7 @@ pub fn alloc(len : Int) -> FixedArray[Byte] {
 ///|
 /// Applies filter `filter_id` (see `@pixelforge.Image::apply_filter_id`) to the
 /// `width` x `height` RGBA buffer at `buf` and returns the result buffer.
+#export_name("process")
 pub fn process(
   buf : FixedArray[Byte],
   width : Int,
@@ -33,6 +35,7 @@ pub fn process(
 /// one linear-memory buffer for a whole pipeline. Filter implementations may
 /// still allocate temporary MoonBit arrays internally; this API guarantees
 /// pointer stability for the caller's buffer, not zero internal allocation.
+#export_name("process_in_place")
 pub fn process_in_place(
   buf : FixedArray[Byte],
   width : Int,

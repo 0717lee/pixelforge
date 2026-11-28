@@ -9,7 +9,6 @@ pkgtype(kind: "foreign_library")
 options(
   link: {
     "js": {
-      "exports": [ "apply_filter", "encode_png", "luma_histogram" ],
       "format": "esm",
     },
   },

@@ -42,7 +42,7 @@ test "resize clamps degenerate target sizes to 1x1" {
 test "nearest resize preserves long strips without overflowing sample positions" {
   for dimensions in [(50000, 1), (1, 50000)] {
     let (w, h) = dimensions
-    let image = Image::new(w, h)
+    let image = @pixelforge.Image::new(w, h)
     for i in 0..<image.data.length() {
       image.data[i] = (i % 251).to_byte()
     }
@@ -61,7 +61,7 @@ test "nearest resize preserves long strips without overflowing sample positions"
 test "all resizers produce transparent output from an empty source" {
   for dimensions in [(0, 0), (0, 7), (9, 0)] {
     let (w, h) = dimensions
-    let image = Image::new(w, h)
+    let image = @pixelforge.Image::new(w, h)
     for
       output in [
         image.resize_nearest(3, 2),

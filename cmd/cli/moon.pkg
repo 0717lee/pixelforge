@@ -1,7 +1,6 @@
 // Native command-line codec utility. `--input-hex` remains available as a
 // deterministic fallback for callers that do not want filesystem access.
 import {
-  "moonbitlang/core/bytes",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
   "moonbitlang/x/fs",

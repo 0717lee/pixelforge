@@ -72,7 +72,7 @@ fn two_frame_gif() -> Array[Byte] {
 
 ///|
 test "gif_decode reads the canonical 1x1 transparent GIF" {
-  let img = gif_decode(tiny_transparent_gif()).unwrap()
+  let img = @pixelforge.gif_decode(tiny_transparent_gif()).unwrap()
   assert_eq(img.width, 1)
   assert_eq(img.height, 1)
   let (r, g, b, a) = img.get_pixel(0, 0)
@@ -84,7 +84,7 @@ test "gif_decode reads the canonical 1x1 transparent GIF" {
 
 ///|
 test "gif_decode reads a hand-assembled 2x2 four-color image" {
-  let img = gif_decode(four_color_gif()).unwrap()
+  let img = @pixelforge.gif_decode(four_color_gif()).unwrap()
   assert_eq(img.width, 2)
   assert_eq(img.height, 2)
   let (r0, g0, b0, a0) = img.get_pixel(0, 0)
@@ -102,7 +102,7 @@ test "gif_decode reads a hand-assembled 2x2 four-color image" {
 
 ///|
 test "gif_decode_all returns independent frames and GCE metadata" {
-  let frames = gif_decode_all(two_frame_gif()).unwrap()
+  let frames = @pixelforge.gif_decode_all(two_frame_gif()).unwrap()
   assert_eq(frames.length(), 2)
   assert_eq(frames[0].image.width, 1)
   assert_eq(frames[0].delay_cs, 5)
@@ -121,34 +121,34 @@ test "gif_decode_all rejects malformed trailing and GCE blocks" {
   let truncated = two_frame_gif()
   // Remove the trailer: the decoder must not silently accept an incomplete file.
   ignore(truncated.pop())
-  assert_true(gif_decode_all(truncated) is None)
+  assert_true(@pixelforge.gif_decode_all(truncated) is None)
   let bad_gce = two_frame_gif()
   bad_gce[21] = b'\x03' // GCE block size must be exactly four bytes.
-  assert_true(gif_decode_all(bad_gce) is None)
+  assert_true(@pixelforge.gif_decode_all(bad_gce) is None)
 }
 
 ///|
 test "gif_decode rejects malformed input" {
-  assert_true(gif_decode([]) is None)
+  assert_true(@pixelforge.gif_decode([]) is None)
   // Wrong signature.
   let junk : Array[Byte] = []
   for i in 0..<50 {
     junk.push((i % 250).to_byte())
   }
-  assert_true(gif_decode(junk) is None)
+  assert_true(@pixelforge.gif_decode(junk) is None)
   // Truncated: valid header, cut inside the LZW data.
   let good = tiny_transparent_gif()
   let cut : Array[Byte] = []
   for i in 0..<30 {
     cut.push(good[i])
   }
-  assert_true(gif_decode(cut) is None)
+  assert_true(@pixelforge.gif_decode(cut) is None)
   // Corrupted LZW: an out-of-range code must be refused.
   let bad = four_color_gif()
   bad[35] = b'\xFF' // clobber the packed code bytes
   bad[36] = b'\xFF'
   bad[37] = b'\xFF'
-  assert_true(gif_decode(bad) is None)
+  assert_true(@pixelforge.gif_decode(bad) is None)
 }
 
 ///|
@@ -159,22 +159,22 @@ test "gif_decode rejects invalid dimensions, tables and LZW parameters" {
   // Image descriptor starts at byte 25; width is little-endian at 30..31.
   zero_width[30] = b'\x00'
   zero_width[31] = b'\x00'
-  assert_true(gif_decode(zero_width) is None)
+  assert_true(@pixelforge.gif_decode(zero_width) is None)
 
   let zero_height = four_color_gif()
   zero_height[32] = b'\x00'
   zero_height[33] = b'\x00'
-  assert_true(gif_decode(zero_height) is None)
+  assert_true(@pixelforge.gif_decode(zero_height) is None)
 
   let no_table = four_color_gif()
   no_table[10] = b'\x00' // clear the global color-table flag
-  assert_true(gif_decode(no_table) is None)
+  assert_true(@pixelforge.gif_decode(no_table) is None)
 
   let bad_min_code = four_color_gif()
   bad_min_code[35] = b'\x01' // GIF LZW minimum code size must be 2..8.
-  assert_true(gif_decode(bad_min_code) is None)
+  assert_true(@pixelforge.gif_decode(bad_min_code) is None)
 
   let truncated_block = four_color_gif()
   truncated_block[35] = b'\xFF' // sub-block claims bytes past the file end
-  assert_true(gif_decode(truncated_block) is None)
+  assert_true(@pixelforge.gif_decode(truncated_block) is None)
 }

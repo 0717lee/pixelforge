@@ -6,7 +6,7 @@
 test "bmp_encode 24-bit header and padded size are exact" {
   // 3x2 at 24bpp: stride = 12 (9 data + 3 pad), total = 54 + 24 = 78.
   let img = solid(3, 2, 10, 20, 30, 255)
-  let bytes = bmp_encode(img, false)
+  let bytes = @pixelforge.bmp_encode(img, false)
   assert_eq(bytes.length(), 78)
   assert_eq(bytes[0].to_int(), 66) // 'B'
   assert_eq(bytes[1].to_int(), 77) // 'M'
@@ -32,7 +32,7 @@ test "bmp round-trips 32-bit RGBA losslessly" {
       )
     }
   }
-  let decoded = bmp_decode(bmp_encode(img, true)).unwrap()
+  let decoded = @pixelforge.bmp_decode(@pixelforge.bmp_encode(img, true)).unwrap()
   assert_eq(decoded.width, 5)
   assert_eq(decoded.height, 4)
   for i in 0..<(5 * 4 * 4) {
@@ -43,7 +43,7 @@ test "bmp round-trips 32-bit RGBA losslessly" {
 ///|
 test "bmp 24-bit round trip preserves color and forces opaque alpha" {
   let img = single(200, 100, 50, 77)
-  let decoded = bmp_decode(bmp_encode(img, false)).unwrap()
+  let decoded = @pixelforge.bmp_decode(@pixelforge.bmp_encode(img, false)).unwrap()
   let (r, g, b, a) = decoded.get_pixel(0, 0)
   assert_eq(r.to_int(), 200)
   assert_eq(g.to_int(), 100)
@@ -53,19 +53,19 @@ test "bmp 24-bit round trip preserves color and forces opaque alpha" {
 
 ///|
 test "bmp_decode rejects malformed input" {
-  assert_true(bmp_decode([]) is None)
+  assert_true(@pixelforge.bmp_decode([]) is None)
   let junk : Array[Byte] = []
   for i in 0..<60 {
     junk.push((i % 250).to_byte())
   }
-  assert_true(bmp_decode(junk) is None)
+  assert_true(@pixelforge.bmp_decode(junk) is None)
   // Truncated pixel data: keep the valid header, cut the payload short.
-  let bytes = bmp_encode(solid(8, 8, 1, 2, 3, 255), true)
+  let bytes = @pixelforge.bmp_encode(solid(8, 8, 1, 2, 3, 255), true)
   let cut : Array[Byte] = []
   for i in 0..<60 {
     cut.push(bytes[i])
   }
-  assert_true(bmp_decode(cut) is None)
+  assert_true(@pixelforge.bmp_decode(cut) is None)
 }
 
 ///|
@@ -73,35 +73,35 @@ test "bmp_decode rejects malformed input" {
 /// be rejected before any pixel reads. Keep the payload from a valid file so
 /// these cases exercise the parameter checks rather than truncation handling.
 test "bmp_decode rejects unsupported parameters and dimensions" {
-  let good = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let good = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
 
-  let bad_bpp = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let bad_bpp = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
   bad_bpp[28] = b'\x10' // 16-bit, outside the supported 24/32-bit subset.
   bad_bpp[29] = b'\x00'
-  assert_true(bmp_decode(bad_bpp) is None)
+  assert_true(@pixelforge.bmp_decode(bad_bpp) is None)
 
-  let bad_compression = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let bad_compression = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
   bad_compression[30] = b'\x01' // BI_RLE8, unsupported by this decoder.
-  assert_true(bmp_decode(bad_compression) is None)
+  assert_true(@pixelforge.bmp_decode(bad_compression) is None)
 
-  let bad_offset = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let bad_offset = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
   bad_offset[10] = b'\x00'
   bad_offset[11] = b'\x00'
   bad_offset[12] = b'\x00'
   bad_offset[13] = b'\x00'
-  assert_true(bmp_decode(bad_offset) is None)
+  assert_true(@pixelforge.bmp_decode(bad_offset) is None)
 
-  let zero_width = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let zero_width = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
   for i in 18..<22 {
     zero_width[i] = b'\x00'
   }
-  assert_true(bmp_decode(zero_width) is None)
+  assert_true(@pixelforge.bmp_decode(zero_width) is None)
 
-  let zero_height = bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
+  let zero_height = @pixelforge.bmp_encode(solid(2, 2, 1, 2, 3, 255), true)
   for i in 22..<26 {
     zero_height[i] = b'\x00'
   }
-  assert_true(bmp_decode(zero_height) is None)
+  assert_true(@pixelforge.bmp_decode(zero_height) is None)
 
   // A valid top-down orientation with a negative height must remain accepted.
   let top_down = good
@@ -109,5 +109,5 @@ test "bmp_decode rejects unsupported parameters and dimensions" {
   top_down[23] = b'\xFF'
   top_down[24] = b'\xFF'
   top_down[25] = b'\xFF'
-  assert_true(bmp_decode(top_down) is Some(_))
+  assert_true(@pixelforge.bmp_decode(top_down) is Some(_))
 }

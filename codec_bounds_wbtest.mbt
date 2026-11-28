@@ -7,7 +7,7 @@ fn bounds_u32(data : Array[Byte], p : Int, value : Int, little : Bool) -> Unit {
 
 ///|
 fn bounds_png_crc(data : Array[Byte]) -> Unit {
-  bounds_u32(data, 29, crc32(data, 12, 29).to_int(), false)
+  bounds_u32(data, 29, crc32(data, 12, 29).reinterpret_as_int(), false)
 }
 
 ///|

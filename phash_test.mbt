@@ -4,11 +4,11 @@
 
 ///|
 test "hamming_distance counts differing bits exactly" {
-  assert_eq(hamming_distance(0UL, 0UL), 0)
-  assert_eq(hamming_distance(0xFFUL, 0UL), 8)
-  assert_eq(hamming_distance(0b1010UL, 0b0101UL), 4)
+  assert_eq(@pixelforge.hamming_distance(0UL, 0UL), 0)
+  assert_eq(@pixelforge.hamming_distance(0xFFUL, 0UL), 8)
+  assert_eq(@pixelforge.hamming_distance(0b1010UL, 0b0101UL), 4)
   // All 64 bits differ between all-zeros and all-ones.
-  assert_eq(hamming_distance(0UL, 0xFFFFFFFFFFFFFFFFUL), 64)
+  assert_eq(@pixelforge.hamming_distance(0UL, 0xFFFFFFFFFFFFFFFFUL), 64)
 }
 
 ///|
@@ -24,7 +24,7 @@ test "average_hash of a half-dark half-bright image is hand-computable" {
   }
   let h = img.average_hash()
   // Count set bits: must be exactly 32, and bit (y*8+x) set iff x >= 4.
-  assert_eq(hamming_distance(h, 0UL), 32)
+  assert_eq(@pixelforge.hamming_distance(h, 0UL), 32)
   for y in 0..<8 {
     for x in 0..<8 {
       let bit = (h >> (y * 8 + x)) & 1UL
@@ -49,7 +49,7 @@ test "average_hash is invariant under 4x upscaling" {
     }
   }
   let big = small.resize_nearest(32, 32)
-  assert_eq(hamming_distance(small.average_hash(), big.average_hash()), 0)
+  assert_eq(@pixelforge.hamming_distance(small.average_hash(), big.average_hash()), 0)
 }
 
 ///|
@@ -63,7 +63,7 @@ test "inverting an image flips every average_hash bit" {
       img.set_pixel(x, y, v, v, v, b'\xFF')
     }
   }
-  let d = hamming_distance(img.average_hash(), img.invert().average_hash())
+  let d = @pixelforge.hamming_distance(img.average_hash(), img.invert().average_hash())
   assert_eq(d, 64)
 }
 
@@ -79,7 +79,7 @@ test "difference_hash tracks horizontal gradients" {
       ramp.set_pixel(x, y, v, v, v, b'\xFF')
     }
   }
-  assert_eq(hamming_distance(ramp.difference_hash(), 0UL), 64)
+  assert_eq(@pixelforge.hamming_distance(ramp.difference_hash(), 0UL), 64)
   let vert = @pixelforge.Image::new(9, 8)
   for y in 0..<8 {
     for x in 0..<9 {
@@ -87,7 +87,7 @@ test "difference_hash tracks horizontal gradients" {
       vert.set_pixel(x, y, v, v, v, b'\xFF')
     }
   }
-  assert_eq(hamming_distance(vert.difference_hash(), 0UL), 0)
+  assert_eq(@pixelforge.hamming_distance(vert.difference_hash(), 0UL), 0)
 }
 
 ///|
@@ -102,7 +102,7 @@ test "small brightness shifts keep dHash distance at zero" {
   }
   let shifted = img.brightness(20)
   assert_eq(
-    hamming_distance(img.difference_hash(), shifted.difference_hash()),
+    @pixelforge.hamming_distance(img.difference_hash(), shifted.difference_hash()),
     0,
   )
 }

@@ -315,7 +315,7 @@ fn webp_decode_stream(
     group_count = max_group + 1
     if group_count > 256 { raise WebPDecodeError::Invalid }
   }
-  let groups = Array::new()
+  let groups = Array(capacity=group_count)
   for _ in 0..<group_count {
     groups.push({
       green: webp_decode_prefix(bits, green_alphabet),

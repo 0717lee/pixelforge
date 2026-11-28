@@ -1,13 +1,13 @@
 ///|
-fn pipeline_fixture() -> Image {
-  let image = Image::new(1, 1)
+fn pipeline_fixture() -> @pixelforge.Image {
+  let image = @pixelforge.Image::new(1, 1)
   image.set_pixel(0, 0, b'\x14', b'\x32', b'\x64', b'\xFF')
   image
 }
 
 ///|
 test "pipeline applies operations in insertion order" {
-  let pipeline = Pipeline::new().append(Invert).append(Brightness(10))
+  let pipeline = @pixelforge.Pipeline::new().append(Invert).append(Brightness(10))
   let result = pipeline.apply(pipeline_fixture())
   let (r, g, b, a) = result.get_pixel(0, 0)
   // (20, 50, 100) -> invert -> (235, 205, 155) -> +10.
@@ -21,7 +21,7 @@ test "pipeline applies operations in insertion order" {
 ///|
 test "pipeline parameters match numeric dispatch" {
   let source = pipeline_fixture()
-  let pipeline = Pipeline::new()
+  let pipeline = @pixelforge.Pipeline::new()
     .append(Threshold(90))
     .append(Pixelate(3))
     .append(Gamma(1.5))
@@ -41,22 +41,22 @@ test "pipeline parameters match numeric dispatch" {
 ///|
 test "empty pipeline is a copy and does not mutate source" {
   let source = pipeline_fixture()
-  let result = source.apply_pipeline(Pipeline::new())
+  let result = source.apply_pipeline(@pixelforge.Pipeline::new())
   let (r, g, b, a) = result.get_pixel(0, 0)
   assert_eq(r.to_int(), 20)
   assert_eq(g.to_int(), 50)
   assert_eq(b.to_int(), 100)
   assert_eq(a.to_int(), 255)
-  assert_eq(Pipeline::new().length(), 0)
-  assert_true(Pipeline::new().is_empty())
+  assert_eq(@pixelforge.Pipeline::new().length(), 0)
+  assert_true(@pixelforge.Pipeline::new().is_empty())
   result.set_pixel(0, 0, b'\xFF', b'\x00', b'\x00', b'\xFF')
   assert_eq(source.get_pixel(0, 0).0.to_int(), 20)
 }
 
 ///|
 test "pipeline composition leaves both inputs reusable" {
-  let left = Pipeline::from_filter(Invert)
-  let right = Pipeline::from_filter(Brightness(5)).append(FlipHorizontal)
+  let left = @pixelforge.Pipeline::from_filter(Invert)
+  let right = @pixelforge.Pipeline::from_filter(Brightness(5)).append(FlipHorizontal)
   let combined = left.then(right)
   assert_eq(left.length(), 1)
   assert_eq(right.length(), 2)
@@ -79,7 +79,7 @@ test "typed boundary values preserve dispatch defaults" {
   let source = pipeline_fixture()
   // Threshold, pixelate, posterize, gamma, vignette and canny all define
   // fallback behavior for non-positive amounts in the numeric dispatcher.
-  let via_pipeline = Pipeline::new()
+  let via_pipeline = @pixelforge.Pipeline::new()
     .append(Threshold(0))
     .append(Pixelate(0))
     .append(Posterize(1))

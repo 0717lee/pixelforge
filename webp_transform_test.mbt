@@ -10,7 +10,7 @@ test "webp_decode handles predictor and color transforms" {
     0x4F, 0xC0, 0x14, 0x02, 0x08, 0x80, 0x82, 0x66, 0x0E, 0x62, 0x02, 0x00, 0x5F,
     0xEF, 0xEE, 0x3B,
   ]
-  let decoded = webp_decode(encoded).unwrap()
+  let decoded = @pixelforge.webp_decode(encoded).unwrap()
   assert_eq((decoded.width, decoded.height), (64, 64))
   for y in 0..<64 {
     for x in 0..<64 {
@@ -35,7 +35,7 @@ test "webp_decode handles color indexing transform" {
     0x09, 0x28, 0x1E, 0x9C, 0xBC, 0xF8, 0xBF, 0x06, 0x27, 0x2F, 0x2E, 0xFE, 0xAF,
     0xE4, 0xC5, 0xC5, 0x83, 0xFF, 0x6B, 0x71, 0xF1, 0xE0, 0xE4, 0xFF, 0x02,
   ]
-  let decoded = webp_decode(encoded).unwrap()
+  let decoded = @pixelforge.webp_decode(encoded).unwrap()
   assert_eq((decoded.width, decoded.height), (64, 64))
   assert_eq(
     (decoded.data[0], decoded.data[1], decoded.data[2], decoded.data[3]),

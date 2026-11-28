@@ -5,15 +5,15 @@
 ///|
 test "rgb_to_hsl on primaries and white matches reference values" {
   // Pure red: H=0, S=1, L=0.5.
-  let (h, s, l) = rgb_to_hsl(255, 0, 0)
+  let (h, s, l) = @pixelforge.rgb_to_hsl(255, 0, 0)
   assert_eq(h.to_int(), 0)
   assert_eq((s * 100.0).to_int(), 100)
   assert_eq((l * 100.0).to_int(), 50)
   // Pure green / blue hues.
-  assert_eq(rgb_to_hsl(0, 255, 0).0.to_int(), 120)
-  assert_eq(rgb_to_hsl(0, 0, 255).0.to_int(), 240)
+  assert_eq(@pixelforge.rgb_to_hsl(0, 255, 0).0.to_int(), 120)
+  assert_eq(@pixelforge.rgb_to_hsl(0, 0, 255).0.to_int(), 240)
   // White: L=1, S=0.
-  let (_, sw, lw) = rgb_to_hsl(255, 255, 255)
+  let (_, sw, lw) = @pixelforge.rgb_to_hsl(255, 255, 255)
   assert_eq((sw * 100.0).to_int(), 0)
   assert_eq((lw * 100.0).to_int(), 100)
 }
@@ -34,8 +34,8 @@ test "hsl round-trips 8-bit colors exactly" {
   ]
   for i in 0..<samples.length() {
     let (r, g, b) = samples[i]
-    let (h, s, l) = rgb_to_hsl(r, g, b)
-    let (r2, g2, b2) = hsl_to_rgb(h, s, l)
+    let (h, s, l) = @pixelforge.rgb_to_hsl(r, g, b)
+    let (r2, g2, b2) = @pixelforge.hsl_to_rgb(h, s, l)
     assert_eq(r2, r)
     assert_eq(g2, g)
     assert_eq(b2, b)
@@ -45,10 +45,10 @@ test "hsl round-trips 8-bit colors exactly" {
 ///|
 test "grays keep zero saturation and exact lightness" {
   for v in [0, 64, 128, 200, 255] {
-    let (_, s, l) = rgb_to_hsl(v, v, v)
+    let (_, s, l) = @pixelforge.rgb_to_hsl(v, v, v)
     assert_eq((s * 1000.0).to_int(), 0)
     // L = v/255 exactly.
-    let (r2, g2, b2) = hsl_to_rgb(0.0, s, l)
+    let (r2, g2, b2) = @pixelforge.hsl_to_rgb(0.0, s, l)
     assert_eq(r2, v)
     assert_eq(g2, v)
     assert_eq(b2, v)

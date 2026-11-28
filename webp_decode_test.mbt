@@ -1,6 +1,6 @@
 ///|
-fn webp_decode_test_image() -> Image {
-  let image = Image::new(7, 3)
+fn webp_decode_test_image() -> @pixelforge.Image {
+  let image = @pixelforge.Image::new(7, 3)
   for y in 0..<3 {
     for x in 0..<7 {
       let i = x + y * 7
@@ -20,8 +20,8 @@ fn webp_decode_test_image() -> Image {
 ///|
 test "webp_decode round-trips the lossless external encoder" {
   let source = webp_decode_test_image()
-  let encoded = webp_encode(source)
-  let decoded = webp_decode(encoded).unwrap()
+  let encoded = @pixelforge.webp_encode(source)
+  let decoded = @pixelforge.webp_decode(encoded).unwrap()
   assert_eq((decoded.width, decoded.height), (source.width, source.height))
   for i in 0..<source.data.length() {
     assert_eq(decoded.data[i], source.data[i])
@@ -30,7 +30,7 @@ test "webp_decode round-trips the lossless external encoder" {
 
 ///|
 test "webp_decode round-trips color-cache friendly pixels" {
-  let source = Image::new(32, 8)
+  let source = @pixelforge.Image::new(32, 8)
   for y in 0..<source.height {
     for x in 0..<source.width {
       if (x + y) % 3 == 0 {
@@ -40,22 +40,22 @@ test "webp_decode round-trips color-cache friendly pixels" {
       }
     }
   }
-  let encoded = webp_encode(source)
-  let decoded = webp_decode(encoded).unwrap()
+  let encoded = @pixelforge.webp_encode(source)
+  let decoded = @pixelforge.webp_decode(encoded).unwrap()
   assert_eq(decoded.data, source.data)
 }
 
 ///|
 test "webp_decode rejects non-lossless and truncated containers" {
   let source = webp_decode_test_image()
-  let encoded = webp_encode(source)
+  let encoded = @pixelforge.webp_encode(source)
   let truncated : Array[Byte] = []
   for i in 0..<(encoded.length() - 1) { truncated.push(encoded[i]) }
-  assert_true(webp_decode(truncated) is None)
+  assert_true(@pixelforge.webp_decode(truncated) is None)
   let bad = encoded.copy()
   bad[12] = b'V'
   bad[13] = b'P'
   bad[14] = b'8'
   bad[15] = b' '
-  assert_true(webp_decode(bad) is None)
+  assert_true(@pixelforge.webp_decode(bad) is None)
 }
